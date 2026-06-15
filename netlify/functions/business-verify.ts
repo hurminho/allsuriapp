@@ -183,6 +183,44 @@ async function authenticateUser(authHeader: string): Promise<string | null> {
 export const handler = async (event: any): Promise<ApiResp> => {
   // 진단 엔드포인트
   if (event.httpMethod === 'GET') {
+    const qs = (event.queryStringParameters || {}) as Record<string, string>
+
+    // 국세청(NTS) 업스트림 실연동 셀프테스트.
+    //  - 키 인코딩 오류 / NTS 다운 / 정상 여부를 구분하기 위함.
+    //  - 공개적으로 알려진 사업자번호(삼성전자 124-81-00998)로 status 조회만 수행.
+    //  - 키 값 자체는 절대 응답에 노출하지 않는다.
+    if (qs.selftest === '1') {
+      if (!BUSINESS_API_SERVICE_KEY) {
+        return ok({ selftest: true, ok: false, reason: 'NO_SERVICE_KEY' })
+      }
+      const testBNo = '1248100998'
+      const url = `${NTS_BASE}/status?serviceKey=${encodeURIComponent(BUSINESS_API_SERVICE_KEY)}&returnType=JSON`
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ b_no: [testBNo] }),
+        })
+        const raw = await res.text()
+        let parsed: any = null
+        try { parsed = JSON.parse(raw) } catch (_) { /* not JSON */ }
+        const item = parsed && Array.isArray(parsed.data) ? parsed.data[0] : null
+        return ok({
+          selftest: true,
+          upstreamHttpStatus: res.status,
+          upstreamOk: res.ok,
+          nts_status_code: parsed?.status_code ?? null,
+          match_cnt: parsed?.match_cnt ?? null,
+          sample_b_stt: item?.b_stt ?? null,
+          sample_tax_type: item?.tax_type ?? null,
+          // JSON 파싱 실패(키 미등록 등) 시 원인 파악용 본문 일부
+          rawSnippet: parsed ? undefined : raw.slice(0, 300),
+        })
+      } catch (e: any) {
+        return ok({ selftest: true, ok: false, reason: 'FETCH_ERROR', detail: e?.message })
+      }
+    }
+
     return ok({
       status: 'ok',
       env: {
