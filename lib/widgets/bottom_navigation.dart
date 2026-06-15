@@ -7,7 +7,7 @@ import '../screens/chat/chat_list_page.dart';
 import '../screens/profile/profile_screen.dart';
 import '../widgets/professional_dashboard.dart';
 
-class BottomNavigation extends StatelessWidget {
+class BottomNavigation extends StatefulWidget {
   final int currentIndex;
   final Function(int) onTap;
 
@@ -18,11 +18,30 @@ class BottomNavigation extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<BottomNavigation> createState() => _BottomNavigationState();
+}
+
+class _BottomNavigationState extends State<BottomNavigation> {
+  Future<int>? _unreadChatFuture;
+  String _loadedUserId = '';
+
+  /// userId가 바뀔 때만 안읽음 카운트 Future를 새로 만든다.
+  /// (build 마다 새 쿼리를 쏘던 문제 해결)
+  void _ensureUnreadFuture(String userId) {
+    if (userId != _loadedUserId) {
+      _loadedUserId = userId;
+      _unreadChatFuture =
+          userId.isEmpty ? Future.value(0) : NotificationService().getUnreadChatCount(userId);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<AuthService>(
       builder: (context, authService, child) {
         final userId = authService.currentUser?.id ?? '';
-        
+        _ensureUnreadFuture(userId);
+
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -57,12 +76,9 @@ class BottomNavigation extends StatelessWidget {
                     label: '공사 만들기',
                   ),
                   FutureBuilder<int>(
-                    future: NotificationService().getUnreadChatCount(userId),
+                    future: _unreadChatFuture,
                     builder: (context, snapshot) {
                       final chatBadge = snapshot.data ?? 0;
-                      if (snapshot.connectionState == ConnectionState.done && chatBadge > 0) {
-                        print('💬 [BottomNav] 읽지 않은 채팅: $chatBadge개');
-                      }
                       return _buildNavItem(
                         context: context,
                         index: 2,
@@ -97,7 +113,7 @@ class BottomNavigation extends StatelessWidget {
     required String label,
     int? badgeCount,
   }) {
-    final isSelected = currentIndex == index;
+    final isSelected = widget.currentIndex == index;
     final primaryColor = Theme.of(context).primaryColor;
     
     return Expanded(
@@ -119,7 +135,7 @@ class BottomNavigation extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => const CreateJobScreen(),
                 ),
-              ).then((_) => onTap(0)); // 돌아오면 홈으로 초기화
+              ).then((_) => widget.onTap(0)); // 돌아오면 홈으로 초기화
               break;
             case 2:
               Navigator.push(
@@ -127,7 +143,7 @@ class BottomNavigation extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => const ChatListPage(),
                 ),
-              ).then((_) => onTap(0)); // 돌아오면 홈으로 초기화
+              ).then((_) => widget.onTap(0)); // 돌아오면 홈으로 초기화
               break;
             case 3:
               Navigator.push(
@@ -135,10 +151,10 @@ class BottomNavigation extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => const ProfileScreen(),
                 ),
-              ).then((_) => onTap(0)); // 돌아오면 홈으로 초기화
+              ).then((_) => widget.onTap(0)); // 돌아오면 홈으로 초기화
               break;
           }
-          onTap(index);
+          widget.onTap(index);
         },
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(

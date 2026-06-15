@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:allsuriapp/services/kakao_share_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -645,7 +646,11 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(8),
                                           image: DecorationImage(
-                                            image: NetworkImage(mediaUrls[idx]),
+                                            image: CachedNetworkImageProvider(
+                                              mediaUrls[idx],
+                                              maxWidth: 240,
+                                              maxHeight: 240,
+                                            ),
                                             fit: BoxFit.cover,
                                           ),
                                         ),

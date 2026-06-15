@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:allsuriapp/services/marketplace_service.dart';
 import 'package:allsuriapp/screens/business/estimate_management_screen.dart';
@@ -341,7 +342,11 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(8),
                                           image: DecorationImage(
-                                            image: NetworkImage(mediaUrls[idx]),
+                                            image: CachedNetworkImageProvider(
+                                              mediaUrls[idx],
+                                              maxWidth: 240,
+                                              maxHeight: 240,
+                                            ),
                                             fit: BoxFit.cover,
                                           ),
                                         ),

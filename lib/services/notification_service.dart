@@ -128,52 +128,65 @@ class NotificationService {
   }
 
   /// 읽지 않은 채팅 메시지 총 개수 (모든 채팅방의 읽지 않은 메시지 합계)
+  ///
+  /// 성능: 방마다 쿼리하던 N+1 패턴을 2쿼리로 축소.
+  /// 1) 사용자의 활성 채팅방 + 각 방의 last_read 조회
+  /// 2) 모든 방의 상대방 메시지를 inFilter 로 한 번에 조회 후 클라이언트 집계
   Future<int> getUnreadChatCount(String userId) async {
+    if (userId.isEmpty) return 0;
     try {
-      print('💬 [NotificationService] 읽지 않은 채팅 메시지 조회 중...');
-      print('   userId: $userId');
-      
-      // 사용자의 모든 채팅방 가져오기
       final rooms = await _sb
           .from('chat_rooms')
           .select('id, participant_a, participant_b, participant_a_last_read_at, participant_b_last_read_at')
           .or('participant_a.eq.$userId,participant_b.eq.$userId')
           .eq('active', true);
-      
-      int totalUnread = 0;
-      
+
+      if (rooms.isEmpty) return 0;
+
+      // roomId -> 내가 마지막으로 읽은 시각(없으면 null)
+      final Map<String, DateTime?> lastReadByRoom = {};
       for (final room in rooms) {
-        // 현재 사용자가 participant_a인지 participant_b인지 확인
+        final roomId = room['id']?.toString();
+        if (roomId == null) continue;
         final isParticipantA = room['participant_a']?.toString() == userId;
-        final lastReadAt = isParticipantA 
-            ? room['participant_a_last_read_at'] 
+        final lastReadRaw = isParticipantA
+            ? room['participant_a_last_read_at']
             : room['participant_b_last_read_at'];
-        
-        // 읽지 않은 메시지 수 계산
-        if (lastReadAt != null) {
-          final unreadMessages = await _sb
-              .from('chat_messages')
-              .select('id')
-              .eq('room_id', room['id'])
-              .neq('sender_id', userId)
-              .gt('createdat', lastReadAt.toString());
-          totalUnread += unreadMessages.length;
-        } else {
-          // lastReadAt이 없으면 모든 상대방 메시지를 읽지 않은 것으로 간주
-          final unreadMessages = await _sb
-              .from('chat_messages')
-              .select('id')
-              .eq('room_id', room['id'])
-              .neq('sender_id', userId);
-          totalUnread += unreadMessages.length;
+        DateTime? lastRead;
+        if (lastReadRaw != null) {
+          lastRead = DateTime.tryParse(lastReadRaw.toString());
+        }
+        lastReadByRoom[roomId] = lastRead;
+      }
+
+      final roomIds = lastReadByRoom.keys.toList();
+
+      // 상대방이 보낸 메시지만 한 번에 조회 (room_id, createdat)
+      final messages = await _sb
+          .from('chat_messages')
+          .select('room_id, createdat, sender_id')
+          .inFilter('room_id', roomIds)
+          .neq('sender_id', userId);
+
+      int totalUnread = 0;
+      for (final msg in messages) {
+        final roomId = msg['room_id']?.toString();
+        if (roomId == null) continue;
+        final lastRead = lastReadByRoom[roomId];
+        if (lastRead == null) {
+          // 한 번도 안 읽은 방: 상대방 메시지 전부 미읽음
+          totalUnread++;
+          continue;
+        }
+        final createdAt = DateTime.tryParse(msg['createdat']?.toString() ?? '');
+        if (createdAt != null && createdAt.isAfter(lastRead)) {
+          totalUnread++;
         }
       }
-      
-      print('✅ [NotificationService] 읽지 않은 채팅 메시지 총 ${totalUnread}개');
-      
+
       return totalUnread;
     } catch (e) {
-      print('❌ [NotificationService] 읽지 않은 채팅 메시지 개수 가져오기 실패: $e');
+      debugPrint('❌ [NotificationService] 읽지 않은 채팅 메시지 개수 가져오기 실패: $e');
       return 0;
     }
   }

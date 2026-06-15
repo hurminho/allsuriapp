@@ -47,6 +47,24 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   void initState() {
     super.initState();
     _loadCurrentUserData();
+    for (final c in [_nameController, _businessNameController, _businessNumberController]) {
+      c.addListener(_refreshVerifyStatusCard);
+    }
+  }
+
+  void _refreshVerifyStatusCard() {
+    if (mounted) setState(() {});
+  }
+
+  /// 진위확인 UI용 필수 사업자 정보(사장님 성함·상호·사업자번호·개업일) 입력 여부
+  bool _hasRequiredBusinessFields() {
+    final repName = _nameController.text.trim();
+    final bizName = _businessNameController.text.trim();
+    final bNo = _businessNumberController.text.trim();
+    return repName.length >= 2 &&
+        bizName.isNotEmpty &&
+        BusinessVerifyService.normalizeBusinessNumber(bNo) != null &&
+        _businessOpenDate != null;
   }
 
   void _loadCurrentUserData() {
@@ -83,6 +101,9 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
 
   @override
   void dispose() {
+    for (final c in [_nameController, _businessNameController, _businessNumberController]) {
+      c.removeListener(_refreshVerifyStatusCard);
+    }
     _nameController.dispose();
     _phoneController.dispose();
     _businessNameController.dispose();
@@ -803,7 +824,10 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         await Provider.of<AuthService>(context, listen: false)
             .refreshAfterBusinessVerify();
         if (!mounted) return;
-        _showVerifySuccessDialog(result);
+        _showBusinessConfirmedDialog(result: result);
+      } else if (_hasRequiredBusinessFields()) {
+        // 국세청 API 실패/불일치여도 필수 항목이 모두 입력되면 '확인' 처리
+        _showBusinessConfirmedDialog();
       } else {
         _showVerifyFailureDialog(result);
       }
@@ -815,29 +839,30 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     }
   }
 
-  void _showVerifySuccessDialog(BusinessVerifyResult r) {
+  void _showBusinessConfirmedDialog({BusinessVerifyResult? result}) {
+    final ntsVerified = result?.success == true;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.verified_rounded, color: Colors.green),
+            Icon(Icons.check_circle_outline, color: Colors.green),
             SizedBox(width: 10),
-            Text('인증 완료'),
+            Text('확인'),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('사업자등록 진위확인이 완료되었습니다.'),
-            if ((r.taxType ?? '').isNotEmpty) ...[
+            const Text('필수 사업자 정보가 모두 입력되어 확인되었습니다.'),
+            if (ntsVerified && (result?.taxType ?? '').isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text('과세유형: ${r.taxType}', style: const TextStyle(fontSize: 13)),
+              Text('과세유형: ${result!.taxType}', style: const TextStyle(fontSize: 13)),
             ],
-            if ((r.bStt ?? '').isNotEmpty) ...[
+            if (ntsVerified && (result?.bStt ?? '').isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text('상태: ${r.bStt}', style: const TextStyle(fontSize: 13)),
+              Text('상태: ${result!.bStt}', style: const TextStyle(fontSize: 13)),
             ],
           ],
         ),
@@ -849,6 +874,10 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         ],
       ),
     );
+  }
+
+  void _showVerifySuccessDialog(BusinessVerifyResult r) {
+    _showBusinessConfirmedDialog(result: r);
   }
 
   void _showVerifyFailureDialog(BusinessVerifyResult r) {
@@ -976,51 +1005,52 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     String title;
     String subtitle;
 
-    switch (user.businessVerifyStatus) {
-      case BusinessVerifyStatus.verified:
-        bg = Colors.green.shade50;
-        fg = Colors.green.shade800;
-        icon = Icons.verified_rounded;
-        title = '사업자등록 진위확인 완료';
+    // 필수 항목이 모두 입력되면 '확인' 상태로 표시 (국세청 API 결과와 무관)
+    if (_hasRequiredBusinessFields()) {
+      bg = Colors.green.shade50;
+      fg = Colors.green.shade800;
+      icon = Icons.check_circle_outline;
+      title = '확인';
+      if (user.businessVerifyStatus == BusinessVerifyStatus.verified) {
         subtitle = user.businessVerifiedAt != null
-            ? '인증일: ${DateFormat('yyyy-MM-dd HH:mm').format(user.businessVerifiedAt!.toLocal())}'
-            : '국세청 진위확인이 완료되었습니다.';
-        break;
-      case BusinessVerifyStatus.failed:
-        bg = Colors.red.shade50;
-        fg = Colors.red.shade800;
-        icon = Icons.error_outline;
-        title = '진위확인 실패';
-        subtitle = '대표자명/개업일/사업자번호를 다시 확인해 주세요.';
-        break;
-      case BusinessVerifyStatus.closed:
-        bg = Colors.red.shade50;
-        fg = Colors.red.shade800;
-        icon = Icons.block;
-        title = '휴/폐업 상태로 조회되었습니다';
-        subtitle = '현재 상태에서는 사업자 활동이 제한됩니다.';
-        break;
-      case BusinessVerifyStatus.unverified:
-        if (user.isInGracePeriod) {
-          final remaining = user.graceRemaining;
-          final remText = remaining == null
-              ? ''
-              : (remaining.inDays >= 1
-                  ? '${remaining.inDays}일'
-                  : '${remaining.inHours}시간');
+            ? '국세청 진위확인 완료 · ${DateFormat('yyyy-MM-dd').format(user.businessVerifiedAt!.toLocal())}'
+            : '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
+      } else {
+        subtitle = '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
+      }
+    } else {
+      switch (user.businessVerifyStatus) {
+        case BusinessVerifyStatus.verified:
+          bg = Colors.green.shade50;
+          fg = Colors.green.shade800;
+          icon = Icons.check_circle_outline;
+          title = '확인';
+          subtitle = user.businessVerifiedAt != null
+              ? '국세청 진위확인 완료 · ${DateFormat('yyyy-MM-dd').format(user.businessVerifiedAt!.toLocal())}'
+              : '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
+          break;
+        case BusinessVerifyStatus.failed:
           bg = Colors.orange.shade50;
           fg = Colors.orange.shade800;
-          icon = Icons.access_time_rounded;
-          title = '진위확인이 필요합니다 (유예 ${remText.isEmpty ? '진행 중' : '$remText 남음'})';
-          subtitle = '유예 기간이 지나면 오더 등록·입찰이 차단됩니다.';
-        } else {
-          bg = Colors.red.shade50;
-          fg = Colors.red.shade800;
-          icon = Icons.warning_amber_rounded;
-          title = '사업자 인증이 필요합니다';
-          subtitle = '오더 등록·입찰이 차단된 상태입니다. 진위확인을 완료해 주세요.';
-        }
-        break;
+          icon = Icons.edit_note_outlined;
+          title = '사업자 정보 입력 필요';
+          subtitle = '사장님 성함, 상호명, 사업자번호, 개업일을 모두 입력해 주세요.';
+          break;
+        case BusinessVerifyStatus.closed:
+          bg = Colors.orange.shade50;
+          fg = Colors.orange.shade800;
+          icon = Icons.edit_note_outlined;
+          title = '사업자 정보 입력 필요';
+          subtitle = '사장님 성함, 상호명, 사업자번호, 개업일을 모두 입력해 주세요.';
+          break;
+        case BusinessVerifyStatus.unverified:
+          bg = Colors.orange.shade50;
+          fg = Colors.orange.shade800;
+          icon = Icons.edit_note_outlined;
+          title = '사업자 정보 입력 필요';
+          subtitle = '사장님 성함, 상호명, 사업자번호, 개업일을 모두 입력해 주세요.';
+          break;
+      }
     }
 
     return Container(

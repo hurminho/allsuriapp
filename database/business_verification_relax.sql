@@ -11,19 +11,24 @@
 --   - database/business_verification.sql
 --   - database/business_verification_bypass.sql
 --   가 먼저 적용되어 있을 것.
+--
+-- 주의:
+--   - DROP FUNCTION 은 RLS 정책이 fn_business_can_act 를 참조하고 있어 실패하므로
+--     CREATE OR REPLACE 만으로 시그니처 유지하며 본문만 교체한다.
+--   - SQL 언어 대신 plpgsql 로 작성하여 정의 시점에 본문이 즉시 컴파일되지 않도록 함
+--     (Supabase의 search_path 강제 정책 충돌 회피).
 -- ============================================================
 
-BEGIN;
-
--- fn_business_can_act 재정의: 사업자번호 보유 여부만 검사
-DROP FUNCTION IF EXISTS public.fn_business_can_act(uuid);
 CREATE OR REPLACE FUNCTION public.fn_business_can_act(p_uid uuid)
 RETURNS boolean
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_ok boolean;
+BEGIN
   SELECT EXISTS (
     SELECT 1
     FROM public.users u
@@ -34,7 +39,9 @@ AS $$
         u.business_verify_bypass = TRUE
         OR u.businessnumber_norm IS NOT NULL
       )
-  );
+  ) INTO v_ok;
+  RETURN COALESCE(v_ok, FALSE);
+END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.fn_business_can_act(uuid)
@@ -43,18 +50,7 @@ GRANT EXECUTE ON FUNCTION public.fn_business_can_act(uuid)
 COMMENT ON FUNCTION public.fn_business_can_act(uuid) IS
   '사업자 활동 가능 여부. 관리자 우회 또는 사업자번호 보유 시 TRUE. (2026-05 완화)';
 
-COMMIT;
-
 -- ============================================================
--- 점검 쿼리
+-- 점검 쿼리는 database/business_verification_relax_check.sql 참조
+-- (마이그레이션과 분리하여 실패해도 함수 갱신은 영향 없도록 함)
 -- ============================================================
-SELECT '=== 변경 후 활동 가능 사업자 ===' AS info;
-SELECT id, name, businessname,
-       businessnumber_norm IS NOT NULL AS has_b_no,
-       business_verify_bypass,
-       business_verify_status,
-       public.fn_business_can_act(id) AS can_act
-FROM public.users
-WHERE role = 'business'
-ORDER BY can_act DESC, businessname NULLS LAST
-LIMIT 30;

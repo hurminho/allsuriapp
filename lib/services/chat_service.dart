@@ -365,11 +365,8 @@ class ChatService extends ChangeNotifier {
         }
       }
       
-      // 4. 병렬로 최근 메시지와 읽지 않은 메시지 수 가져오기
-      final futures = <Future>[];
-      
+      // 4. 표시용 메타데이터 설정 (상대방 이름/아바타, 오더 제목)
       for (final room in roomMap.values) {
-        // 사용자 이름·아바타·역할 설정
         final otherId = room['_otherId'];
         if (otherId != null && userMap.containsKey(otherId)) {
           final user = userMap[otherId]!;
@@ -383,72 +380,55 @@ class ChatService extends ChangeNotifier {
         } else {
           room['displayName'] = room['title']?.toString() ?? '채팅';
         }
-        
-        // 오더 제목 설정 (저장된 값 사용)
+
         final savedTitle = room['title']?.toString();
         if (savedTitle != null && savedTitle.isNotEmpty && !savedTitle.startsWith('order_') && !savedTitle.startsWith('call_')) {
           room['orderTitle'] = savedTitle;
         }
-        
-        // 최근 메시지 가져오기 (병렬)
-        futures.add(
-          _sb
-              .from('chat_messages')
-              .select('content, text, createdat')
-              .eq('room_id', room['id'])
-              .order('createdat', ascending: false)
-              .limit(1)
-              .maybeSingle()
-              .then((last) {
-            if (last != null) {
-              room['lastMessage'] = (last['content']?.toString() ?? last['text']?.toString() ?? '');
-              room['lastMessageAt'] = last['createdat']?.toString();
-            } else {
-              room['lastMessage'] = '';
-            }
-          }).catchError((_) {
-            room['lastMessage'] = '';
-          })
-        );
-        
-        // 읽지 않은 메시지 수 계산 (병렬)
-        final isParticipantA = room['participant_a']?.toString() == userId;
-        final lastReadAt = isParticipantA 
-            ? room['participant_a_last_read_at'] 
-            : room['participant_b_last_read_at'];
-        
-        if (lastReadAt != null) {
-          futures.add(
-            _sb
-                .from('chat_messages')
-                .select('id')
-                .eq('room_id', room['id'])
-                .neq('sender_id', userId)
-                .gt('createdat', lastReadAt.toString())
-                .then((unreadMessages) {
-              room['unreadCount'] = unreadMessages.length;
-            }).catchError((_) {
-              room['unreadCount'] = 0;
-            })
-          );
-        } else {
-          futures.add(
-            _sb
-                .from('chat_messages')
-                .select('id')
-                .eq('room_id', room['id'])
-                .neq('sender_id', userId)
-                .then((unreadMessages) {
-              room['unreadCount'] = unreadMessages.length;
-            }).catchError((_) {
-              room['unreadCount'] = 0;
-            })
-          );
-        }
+
+        // 기본값 (메시지가 없는 방 대비)
+        room['lastMessage'] = '';
+        room['unreadCount'] = 0;
       }
-      
-      // 5. 모든 병렬 작업 완료 대기
-      await Future.wait(futures);
+
+      // 5. 모든 방의 메시지를 단일 쿼리로 가져와 마지막 메시지 + 안읽음 수 계산
+      //    (방마다 2쿼리씩 쏘던 N+1 패턴 제거)
+      try {
+        final roomIds = roomMap.keys.toList();
+        final messages = await _sb
+            .from('chat_messages')
+            .select('room_id, content, text, createdat, sender_id')
+            .inFilter('room_id', roomIds)
+            .order('createdat', ascending: false);
+
+        for (final msg in messages) {
+          final roomId = msg['room_id']?.toString();
+          if (roomId == null) continue;
+          final room = roomMap[roomId];
+          if (room == null) continue;
+
+          // 내림차순이므로 첫 등장이 가장 최근 메시지
+          if (room['lastMessageAt'] == null) {
+            room['lastMessage'] = (msg['content']?.toString() ?? msg['text']?.toString() ?? '');
+            room['lastMessageAt'] = msg['createdat']?.toString();
+          }
+
+          // 안읽음 수 집계 (상대방 메시지 & last_read 이후)
+          if (msg['sender_id']?.toString() != userId) {
+            final isParticipantA = room['participant_a']?.toString() == userId;
+            final lastReadRaw = isParticipantA
+                ? room['participant_a_last_read_at']
+                : room['participant_b_last_read_at'];
+            final lastRead = lastReadRaw != null ? DateTime.tryParse(lastReadRaw.toString()) : null;
+            final createdAt = DateTime.tryParse(msg['createdat']?.toString() ?? '');
+            if (lastRead == null || (createdAt != null && createdAt.isAfter(lastRead))) {
+              room['unreadCount'] = (room['unreadCount'] as int) + 1;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('   ⚠️ 메시지 일괄 조회 실패: $e');
+      }
       
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime).inMilliseconds;

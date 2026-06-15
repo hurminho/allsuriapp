@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:allsuriapp/widgets/loading_indicator.dart';
 import '../../services/auth_service.dart';
@@ -320,13 +321,15 @@ class _ListAvatar extends StatelessWidget {
         );
     if (avatarUrl != null && avatarUrl!.isNotEmpty) {
       return ClipOval(
-        child: Image.network(
-          avatarUrl!,
+        child: CachedNetworkImage(
+          imageUrl: avatarUrl!,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => fallback(),
-          loadingBuilder: (context, child, progress) => progress == null ? child : fallback(),
+          memCacheWidth: 144,
+          memCacheHeight: 144,
+          errorWidget: (_, __, ___) => fallback(),
+          placeholder: (context, url) => fallback(),
         ),
       );
     }

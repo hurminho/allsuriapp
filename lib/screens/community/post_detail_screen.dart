@@ -53,18 +53,29 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 child: Column(
                   children: [
                     Expanded(
-                      child: ListView(
+                      child: ListView.builder(
                         padding: const EdgeInsets.all(16),
-                        children: [
-                          if (_post != null) _buildPost(_post!),
-                          const SizedBox(height: 16),
-                          const Divider(height: 1),
-                          const SizedBox(height: 12),
-                          Text('댓글 ${_comments.length}', style: const TextStyle(fontFamily: 'Arial', fontSize: 11, color: CupertinoColors.black, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
-                          ..._comments.map(_buildComment),
-                          const SizedBox(height: 80),
-                        ],
+                        // index 0 = 게시글 헤더, 이후 = 댓글, 마지막 = 하단 여백
+                        itemCount: _comments.length + 2,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_post != null) _buildPost(_post!),
+                                const SizedBox(height: 16),
+                                const Divider(height: 1),
+                                const SizedBox(height: 12),
+                                Text('댓글 ${_comments.length}', style: const TextStyle(fontFamily: 'Arial', fontSize: 11, color: CupertinoColors.black, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 8),
+                              ],
+                            );
+                          }
+                          if (index == _comments.length + 1) {
+                            return const SizedBox(height: 80);
+                          }
+                          return _buildComment(_comments[index - 1]);
+                        },
                       ),
                     ),
                     _buildCommentInput()

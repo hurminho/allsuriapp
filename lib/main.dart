@@ -83,62 +83,17 @@ void main() async {
     anonKey: SupabaseConfig.anonKey,
   );
   
-  // NotificationService 초기화
-  await NotificationService().initialize();
+  // 알림 서비스 초기화 (서로 독립적이므로 병렬 실행)
+  await Future.wait([
+    NotificationService().initialize(),
+    LocalNotificationService().initialize(
+      onSelectNotification: (String? payload) {
+        debugPrint('🔔 [Main] 알림 클릭: $payload');
+        // TODO: 페이로드를 처리하여 적절한 화면으로 이동
+      },
+    ),
+  ]);
   
-  // LocalNotificationService 초기화
-  await LocalNotificationService().initialize(
-    onSelectNotification: (String? payload) {
-      print('🔔 [Main] 알림 클릭: $payload');
-      // TODO: 페이로드를 처리하여 적절한 화면으로 이동
-    },
-  );
-  
-  // Firebase 초기화 (Android + iOS)
-  // iOS: 네이티브가 GoogleService-Info.plist로 자동 초기화 시 duplicate-app → 무시하고 FCM 계속 진행
-  if (!kIsWeb) {
-    bool firebaseReady = false;
-    try {
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        ).timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            print('⚠️ Firebase 초기화 타임아웃');
-            throw TimeoutException('Firebase init timeout');
-          },
-        );
-      } else {
-        print('ℹ️ [Main] Firebase 이미 초기화됨 (네이티브)');
-      }
-      firebaseReady = true;
-    } catch (e) {
-      if (e.toString().contains('duplicate-app') || e.toString().contains('already exists')) {
-        print('ℹ️ [Main] Firebase 네이티브 초기화됨 - FCM 계속 진행');
-        firebaseReady = true;
-      } else {
-        print('⚠️ Firebase 초기화 실패: $e');
-      }
-    }
-    if (firebaseReady) {
-      try {
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-        await FCMService().initialize().timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            print('⚠️ FCM 초기화 타임아웃');
-            throw TimeoutException('FCM init timeout');
-          },
-        );
-        FCMService().setNavigatorKey(navigatorKey);
-        print('✅ FCM 기능이 활성화되었습니다. (${Platform.isIOS ? "iOS" : "Android"})');
-      } catch (e) {
-        print('⚠️ FCM 초기화 실패 (앱은 계속 실행됨): $e');
-      }
-    }
-  }
-
   // iOS/Android: 앱 포그라운드 진입 시 앱 아이콘 배지 제거
   if (!kIsWeb) {
     WidgetsBinding.instance.addObserver(_BadgeLifecycleObserver());
@@ -146,6 +101,10 @@ void main() async {
 
   runZonedGuarded(() {
     runApp(const MyApp());
+    // Firebase/FCM 초기화(최대 10초)는 첫 프레임을 막지 않도록 runApp 이후로 지연
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initFirebaseMessaging();
+    });
   }, (error, stack) {
     // Supabase OAuth 미사용 시 Code verifier 에러 무시 (Kakao 리다이렉트 등으로 인한 오탐)
     if (error.toString().contains('Code verifier could not be found')) {
@@ -154,6 +113,51 @@ void main() async {
     }
     debugPrint('Top-level error caught: $error');
   });
+}
+
+/// Firebase + FCM 초기화 (첫 프레임 이후 비동기 실행).
+/// 실패해도 앱 동작에는 영향이 없으므로 모든 예외를 흡수한다.
+Future<void> _initFirebaseMessaging() async {
+  if (kIsWeb) return;
+  bool firebaseReady = false;
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          debugPrint('⚠️ Firebase 초기화 타임아웃');
+          throw TimeoutException('Firebase init timeout');
+        },
+      );
+    } else {
+      debugPrint('ℹ️ [Main] Firebase 이미 초기화됨 (네이티브)');
+    }
+    firebaseReady = true;
+  } catch (e) {
+    if (e.toString().contains('duplicate-app') || e.toString().contains('already exists')) {
+      debugPrint('ℹ️ [Main] Firebase 네이티브 초기화됨 - FCM 계속 진행');
+      firebaseReady = true;
+    } else {
+      debugPrint('⚠️ Firebase 초기화 실패: $e');
+    }
+  }
+  if (!firebaseReady) return;
+  try {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    await FCMService().initialize().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        debugPrint('⚠️ FCM 초기화 타임아웃');
+        throw TimeoutException('FCM init timeout');
+      },
+    );
+    FCMService().setNavigatorKey(navigatorKey);
+    debugPrint('✅ FCM 기능이 활성화되었습니다. (${Platform.isIOS ? "iOS" : "Android"})');
+  } catch (e) {
+    debugPrint('⚠️ FCM 초기화 실패 (앱은 계속 실행됨): $e');
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -176,7 +180,9 @@ class MyApp extends StatelessWidget {
         // UserProvider는 AuthService에 의존하므로 마지막에 생성
         ChangeNotifierProxyProvider<AuthService, UserProvider>(
           create: (context) => UserProvider(Provider.of<AuthService>(context, listen: false)),
-          update: (context, authService, previous) => UserProvider(authService),
+          // AuthService는 싱글톤이므로 매번 새 UserProvider를 만들지 않고 재사용한다.
+          // (auth notify마다 새 인스턴스 생성 + 리스너 재등록으로 인한 광역 rebuild/누수 방지)
+          update: (context, authService, previous) => previous ?? UserProvider(authService),
         ),
       ],
       child: DynamicColorBuilder(
@@ -418,7 +424,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAutoLogin() async {
-    await Future.delayed(const Duration(milliseconds: 500)); // 최소 스플래시 시간
+    await Future.delayed(const Duration(milliseconds: 150)); // 최소 스플래시 시간(깜빡임 방지)
     
     if (!mounted) return;
     

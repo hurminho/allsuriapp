@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/job_service.dart';
@@ -15,8 +16,33 @@ class TransferJobScreen extends StatefulWidget {
 
 class _TransferJobScreenState extends State<TransferJobScreen> {
   String? _selectedBusinessId;
-  String _query = '';
   bool _submitting = false;
+
+  Timer? _debounce;
+  Future<List<Map<String, dynamic>>>? _searchFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFuture = _searchBusinesses('');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  /// 입력마다 쿼리하지 않고 350ms 디바운스 후 한 번만 검색.
+  void _onSearchChanged(String text) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() {
+        _searchFuture = _searchBusinesses(text);
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,12 +58,12 @@ class _TransferJobScreenState extends State<TransferJobScreen> {
                   labelText: '상호명 또는 전화번호로 검색',
                   prefixIcon: Icon(Icons.search),
                 ),
-                onChanged: (text) => setState(() { _query = text; }),
+                onChanged: _onSearchChanged,
               ),
             ),
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _searchBusinesses(_query),
+                future: _searchFuture,
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());

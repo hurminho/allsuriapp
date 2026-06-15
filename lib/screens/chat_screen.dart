@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -536,7 +537,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   onTap: () => _showImageFullScreen(m.imageUrl!),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 240, maxHeight: 280),
-                    child: Image.network(m.imageUrl!, fit: BoxFit.cover),
+                    child: CachedNetworkImage(
+                      imageUrl: m.imageUrl!,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 720,
+                    ),
                   ),
                 ),
               ),

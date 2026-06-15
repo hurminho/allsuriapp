@@ -45,6 +45,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
   late Future<int> _completedJobsCountFuture;
   late Future<int> _myOrdersCountFuture;
   late Future<int> _myBidsCountFuture;
+  // 광고/알림 Future도 캐싱해 build 마다 재요청되지 않게 한다.
+  Future<List<Ad>>? _adBannerFuture;
+  Future<int>? _notifCountFuture;
   
   RealtimeChannel? _marketplaceChannel;
   RealtimeChannel? _ordersChannel;
@@ -118,12 +121,19 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
   }
 
   void _refreshCounts() {
+    final userId = context.read<AuthService>().currentUser?.id ?? '';
     setState(() {
       _callOpenCountFuture = _getCallOpenCount();
       _estimateRequestsCountFuture = _getEstimateRequestsCount();
       _completedJobsCountFuture = _getMyCompletedJobsCount();
       _myOrdersCountFuture = _getMyOrdersCount();
       _myBidsCountFuture = _getMyBidsCount();
+      _adBannerFuture = Future.wait([
+        AdService().getAdsByLocation('dashboard_ad_1'),
+        AdService().getAdsByLocation('dashboard_ad_2'),
+      ]).then((results) => [...results[0], ...results[1]]);
+      _notifCountFuture =
+          userId.isEmpty ? Future.value(0) : NotificationService().getUnreadCount(userId);
     });
   }
 
@@ -297,7 +307,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
             centerTitle: true,
             actions: [
               FutureBuilder<int>(
-                future: NotificationService().getUnreadCount(user?.id ?? ''),
+                future: _notifCountFuture,
                 builder: (context, snapshot) {
                   final unread = snapshot.data ?? 0;
                   return Stack(
@@ -599,10 +609,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
 
   Widget _buildAdBanner(BuildContext context) {
     return FutureBuilder<List<Ad>>(
-      future: Future.wait([
-        AdService().getAdsByLocation('dashboard_ad_1'),
-        AdService().getAdsByLocation('dashboard_ad_2'),
-      ]).then((results) => [...results[0], ...results[1]]),
+      future: _adBannerFuture,
       builder: (context, snapshot) {
         // 광고 데이터 로드
         final ads = snapshot.data ?? [];
@@ -750,11 +757,12 @@ class _DashboardAdCarouselState extends State<_DashboardAdCarousel> {
                   child: ad.imageUrl.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            ad.imageUrl,
+                          child: CachedNetworkImage(
+                            imageUrl: ad.imageUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
-                            errorBuilder: (_, __, ___) => Center(
+                            memCacheHeight: 240,
+                            errorWidget: (_, __, ___) => Center(
                               child: Text(
                                 ad.title ?? '광고 ${index + 1}',
                                 style: const TextStyle(

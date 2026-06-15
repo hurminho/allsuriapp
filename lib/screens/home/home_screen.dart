@@ -32,12 +32,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _shouldShowOnboarding = false;
   int _totalCompletedJobs = 0;
   bool _isLoadingStats = true;
+  // 홈 배너 광고 Future 캐싱 (build 마다 재요청 방지)
+  Future<List<Ad>>? _homeBannerFuture;
 
   @override
   void initState() {
     super.initState();
     _checkOnboarding();
     _loadStatistics();
+    _homeBannerFuture = AdService().getAdsByLocation('home_banner');
   }
 
   Future<void> _checkOnboarding() async {
@@ -397,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHomeBanner(BuildContext context) {
     return FutureBuilder<List<Ad>>(
-      future: AdService().getAdsByLocation('home_banner'),
+      future: _homeBannerFuture,
       builder: (context, snapshot) {
         final ads = snapshot.data ?? [];
         

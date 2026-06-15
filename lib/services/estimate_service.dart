@@ -28,42 +28,53 @@ class EstimateService extends ChangeNotifier {
     _notifyListenersSafely();
 
     try {
-      print('🔍 EstimateService.loadEstimates 시작');
-      print('🔍 파라미터: businessId=$businessId, customerId=$customerId, orderId=$orderId');
-      
       var query = _sb.from('estimates').select();
       if (businessId != null) {
-        print('🔍 businessId로 필터링: $businessId');
         query = query.eq('businessId', businessId);
       } else if (customerId != null) {
-        print('🔍 customerId로 필터링: $customerId');
         query = query.eq('customerId', customerId);
       } else if (orderId != null) {
-        print('🔍 orderId로 필터링: $orderId');
         query = query.eq('orderId', orderId);
       }
-      
-      print('🔍 쿼리 실행 중...');
+
       // Supabase 테이블은 camelCase 사용
       final rows = await query.order('createdAt', ascending: false);
-      
-      print('🔍 DB에서 가져온 견적 행 수: ${rows.length}');
-      
+
       _estimates = rows
           .map((r) => Estimate.fromMap(Map<String, dynamic>.from(r)))
           .toList();
-      
-      print('🔍 변환된 견적 수: ${_estimates.length}');
-      if (_estimates.isNotEmpty) {
-        print('🔍 첫 번째 견적: ${_estimates.first.businessName} (금액: ${_estimates.first.amount})');
-      }
     } catch (e) {
-      print('❌ 견적 로드 오류: $e');
+      debugPrint('❌ 견적 로드 오류: $e');
       _estimates = [];
     } finally {
       _isLoading = false;
       _notifyListenersSafely();
     }
+  }
+
+  /// 여러 주문의 견적을 단일 쿼리로 한 번에 로드해 orderId 별로 그룹핑한다.
+  /// (주문마다 loadEstimates 를 반복 호출하던 N+1 패턴 제거)
+  Future<Map<String, List<Estimate>>> loadEstimatesForOrders(List<String> orderIds) async {
+    final result = <String, List<Estimate>>{};
+    if (orderIds.isEmpty) return result;
+    try {
+      final rows = await _sb
+          .from('estimates')
+          .select()
+          .inFilter('orderId', orderIds)
+          .order('createdAt', ascending: false);
+
+      for (final r in rows) {
+        final map = Map<String, dynamic>.from(r);
+        final estimate = Estimate.fromMap(map);
+        final oid = map['orderId']?.toString();
+        if (oid == null) continue;
+        (result[oid] ??= <Estimate>[]).add(estimate);
+      }
+    } catch (e) {
+      debugPrint('❌ 견적 일괄 로드 오류: $e');
+    }
+    return result;
   }
 
   // 안전한 notifyListeners 호출

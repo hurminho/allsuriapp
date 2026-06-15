@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:percent_indicator/percent_indicator.dart';
@@ -39,6 +40,9 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   final MarketplaceService _market = MarketplaceService();
   
   late Future<Map<String, int>> _dashboardDataFuture;
+  // 광고/알림 Future 캐싱 (build 마다 재요청 방지)
+  Future<List<Ad>>? _adBannerFuture;
+  Future<int>? _notifCountFuture;
   
   RealtimeChannel? _marketplaceChannel;
   RealtimeChannel? _ordersChannel;
@@ -101,28 +105,26 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   }
 
   void _refreshData() {
+    final userId = context.read<AuthService>().currentUser?.id ?? '';
     setState(() {
       _dashboardDataFuture = _loadDashboardData();
+      _adBannerFuture = Future.wait([
+        AdService().getAdsByLocation('dashboard_ad_1'),
+        AdService().getAdsByLocation('dashboard_ad_2'),
+      ]).then((results) => [...results[0], ...results[1]]);
+      _notifCountFuture =
+          userId.isEmpty ? Future.value(0) : NotificationService().getUnreadCount(userId);
     });
   }
 
   Future<Map<String, int>> _loadDashboardData() async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🚀 [ProfessionalDashboard] 대시보드 데이터 로드 시작');
-      
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentUserId = authService.currentUser?.id;
-      
-      print('   userId: $currentUserId');
-      
-      if (currentUserId == null) {
-        print('❌ [ProfessionalDashboard] userId가 null');
-        return {};
-      }
-      
+
+      if (currentUserId == null) return {};
+
       // 병렬로 데이터 로드
-      print('   병렬 로드 시작...');
       final results = await Future.wait([
         _getCompletedJobsCount(currentUserId),
         _getInProgressJobsCount(currentUserId),
@@ -130,27 +132,16 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         _getMyBidsCount(currentUserId),
         _getMyOrdersCount(currentUserId),
       ]);
-      
-      final data = {
+
+      return {
         'completed': results[0],
         'inProgress': results[1],
         'newOrders': results[2],
         'myBids': results[3],
         'myOrders': results[4],
       };
-      
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('✅ [ProfessionalDashboard] 로드 완료:');
-      print('   완료한 공사: ${data['completed']}');
-      print('   진행 중: ${data['inProgress']}');
-      print('   새 오더: ${data['newOrders']}');
-      print('   입찰 대기 중: ${data['myBids']}');
-      print('   내 오더: ${data['myOrders']}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
-      return data;
     } catch (e) {
-      print('❌ [_loadDashboardData] 에러: $e');
+      debugPrint('❌ [_loadDashboardData] 에러: $e');
       return {};
     }
   }
@@ -360,15 +351,10 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       ),
       actions: [
         FutureBuilder<int>(
-          future: NotificationService().getUnreadCount(user?.id ?? ''),
+          future: _notifCountFuture,
           builder: (context, snapshot) {
             final unread = snapshot.data ?? 0;
-            
-            // 디버그 로그
-            if (snapshot.connectionState == ConnectionState.done) {
-              print('🔔 [Dashboard] 읽지 않은 알림: $unread개');
-            }
-            
+
             return Stack(
               clipBehavior: Clip.none,
               children: [
@@ -723,10 +709,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
 
   Widget _buildAdBanner(BuildContext context) {
     return FutureBuilder<List<Ad>>(
-      future: Future.wait([
-        AdService().getAdsByLocation('dashboard_ad_1'),
-        AdService().getAdsByLocation('dashboard_ad_2'),
-      ]).then((results) => [...results[0], ...results[1]]),
+      future: _adBannerFuture,
       builder: (context, snapshot) {
         // 광고 데이터 로드
         final ads = snapshot.data ?? [];
@@ -843,11 +826,12 @@ class _DashboardAdCarouselState extends State<_DashboardAdCarousel> {
                   child: ad.imageUrl.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            ad.imageUrl,
+                          child: CachedNetworkImage(
+                            imageUrl: ad.imageUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
-                            errorBuilder: (_, __, ___) => Center(
+                            memCacheHeight: 240,
+                            errorWidget: (_, __, ___) => Center(
                               child: Text(
                                 ad.title ?? '광고 ${index + 1}',
                                 style: const TextStyle(

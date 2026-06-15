@@ -51,67 +51,50 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
       
       if (authService.currentUser != null) {
         final currentUser = authService.currentUser!;
-        
-        print('🔍 현재 사용자: ${currentUser.id}');
-        print('🔍 사용자 전화번호: ${currentUser.phoneNumber}');
-        
+
         // 현재 사용자의 전화번호 가져오기
         String? userPhoneNumber = currentUser.phoneNumber;
-        
+
         if (userPhoneNumber != null) {
           // 전화번호 정규화 (하이픈, 공백 제거)
           String normalizedUserPhone = userPhoneNumber.replaceAll(RegExp(r'[-\s()]'), '');
-          print('🔍 정규화된 전화번호: $normalizedUserPhone');
-          
+
           // 모든 주문을 가져온 후 전화번호로 필터링
           await orderService.loadOrders(); // 모든 주문 로드
-          print('🔍 전체 주문 수: ${orderService.orders.length}');
-          
+
           // 전화번호가 일치하는 주문만 필터링
           _orders = orderService.orders.where((order) {
             String normalizedOrderPhone = order.customerPhone.replaceAll(RegExp(r'[-\s()]'), '');
-            print('🔍 주문 전화번호: ${order.customerPhone} → 정규화: $normalizedOrderPhone');
             return normalizedOrderPhone == normalizedUserPhone;
           }).toList();
-          
-          print('🔍 필터링된 주문 수: ${_orders.length}');
         } else {
           // 전화번호가 없으면 customerId로 필터링 (기존 방식)
-          print('🔍 customerId로 주문 조회: ${currentUser.id}');
           await orderService.loadOrders(customerId: currentUser.id);
           _orders = orderService.orders;
-          print('🔍 customerId로 찾은 주문 수: ${_orders.length}');
         }
-        
-        // 각 주문에 대한 견적 목록 로드
-        _orderEstimates.clear();
-        for (final order in _orders) {
-          if (order.id != null) {
-            print('🔍 주문 ${order.id}에 대한 견적 로드 중...');
-            await estimateService.loadEstimates(orderId: order.id!);
-            _orderEstimates[order.id!] = List.from(estimateService.estimates);
-            print('🔍 주문 ${order.id}의 견적 수: ${estimateService.estimates.length}');
-          }
-        }
-        
-        print('🔍 최종 결과: 주문 ${_orders.length}개, 견적 맵 ${_orderEstimates.length}개');
+
+        // 각 주문에 대한 견적을 단일 쿼리로 일괄 로드 (N+1 제거)
+        final orderIds = _orders
+            .map((o) => o.id)
+            .whereType<String>()
+            .toList();
+        _orderEstimates
+          ..clear()
+          ..addAll(await estimateService.loadEstimatesForOrders(orderIds));
       } else {
         // 비로그인 사용자: 로컬 세션ID로 주문 조회
-        print('🔍 비로그인 사용자: 세션ID로 조회');
         final prefs = await SharedPreferences.getInstance();
         String? sessionId = prefs.getString('allsuri_session_id');
         sessionId ??= const Uuid().v4();
         await prefs.setString('allsuri_session_id', sessionId);
-        print('🔍 세션ID: $sessionId');
 
         await orderService.loadOrders(sessionId: sessionId);
         _orders = orderService.orders;
-        print('🔍 세션ID로 찾은 주문 수: ${_orders.length}');
       }
 
       // 고객 화면에서는 사업자 Call 목록을 표시하지 않습니다 (요청사항 반영)
     } catch (e) {
-      print('❌ 데이터 로드 오류: $e');
+      debugPrint('❌ 데이터 로드 오류: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -199,12 +182,16 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: _loadData,
-            child: ListView(
+            child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              children: [
-                for (final order in filteredOrders)
-                  _buildOrderCard(order, _orderEstimates[order.id ?? ''] ?? []),
-              ],
+              itemCount: filteredOrders.length,
+              itemBuilder: (context, index) {
+                final order = filteredOrders[index];
+                return KeyedSubtree(
+                  key: ValueKey(order.id),
+                  child: _buildOrderCard(order, _orderEstimates[order.id ?? ''] ?? []),
+                );
+              },
             ),
           ),
         ),

@@ -28,7 +28,10 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
   bool _loading = true;
   String? _error;
 
-  // 사업자 평점 평균 가져오기
+  // bidderId -> {average, count}. _loadBidders 에서 일괄 채움.
+  final Map<String, Map<String, dynamic>> _ratingsByBidder = {};
+
+  // 사업자 평점 평균 가져오기 (단건 - 프로필 다이얼로그용)
   Future<Map<String, dynamic>> _getBidderRating(String bidderId) async {
     try {
       final reviews = await Supabase.instance.client
@@ -45,8 +48,40 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
       
       return {'average': average, 'count': ratings.length};
     } catch (e) {
-      print('⚠️ 평점 조회 실패: $e');
+      debugPrint('⚠️ 평점 조회 실패: $e');
       return {'average': 0.0, 'count': 0};
+    }
+  }
+
+  /// 모든 입찰자의 평점을 단일 쿼리로 조회해 _ratingsByBidder 에 채운다.
+  /// (입찰자마다 FutureBuilder로 쿼리하던 N+1 제거)
+  Future<void> _loadRatingsFor(List<String> bidderIds) async {
+    _ratingsByBidder.clear();
+    if (bidderIds.isEmpty) return;
+    try {
+      final reviews = await Supabase.instance.client
+          .from('order_reviews')
+          .select('rating, reviewee_id')
+          .inFilter('reviewee_id', bidderIds);
+
+      final sums = <String, int>{};
+      final counts = <String, int>{};
+      for (final r in reviews) {
+        final id = r['reviewee_id']?.toString();
+        if (id == null) continue;
+        final rating = (r['rating'] ?? 0) as int;
+        sums[id] = (sums[id] ?? 0) + rating;
+        counts[id] = (counts[id] ?? 0) + 1;
+      }
+      for (final id in bidderIds) {
+        final cnt = counts[id] ?? 0;
+        _ratingsByBidder[id] = {
+          'average': cnt > 0 ? (sums[id]! / cnt) : 0.0,
+          'count': cnt,
+        };
+      }
+    } catch (e) {
+      debugPrint('⚠️ 평점 일괄 조회 실패: $e');
     }
   }
 
@@ -216,23 +251,31 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
     });
 
     try {
-      print('🔍 [OrderBiddersScreen] 입찰자 목록 로드: ${widget.listingId}');
-      
       final api = ApiService();
       final response = await api.get('/market/listings/${widget.listingId}/bids');
-      
-      print('   응답: $response');
-      
+
       if (response['success'] == true && response['data'] is List) {
+        final bidders = List<Map<String, dynamic>>.from(response['data']);
+
+        // 입찰자 평점을 단일 쿼리로 일괄 로드 (N+1 제거)
+        final bidderIds = bidders
+            .map((b) => b['bidder_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+        await _loadRatingsFor(bidderIds);
+
+        if (!mounted) return;
         setState(() {
-          _bidders = List<Map<String, dynamic>>.from(response['data']);
+          _bidders = bidders;
           _loading = false;
         });
       } else {
         throw Exception('데이터 형식이 올바르지 않습니다');
       }
     } catch (e) {
-      print('❌ [OrderBiddersScreen] 로드 오류: $e');
+      debugPrint('❌ [OrderBiddersScreen] 로드 오류: $e');
+      if (!mounted) return;
       setState(() {
         _error = '입찰자 목록을 불러오는데 실패했습니다';
         _loading = false;
@@ -748,24 +791,21 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        // 평점
-                        FutureBuilder<Map<String, dynamic>>(
-                          future: _getBidderRating(bidderId),
-                          builder: (context, snap) {
-                            if (snap.hasData) {
-                              final avg = snap.data!['average'] as double? ?? 0.0;
-                              final cnt = snap.data!['count'] as int? ?? 0;
-                              return Row(children: [
-                                ...List.generate(5, (i) => Icon(
-                                  i < avg.round() ? Icons.star : Icons.star_border,
-                                  size: 14, color: Colors.amber[700],
-                                )),
-                                const SizedBox(width: 4),
-                                Text(cnt > 0 ? '${avg.toStringAsFixed(1)} ($cnt건)' : '후기 없음',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                              ]);
-                            }
-                            return Text('평가 로딩 중...', style: TextStyle(fontSize: 12, color: Colors.grey[500]));
+                        // 평점 (사전 로드된 _ratingsByBidder 사용)
+                        Builder(
+                          builder: (context) {
+                            final rating = _ratingsByBidder[bidderId];
+                            final avg = rating?['average'] as double? ?? 0.0;
+                            final cnt = rating?['count'] as int? ?? 0;
+                            return Row(children: [
+                              ...List.generate(5, (i) => Icon(
+                                i < avg.round() ? Icons.star : Icons.star_border,
+                                size: 14, color: Colors.amber[700],
+                              )),
+                              const SizedBox(width: 4),
+                              Text(cnt > 0 ? '${avg.toStringAsFixed(1)} ($cnt건)' : '후기 없음',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                            ]);
                           },
                         ),
                         const SizedBox(height: 4),
