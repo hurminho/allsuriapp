@@ -193,28 +193,61 @@ export const handler = async (event: any): Promise<ApiResp> => {
       if (!BUSINESS_API_SERVICE_KEY) {
         return ok({ selftest: true, ok: false, reason: 'NO_SERVICE_KEY' })
       }
-      const testBNo = '1248100998'
-      const url = `${NTS_BASE}/status?serviceKey=${encodeURIComponent(BUSINESS_API_SERVICE_KEY)}&returnType=JSON`
+      // 파라미터로 임의 사업자 테스트 가능 (없으면 공개번호 삼성전자로 키 점검).
+      // 인증/DB쓰기 없이 국세청 status, (p_nm 있으면) validate 만 호출하는 읽기전용 진단.
+      const testBNo = normalizeBNo(qs.b_no) || '1248100998'
+      const testStartDt = normalizeStartDt(qs.start_dt || '')
+      const testPNm = (qs.p_nm || '').trim()
+      const testBNm = (qs.b_nm || '').trim()
       try {
-        const res = await fetch(url, {
+        // 1) status
+        const statusUrl = `${NTS_BASE}/status?serviceKey=${encodeURIComponent(BUSINESS_API_SERVICE_KEY)}&returnType=JSON`
+        const sres = await fetch(statusUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ b_no: [testBNo] }),
         })
-        const raw = await res.text()
-        let parsed: any = null
-        try { parsed = JSON.parse(raw) } catch (_) { /* not JSON */ }
-        const item = parsed && Array.isArray(parsed.data) ? parsed.data[0] : null
+        const sraw = await sres.text()
+        let sparsed: any = null
+        try { sparsed = JSON.parse(sraw) } catch (_) { /* not JSON */ }
+        const sitem = sparsed && Array.isArray(sparsed.data) ? sparsed.data[0] : null
+
+        // 2) validate (대표자명이 있을 때만)
+        let validateResult: any = null
+        if (testPNm.length >= 2 && testStartDt) {
+          const businesses: Record<string, string> = { b_no: testBNo, start_dt: testStartDt, p_nm: testPNm }
+          if (testBNm) businesses.b_nm = testBNm
+          const vUrl = `${NTS_BASE}/validate?serviceKey=${encodeURIComponent(BUSINESS_API_SERVICE_KEY)}&returnType=JSON`
+          const vres = await fetch(vUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ businesses: [businesses] }),
+          })
+          const vraw = await vres.text()
+          let vparsed: any = null
+          try { vparsed = JSON.parse(vraw) } catch (_) { /* not JSON */ }
+          const vitem = vparsed && Array.isArray(vparsed.data) ? vparsed.data[0] : null
+          validateResult = {
+            upstreamHttpStatus: vres.status,
+            valid: vitem?.valid ?? null,
+            valid_msg: vitem?.valid_msg ?? null,
+            rawSnippet: vparsed ? undefined : vraw.slice(0, 300),
+          }
+        }
+
         return ok({
           selftest: true,
-          upstreamHttpStatus: res.status,
-          upstreamOk: res.ok,
-          nts_status_code: parsed?.status_code ?? null,
-          match_cnt: parsed?.match_cnt ?? null,
-          sample_b_stt: item?.b_stt ?? null,
-          sample_tax_type: item?.tax_type ?? null,
-          // JSON 파싱 실패(키 미등록 등) 시 원인 파악용 본문 일부
-          rawSnippet: parsed ? undefined : raw.slice(0, 300),
+          tested_b_no: testBNo,
+          status: {
+            upstreamHttpStatus: sres.status,
+            nts_status_code: sparsed?.status_code ?? null,
+            match_cnt: sparsed?.match_cnt ?? null,
+            b_stt: sitem?.b_stt ?? null,
+            tax_type: sitem?.tax_type ?? null,
+            end_dt: sitem?.end_dt ?? null,
+            rawSnippet: sparsed ? undefined : sraw.slice(0, 300),
+          },
+          validate: validateResult,
         })
       } catch (e: any) {
         return ok({ selftest: true, ok: false, reason: 'FETCH_ERROR', detail: e?.message })
