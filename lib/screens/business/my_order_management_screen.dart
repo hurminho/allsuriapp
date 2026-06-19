@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart'; // 추가
 import '../../services/marketplace_service.dart'; // 추가
+import '../../services/kakao_share_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../business/order_bidders_screen.dart';
 import '../business/order_review_screen.dart';
@@ -605,6 +607,18 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                   ),
                 ),
                 const Spacer(),
+                // 카카오 공유 버튼 (낙찰 전 오더에 한해 노출)
+                if (listingId.isNotEmpty && selectedBidderId == null)
+                  IconButton(
+                    onPressed: () => _shareOrder(order),
+                    icon: const Icon(Icons.share_outlined, color: Color(0xFF1E3A8A), size: 22),
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: '오더 공유',
+                  ),
+                if (listingId.isNotEmpty && selectedBidderId == null)
+                  const SizedBox(width: 8),
                 // 프로세스 보기 버튼
                 if (listingId.isNotEmpty)
                   IconButton(
@@ -992,6 +1006,63 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         ),
       ),
     ).then((_) => _loadMyOrders());
+  }
+
+  /// 오더 카카오톡 공유 (오더 등록자가 직접 공유)
+  /// - listingId 가 있고 낙찰 전인 오더에서만 노출되며,
+  ///   카카오 미설치/공유 실패 시 시스템 공유로 폴백한다.
+  Future<void> _shareOrder(Map<String, dynamic> order) async {
+    final String title = order['title']?.toString() ?? '제목 없음';
+    final String description = order['description']?.toString() ?? '';
+    final String listingId = order['id']?.toString() ?? '';
+    final String jobId = order['jobid']?.toString() ?? '';
+    final String category =
+        (order['category'] ?? order['equipmentType'] ?? order['equipment_type'] ?? '')
+            .toString();
+    final String region =
+        (order['region'] ?? order['address'] ?? order['location'] ?? '').toString();
+
+    final budgetRaw = order['budget_amount'] ??
+        order['estimate_amount'] ??
+        order['budgetAmount'] ??
+        order['estimateAmount'];
+    final double? budgetAmount =
+        budgetRaw is num ? budgetRaw.toDouble() : double.tryParse(budgetRaw?.toString() ?? '');
+
+    final commRaw = order['commission_rate'] ?? order['commissionRate'];
+    final double? commissionRate =
+        commRaw is num ? commRaw.toDouble() : double.tryParse(commRaw?.toString() ?? '');
+
+    String? imageUrl;
+    final mediaCandidates = order['media_urls'] ??
+        order['mediaUrls'] ??
+        order['images'] ??
+        order['imageurls'];
+    if (mediaCandidates is List && mediaCandidates.isNotEmpty) {
+      imageUrl = mediaCandidates.first?.toString();
+    }
+
+    try {
+      final kakaoService = KakaoShareService();
+      final ok = await kakaoService.shareOrder(
+        orderId: listingId.isNotEmpty ? listingId : jobId,
+        title: title,
+        region: region,
+        category: category,
+        budgetAmount: budgetAmount,
+        commissionRate: commissionRate,
+        imageUrl: imageUrl,
+        description: description,
+      );
+      if (ok) return;
+    } catch (e) {
+      print('⚠️ [_shareOrder] 카카오 공유 실패, 시스템 공유로 폴백: $e');
+    }
+
+    final shareText =
+        '[$category] $title${region.isNotEmpty ? '\n📍 지역: $region' : ''}'
+        '${description.isNotEmpty ? '\n\n$description' : ''}\n\n올수리 앱에서 입찰하세요!';
+    await Share.share(shareText, subject: title);
   }
 
   /// 오더 삭제 처리

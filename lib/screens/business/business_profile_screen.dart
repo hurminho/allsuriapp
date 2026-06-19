@@ -1005,52 +1005,24 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     String title;
     String subtitle;
 
-    // 필수 항목이 모두 입력되면 '확인' 상태로 표시 (국세청 API 결과와 무관)
-    if (_hasRequiredBusinessFields()) {
-      bg = Colors.green.shade50;
-      fg = Colors.green.shade800;
-      icon = Icons.check_circle_outline;
-      title = '확인';
-      if (user.businessVerifyStatus == BusinessVerifyStatus.verified) {
-        subtitle = user.businessVerifiedAt != null
-            ? '국세청 진위확인 완료 · ${DateFormat('yyyy-MM-dd').format(user.businessVerifiedAt!.toLocal())}'
-            : '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
-      } else {
-        subtitle = '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
-      }
+    // 정책 변경: 사업자등록 인증 경고/안내 메시지는 표시하지 않는다.
+    // - 모든 필수 항목이 입력된 경우에만 '확인' 카드를 노출
+    // - 그 외에는 빈 위젯을 반환하여 사용자가 자율적으로 입력하도록 유도
+    if (!_hasRequiredBusinessFields() &&
+        user.businessVerifyStatus != BusinessVerifyStatus.verified) {
+      return const SizedBox.shrink();
+    }
+
+    bg = Colors.green.shade50;
+    fg = Colors.green.shade800;
+    icon = Icons.check_circle_outline;
+    title = '확인';
+    if (user.businessVerifyStatus == BusinessVerifyStatus.verified) {
+      subtitle = user.businessVerifiedAt != null
+          ? '국세청 진위확인 완료 · ${DateFormat('yyyy-MM-dd').format(user.businessVerifiedAt!.toLocal())}'
+          : '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
     } else {
-      switch (user.businessVerifyStatus) {
-        case BusinessVerifyStatus.verified:
-          bg = Colors.green.shade50;
-          fg = Colors.green.shade800;
-          icon = Icons.check_circle_outline;
-          title = '확인';
-          subtitle = user.businessVerifiedAt != null
-              ? '국세청 진위확인 완료 · ${DateFormat('yyyy-MM-dd').format(user.businessVerifiedAt!.toLocal())}'
-              : '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
-          break;
-        case BusinessVerifyStatus.failed:
-          bg = Colors.orange.shade50;
-          fg = Colors.orange.shade800;
-          icon = Icons.edit_note_outlined;
-          title = '사업자 정보 입력 필요';
-          subtitle = '사장님 성함, 상호명, 사업자번호, 개업일을 모두 입력해 주세요.';
-          break;
-        case BusinessVerifyStatus.closed:
-          bg = Colors.orange.shade50;
-          fg = Colors.orange.shade800;
-          icon = Icons.edit_note_outlined;
-          title = '사업자 정보 입력 필요';
-          subtitle = '사장님 성함, 상호명, 사업자번호, 개업일을 모두 입력해 주세요.';
-          break;
-        case BusinessVerifyStatus.unverified:
-          bg = Colors.orange.shade50;
-          fg = Colors.orange.shade800;
-          icon = Icons.edit_note_outlined;
-          title = '사업자 정보 입력 필요';
-          subtitle = '사장님 성함, 상호명, 사업자번호, 개업일을 모두 입력해 주세요.';
-          break;
-      }
+      subtitle = '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
     }
 
     return Container(

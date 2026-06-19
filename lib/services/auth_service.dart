@@ -97,12 +97,8 @@ class AuthService extends ChangeNotifier {
           print('⚠️ FCM 토큰 저장 실패 (무시됨): $e');
         }
 
-        // 사업자 진위확인 미완료 시 인앱 알림 1회/일 발송 (실패해도 무시)
-        try {
-          await _maybeNotifyBusinessVerifyRequired();
-        } catch (e) {
-          debugPrint('⚠️ [AuthService] 진위확인 알림 트리거 실패(무시): $e');
-        }
+        // 사업자 진위확인 안내 알림은 사용자 요청에 따라 비활성화.
+        // 사업자번호 등록은 프로필에서 자율적으로 진행.
 
         return;
       }
@@ -677,42 +673,12 @@ class AuthService extends ChangeNotifier {
     await refreshCurrentUser();
   }
 
-  /// 사업자번호가 등록되어 있지 않은 사업자 회원에게 1일 1회 알림을 생성한다.
-  /// 2026-05 완화: 사업자번호 보유만 검사 (진위확인 결과는 활동을 제한하지 않음).
-  /// FCM 푸시는 Supabase webhook이 알아서 발송한다.
+  /// 사업자번호가 등록되어 있지 않은 사업자 회원에게 안내 알림을 생성하는 로직.
+  /// 사용자 요청에 따라 더 이상 알림을 생성하지 않는다 (no-op).
+  /// 사업자번호 등록은 사용자가 프로필에서 자율적으로 진행한다.
+  // ignore: unused_element
   Future<void> _maybeNotifyBusinessVerifyRequired() async {
-    final user = _currentUser;
-    if (user == null) return;
-    if (user.role != 'business') return;
-    if (user.businessStatus != 'approved') return;
-    if (user.businessVerifyBypass) return;
-    if (user.hasBusinessNumber) return;
-
-    try {
-      final since = DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
-      final existing = await _sb
-          .from('notifications')
-          .select('id')
-          .eq('userid', user.id)
-          .eq('type', 'business_verify_required')
-          .gte('createdat', since)
-          .limit(1);
-      if (existing.isNotEmpty) {
-        debugPrint('ℹ️ [AuthService] 사업자번호 알림 24h 내 중복 발송 차단');
-        return;
-      }
-
-      await _sb.from('notifications').insert({
-        'userid': user.id,
-        'title': '사업자등록번호 입력이 필요합니다',
-        'body': '사업자등록번호가 없으면 오더 등록·입찰·낙찰이 모두 차단됩니다. '
-            '프로필에서 10자리 사업자등록번호를 입력해 주세요.',
-        'type': 'business_verify_required',
-      });
-      debugPrint('✅ [AuthService] 사업자번호 입력 안내 알림 생성: ${user.id}');
-    } catch (e) {
-      debugPrint('⚠️ [AuthService] 알림 생성 실패(무시): $e');
-    }
+    return;
   }
 
   /// 세션에서 사용자 정보를 로드 (자동 로그인용)

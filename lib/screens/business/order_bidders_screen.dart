@@ -304,7 +304,7 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
 
     if (confirmed != true) return;
 
-    // ⭐ 낙찰 사전 가드: 후보 사업자가 활동 가능 상태인지 확인
+    // ⭐ 낙찰 사전 가드: 사업자번호 등록 여부만 점검
     final bidderEligible = await BusinessVerifyService.isUserEligibleAsBusiness(bidderId);
     if (!mounted) return;
     if (!bidderEligible) {
@@ -313,14 +313,14 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
         builder: (ctx) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.block, color: Colors.red),
+              Icon(Icons.info_outline, color: Colors.orange),
               SizedBox(width: 10),
-              Text('낙찰할 수 없습니다'),
+              Text('낙찰을 진행할 수 없습니다'),
             ],
           ),
           content: Text(
-            '$bidderName님은 사업자등록 진위확인이 완료되지 않았거나 사업자번호가 등록되어 있지 않아 낙찰할 수 없습니다.\n\n'
-            '다른 사업자를 선택하시거나, 해당 사업자에게 사업자번호 등록·진위확인을 요청해 주세요.',
+            '$bidderName님의 사업자 정보가 아직 준비되지 않았습니다.\n\n'
+            '다른 사업자를 선택하시거나 잠시 후 다시 시도해 주세요.',
           ),
           actions: [
             TextButton(
@@ -368,9 +368,10 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
           await showDialog(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('낙찰할 수 없습니다'),
+              title: const Text('낙찰을 진행할 수 없습니다'),
               content: Text(
-                '$bidderName님은 사업자등록 진위확인이 완료되지 않아 낙찰할 수 없습니다.',
+                '$bidderName님의 사업자 정보가 아직 준비되지 않았습니다.\n'
+                '잠시 후 다시 시도하거나 다른 사업자를 선택해 주세요.',
               ),
               actions: [
                 TextButton(
