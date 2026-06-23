@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:allsuriapp/services/api_service.dart';
 import 'package:allsuriapp/services/auth_service.dart';
 import 'package:allsuriapp/services/chat_service.dart';
-import 'package:allsuriapp/services/notification_service.dart';
 import 'package:allsuriapp/widgets/loading_indicator.dart';
 import 'package:allsuriapp/services/business_verify_service.dart';
 import '../chat_screen.dart';
@@ -465,28 +464,6 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
               currentUserId,
             );
             print('✅ [OrderBiddersScreen] 자동 환영 메시지 발송 완료: $welcomeMessage');
-            
-            // 4️⃣ 채팅 알림 발송
-            try {
-              print('📤 [OrderBiddersScreen] 채팅 알림 발송 중...');
-              
-              // 현재 사용자 이름 가져오기
-              final currentUserName = authService.currentUser?.businessName ?? 
-                                      authService.currentUser?.name ?? 
-                                      '오더 발주자';
-              
-              final notificationService = NotificationService();
-              await notificationService.sendNotification(
-                userId: bidderId, // 낙찰받은 사업자에게
-                title: '💬 새로운 메시지',
-                body: '[${widget.orderTitle}] - $currentUserName: $welcomeMessage',
-                type: 'chat_message',
-                chatRoomId: chatRoomId,
-              );
-              print('✅ [OrderBiddersScreen] 채팅 알림 발송 완료');
-            } catch (chatNotiErr) {
-              print('⚠️ [OrderBiddersScreen] 채팅 알림 발송 실패 (무시됨): $chatNotiErr');
-            }
           } catch (msgErr) {
             print('⚠️ [OrderBiddersScreen] 자동 메시지 발송 실패 (무시됨): $msgErr');
             // 메시지 실패해도 채팅방은 열림

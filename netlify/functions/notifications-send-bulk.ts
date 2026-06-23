@@ -279,58 +279,16 @@ export const handler = async (event: any) => {
       }
     }
 
-    // ── 4. FCM 일괄 전송 (배치 처리) ─────────────────────────────────
-    const accessToken = await getGoogleAccessToken()
-    if (!accessToken) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          total: ids.length,
-          sent: 0,
-          failed: ids.length,
-          reason: 'firebase_not_configured',
-        }),
-        headers: JSON_HEADERS,
-      }
-    }
-
-    const serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_KEY)
-    const fcmData: Record<string, string> = {}
-    for (const [k, v] of Object.entries(safeData)) {
-      if (v != null && typeof v === 'string') fcmData[k] = v
-    }
-
-    let sent = 0
-    let failed = 0
-    const BATCH_SIZE = 10
-    const DELAY_MS = 100
-
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const batch = ids.slice(i, i + BATCH_SIZE)
-      const results = await Promise.all(
-        batch.map((uid: string) =>
-          sendFCMToUser(uid, title, msgBody, fcmData, accessToken, serviceAccount)
-        )
-      )
-      for (const r of results) {
-        if (r.sent) sent++
-        else failed++
-      }
-      if (i + BATCH_SIZE < ids.length) {
-        await delay(DELAY_MS)
-      }
-    }
-
-    console.log(
-      `[FCM Bulk] 완료: total=${ids.length}, sent=${sent}, failed=${failed}`
-    )
+    // ── 4. FCM은 notifications INSERT Webhook(send-push-webhook)에서 1회 발송 ──
+    console.log(`[FCM Bulk] DB 저장 완료: ${ids.length}건 → Webhook이 FCM 발송`)
 
     return {
       statusCode: 200,
       body: JSON.stringify({
         total: ids.length,
-        sent,
-        failed,
+        sent: ids.length,
+        failed: 0,
+        delivery: 'webhook',
       }),
       headers: JSON_HEADERS,
     }

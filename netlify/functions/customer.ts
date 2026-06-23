@@ -26,22 +26,7 @@ function err(msg: string, status = 400) {
   return { statusCode: status, body: JSON.stringify({ error: msg }), headers: JSON_HEADERS }
 }
 
-// FCM 푸시 알림 전송 (서버 내부 호출)
-async function sendPushNotification(userId: string, title: string, body: string, data: Record<string, string> = {}) {
-  try {
-    const res = await fetch(`${SITE_URL}/api/notifications/send-push`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
-      body: JSON.stringify({ userId, title, body, data }),
-    })
-    const json = await res.json()
-    console.log('[customer] push result:', json)
-  } catch (e: any) {
-    console.warn('[customer] push 전송 실패 (무시):', e.message)
-  }
-}
-
-// 알림 DB 저장
+// 알림 DB 저장 (FCM은 INSERT Webhook이 자동 발송)
 async function insertNotification(userId: string, title: string, body: string, type: string, jobId?: string) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
@@ -328,20 +313,7 @@ export const handler = async (event: any) => {
         jobId || undefined
       )
 
-      // 7. FCM 푸시 알림 (고객 연락처 포함)
-      await sendPushNotification(
-        businessId,
-        `🎉 낙찰되었습니다!`,
-        `[${order.title || '웹 견적'}] 고객: ${customerName} ☎️ ${customerPhone}`,
-        {
-          type: 'web_order_awarded',
-          orderId,
-          jobId: jobId || '',
-          customerPhone,
-          customerName,
-          address: order.address || '',
-        }
-      )
+      // FCM은 notifications INSERT Webhook이 1회 발송
 
       return ok({ success: true, jobId, message: `${bizName}에게 낙찰되었습니다.` })
     }
@@ -379,7 +351,6 @@ export const handler = async (event: any) => {
       const techId = order.technicianId || order.technicianid
       if (techId) {
         await insertNotification(techId, '공사 완료 확인', '고객이 공사 완료를 확인했습니다.', 'job_complete', jobId)
-        await sendPushNotification(techId, '공사 완료 확인', '고객이 공사 완료를 확인했습니다.')
       }
 
       return ok({ success: true, message: '공사 완료가 확인되었습니다.' })
@@ -422,7 +393,6 @@ export const handler = async (event: any) => {
         } catch {}
 
         await insertNotification(businessId, '⭐ 새로운 평점이 등록되었습니다', `고객이 ${rating}점을 남겼습니다.`, 'new_review')
-        await sendPushNotification(businessId, '⭐ 새 평점', `고객이 ${rating}점을 남겼습니다.`)
       }
 
       return ok({ success: true, message: '평점이 등록되었습니다.' })

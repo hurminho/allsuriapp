@@ -1,7 +1,7 @@
--- Supabase Database Webhook 설정 (대안 방법)
--- 
--- notifications 테이블에 새 행이 INSERT될 때 자동으로 Netlify Function 호출
--- 이 방법은 Flutter 앱이 Netlify를 직접 호출하지 않아 Bot Protection 우회 가능
+-- Supabase Database Webhook 설정
+--
+-- notifications 테이블 INSERT 시 send-push-webhook 1회만 호출 (FCM 단일 경로).
+-- 앱/서버에서 send-push를 직접 호출하면 Webhook과 중복되어 푸시 2회 수신됨.
 --
 -- 설정 방법:
 -- Supabase 대시보드 → Database → Webhooks → Create a new hook

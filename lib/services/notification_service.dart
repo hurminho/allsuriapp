@@ -1,4 +1,3 @@
-import 'dart:async' show unawaited;
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -232,7 +231,9 @@ class NotificationService {
     }
   }
 
-  /// 알림 전송: Supabase DB 저장 + Netlify Function 통해 FCM 푸시
+  /// 알림 전송: Supabase DB 저장만 수행.
+  /// FCM 푸시는 notifications INSERT Webhook → send-push-webhook 경로에서 1회 발송.
+  /// (직접 send-push 호출 시 Webhook과 중복되어 푸시 2회 수신됨)
   Future<void> sendNotification({
     required String userId,
     required String title,
@@ -262,32 +263,15 @@ class NotificationService {
         if (chatRoomId != null && chatRoomId.isNotEmpty) 'chatroom_id': chatRoomId,
       };
       await _sb.from('notifications').insert(insertData);
-      debugPrint('✅ [NotificationService] DB 저장 완료: $userId - $title');
+      debugPrint('✅ [NotificationService] DB 저장 완료 (FCM은 Webhook): $userId - $title');
     } catch (e) {
       debugPrint('❌ [NotificationService] DB 저장 실패: $e');
       rethrow;
     }
-
-    // 2. FCM 푸시 전송 (백엔드 API 호출)
-    final pushData = <String, String?>{
-      if (type != null) 'type': type,
-      if (jobId != null) 'jobId': jobId,
-      if (jobTitle != null) 'jobTitle': jobTitle,
-      if (region != null) 'region': region,
-      if (orderId != null) 'orderId': orderId,
-      if (estimateId != null) 'estimateId': estimateId,
-      if (chatRoomId != null) 'chatRoomId': chatRoomId,
-    };
-    unawaited(_sendFCMPush(
-      userId: userId,
-      title: title,
-      body: body,
-      data: pushData,
-    ));
   }
 
-  /// 일괄 알림 전송: DB 저장 + FCM 푸시를 서버에서 처리 (앱 1회 API 호출)
-  /// - Netlify 403/Bot Protection 회피: 앱→서버 1회, 서버가 내부에서 FCM 전송
+  /// 일괄 알림 전송: 서버에서 DB 일괄 저장 (FCM은 INSERT Webhook이 각 행마다 1회 발송)
+  /// - Netlify 403/Bot Protection 회피: 앱→서버 1회 API 호출
   Future<Map<String, int>> sendBulkNotification({
     required List<String> userIds,
     required String title,
@@ -352,75 +336,6 @@ class NotificationService {
     } catch (e) {
       debugPrint('❌ [FCM Bulk] 예외: $e');
       return {'total': userIds.length, 'sent': 0, 'failed': userIds.length};
-    }
-  }
-
-  /// Netlify Function(/api/notifications/send-push)으로 FCM 푸시 전송
-  /// - 비동기 fire-and-forget: 실패해도 앱 흐름에 영향 없음
-  Future<void> _sendFCMPush({
-    required String userId,
-    required String title,
-    required String body,
-    Map<String, String?> data = const {},
-  }) async {
-    try {
-      // 세션 또는 ApiService 베어러 토큰 사용 (Kakao 로그인 시 세션이 null일 수 있음)
-      final sessionToken = _sb.auth.currentSession?.accessToken;
-      final bearerToken = sessionToken ?? ApiService.currentBearerToken;
-
-      if (bearerToken == null || bearerToken.isEmpty) {
-        debugPrint('⚠️ [FCM Push] 인증 토큰 없음 - 푸시 스킵');
-        debugPrint('   currentSession: ${_sb.auth.currentSession != null ? "있음" : "없음"}');
-        debugPrint('   ApiService.currentBearerToken: ${ApiService.currentBearerToken != null ? "있음(${ApiService.currentBearerToken!.substring(0, 10)}...)" : "없음"}');
-        return;
-      }
-
-      const apiBase = String.fromEnvironment('API_BASE_URL',
-          defaultValue: 'https://api.allsuri.app/api');
-      final url = Uri.parse('$apiBase/notifications/send-push');
-
-      // data 값 중 null 제거
-      final safeData = <String, String>{};
-      data.forEach((k, v) { if (v != null) safeData[k] = v; });
-
-      print('📤 [FCM Push] 요청 → $url 수신자: $userId');
-
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $bearerToken',
-          'User-Agent': 'AllSuriApp/1.0 (Flutter; Mobile)',
-          'X-App-Version': '1.0',
-          'Accept': 'application/json',
-        },
-        // Netlify Function은 { userId, title, body, data } 플랫 형식 기대
-        body: jsonEncode({
-          'userId': userId,
-          'title': title,
-          'body': body,
-          'data': safeData,
-        }),
-      ).timeout(const Duration(seconds: 30));
-
-      print('📥 [FCM Push] 응답 ${response.statusCode}: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final result = jsonDecode(response.body) as Map<String, dynamic>;
-        // API 응답: { sent: true, messageId } 또는 { sent: false, reason }
-        if (result['sent'] == true) {
-          print('✅ [FCM Push] 전송 성공: $userId');
-        } else {
-          final reason = result['reason'] ?? result['message'] ?? 'unknown';
-          print('⚠️ [FCM Push] 전송 실패: $reason');
-        }
-      } else {
-        final body = response.body;
-        final reason = body.length > 200 ? '${body.substring(0, 200)}...' : body;
-        print('❌ [FCM Push] 서버 오류 ${response.statusCode}: $reason');
-      }
-    } catch (e) {
-      print('❌ [FCM Push] 예외: $e');
     }
   }
 
@@ -638,28 +553,7 @@ class NotificationService {
           });
         }
         
-        // 포그라운드 메시지 리스너
-        FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-          print('🔔 [NotificationService] 포그라운드 메시지 수신');
-          print('   제목: ${message.notification?.title}');
-          print('   내용: ${message.notification?.body}');
-          
-          // 로컬 알림으로 표시
-          if (message.notification != null) {
-            showNewJobNotification(
-              title: message.notification!.title ?? '새 알림',
-              body: message.notification!.body ?? '',
-              jobId: message.data['jobId'] ?? 'unknown',
-            );
-          }
-        });
-        
-        // 백그라운드 메시지 탭 리스너
-        FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-          print('🔔 [NotificationService] 백그라운드 메시지 탭');
-          print('   데이터: ${message.data}');
-          // TODO: 알림 타입에 따라 적절한 화면으로 이동
-        });
+        // 포그라운드/탭 처리는 FCMService(main.dart)에서 단일 리스너로 처리 (중복 알림 방지)
       } else {
         print('❌ [NotificationService] FCM 권한 거부됨');
       }
