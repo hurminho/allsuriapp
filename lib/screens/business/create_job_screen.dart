@@ -128,6 +128,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         setState(() {
           _selectedImages.addAll(images);
         });
+        // 자동 업로드
+        await _uploadImages();
       }
     } catch (e) {
       if (mounted) {
@@ -192,9 +194,16 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(context);
+              _pickImages();
+            },
+            child: const Text('앨범에서 여러 장 선택'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
               _pickSingleImage();
             },
-            child: const Text('앨범에서 선택'),
+            child: const Text('앨범에서 1장 선택'),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(

@@ -560,21 +560,22 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
           print('   ✅ marketplace_listings 업데이트 성공: ${updateResult.first['status']}');
         }
 
-        // 오더 소유자에게 알림
+        // 오더 소유자(생성자)에게 후기/평점 작성 push 알림
         final ownerId = job.ownerBusinessId;
         print('   알림 전송 중: $ownerId');
-        if (job.id != null) {
+        if (ownerId != null && ownerId.isNotEmpty) {
           await Supabase.instance.client.from('notifications').insert({
             'userid': ownerId,
-            'title': '공사 완료 확인 요청',
-            'body': '${job.title} 공사가 완료되었습니다. 확인 후 리뷰를 남겨주세요!',
-            'type': 'order_completed',
-            'jobid': job.id,
+            'title': '후기/평점 작성 안내',
+            'body': '${job.title} 공사가 완료되었습니다. 후기와 평점을 작성해 주세요.',
+            'type': 'review_request',
+            if (listingId != null) 'listingid': listingId,
+            if (job.id != null) 'jobid': job.id,
             'isread': false,
             'createdat': DateTime.now().toIso8601String(),
           });
         } else {
-          print('⚠️ [JobManagement] jobId가 없어 알림을 건너뜀');
+          print('⚠️ [JobManagement] ownerId 없어 알림을 건너뜀');
         }
 
         print('✅ [JobManagement] 공사 완료 처리 완료 (awaiting_confirmation)');

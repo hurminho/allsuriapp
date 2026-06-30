@@ -17,6 +17,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     'estimate_rejected': true,
     'order_status_changed': true,
     'order_completed': true,
+    'review_request': true,
     'chat_message': true,
   };
 
@@ -99,6 +100,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                       '작업 완료',
                       '작업이 완료되면 알림을 받습니다',
                       'order_completed',
+                    ),
+                    _buildSwitchTile(
+                      '후기/평점 작성 안내',
+                      '내 오더가 완료되면 후기·평점 작성 안내 알림을 받습니다',
+                      'review_request',
                     ),
                   ],
                 ),

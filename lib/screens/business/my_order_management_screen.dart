@@ -34,7 +34,10 @@ class MyOrderManagementScreen extends StatefulWidget {
 class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
   List<Map<String, dynamic>> _myOrders = [];
   bool _isLoading = false;
+  bool _isCompleting = false;
   late String _filter; // all, pending, in_progress, completed
+  // 후기 작성 여부 캐시 (listingId → 작성됨)
+  final Set<String> _reviewedListingIds = {};
   RealtimeChannel? _channel;
   final ScrollController _scrollController = ScrollController();
 
@@ -217,7 +220,10 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       setState(() {
         _myOrders = data;
       });
-      
+
+      // 완료/대기 상태 오더에 대한 내 후기 작성 여부 일괄 조회
+      await _loadMyReviewedListings();
+
       // 데이터가 0개일 때는 알림만 표시
       if (data.isEmpty && mounted) {
         print('ℹ️ [MyOrderManagement] 생성한 오더가 없습니다');
@@ -249,6 +255,49 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           });
         }
       }
+    }
+  }
+
+  Future<void> _loadMyReviewedListings() async {
+    try {
+      final authService = context.read<AuthService>();
+      final currentUserId = authService.currentUser?.id;
+      if (currentUserId == null) return;
+
+      final targetIds = _myOrders
+          .where((o) {
+            final s = o['status']?.toString();
+            return s == 'completed' || s == 'awaiting_confirmation';
+          })
+          .map((o) => o['id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      if (targetIds.isEmpty) {
+        if (mounted) setState(() => _reviewedListingIds.clear());
+        return;
+      }
+
+      final rows = await Supabase.instance.client
+          .from('order_reviews')
+          .select('listing_id')
+          .eq('reviewer_id', currentUserId)
+          .inFilter('listing_id', targetIds);
+
+      final reviewed = (rows as List)
+          .map((r) => r['listing_id']?.toString())
+          .whereType<String>()
+          .toSet();
+
+      if (mounted) {
+        setState(() {
+          _reviewedListingIds
+            ..clear()
+            ..addAll(reviewed);
+        });
+      }
+    } catch (e) {
+      print('⚠️ [MyOrderManagement] 후기 작성 여부 조회 실패: $e');
     }
   }
 
@@ -303,8 +352,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           // 입찰 대기중 (created, open)
           return status == 'created' || status == 'open';
         case 'in_progress':
-          // 진행 중 (assigned)
-          return status == 'assigned';
+          // 진행 중 (assigned, in_progress)
+          return status == 'assigned' || status == 'in_progress';
         case 'completed':
           // 완료됨 (completed, awaiting_confirmation)
           return status == 'completed' || status == 'awaiting_confirmation';
@@ -687,98 +736,82 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
               ),
             
             // 버튼 로직: 완료 상태에 따라 다른 버튼 표시
-            // 1. 완료된 오더 (completed): 상세보기 + 작성한 후기 보기
+            // 1. 완료된 오더 (completed): 상세보기 + 후기 작성/수정
             if (status == 'completed') ...[
               const SizedBox(height: 12),
-              Stack(
+              if (!_reviewedListingIds.contains(listingId)) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '아직 후기/평점을 작성하지 않았습니다.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[800]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Row(
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
+                  Expanded(
+                    child: OutlinedButton.icon(
                       onPressed: () => _showCompletedOrderDetail(order),
                       icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: const Text(
-                        '공사 상세 및 후기 보기',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                      label: const Text('공사 상세 보기'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _openReviewScreen(order),
+                      icon: Icon(
+                        _reviewedListingIds.contains(listingId) ? Icons.edit_outlined : Icons.star_outline,
+                        size: 18,
+                      ),
+                      label: Text(
+                        _reviewedListingIds.contains(listingId) ? '후기 수정' : '후기/평점 작성',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF64748B),
+                        backgroundColor: _reviewedListingIds.contains(listingId)
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFFDC2626),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         elevation: 0,
                       ),
                     ),
                   ),
-                  if (listingId.isNotEmpty)
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      right: 0,
-                      child: Center(
-                        child: InkWell(
-                          onTap: () async {
-                            // 채팅방 이동 로직
-                            try {
-                              final chatService = ChatService();
-                              final authService = Provider.of<AuthService>(context, listen: false);
-                              final currentUserId = authService.currentUser?.id;
-                              
-                              if (currentUserId == null) return;
-                              
-                              // 상대방 ID 확인 (낙찰된 사업자)
-                              final targetUserId = completedBy ?? selectedBidderId ?? claimedBy;
-                              
-                              if (targetUserId == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('대화할 상대방 정보를 찾을 수 없습니다.')),
-                                );
-                                return;
-                              }
-                              
-                              // 채팅방 생성/조회
-                              final chatRoomId = await chatService.ensureChatRoom(
-                                customerId: currentUserId, // 나 (오더 소유자)
-                                businessId: targetUserId, // 낙찰받은 사업자
-                                listingId: listingId,
-                                title: title,
-                              );
-                              
-                              // 채팅 화면으로 이동
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChatScreen(
-                                    chatRoomId: chatRoomId,
-                                    chatRoomTitle: title,
-                                  ),
-                                ),
-                              );
-                            } catch (e) {
-                              print('❌ 채팅방 이동 실패: $e');
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('채팅방을 열 수 없습니다.')),
-                              );
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 20),
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
+              if (listingId.isNotEmpty)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    onPressed: () => _openChatWithBidder(listingId, title, completedBy ?? selectedBidderId ?? claimedBy),
+                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF1E3A8A)),
+                    tooltip: '채팅',
+                  ),
+                ),
             ]
-            // 2. 완료 확인 대기 (awaiting_confirmation): 후기 작성
+            // 2. 완료 확인 대기 (awaiting_confirmation): 후기/평점 작성
             else if (status == 'awaiting_confirmation') ...[
               const SizedBox(height: 12),
               Stack(
@@ -800,7 +833,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                       },
                       icon: const Icon(Icons.star_outline, size: 18),
                       label: const Text(
-                        '후기 작성하기',
+                        '후기/평점 작성하기',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -880,7 +913,54 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 ],
               ),
             ]
-            // 3. 입찰자 보기 버튼 (진행 중 상태 포함)
+            // 3. 진행 중 (assigned/in_progress): 오더 생성자가 공사 완료 처리 가능
+            else if ((status == 'assigned' || status == 'in_progress') &&
+                (selectedBidderId != null || claimedBy != null)) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isCompleting ? null : () => _completeOrderAsOwner(order),
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text(
+                    '공사 완료',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              if (bidCount > 0) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openBidderList(listingId, title),
+                    icon: const Icon(Icons.people_outline, size: 18),
+                    label: Text('입찰자 보기 ($bidCount명)'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
+              if (listingId.isNotEmpty)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    onPressed: () => _openChatWithBidder(listingId, title, selectedBidderId ?? claimedBy),
+                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF1E3A8A)),
+                    tooltip: '채팅',
+                  ),
+                ),
+            ]
+            // 4. 입찰자 보기 버튼 (낙찰 전)
             else if (bidCount > 0) ...[
               const SizedBox(height: 12),
               Stack(
@@ -1117,6 +1197,188 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     }
   }
 
+  Future<void> _openChatWithBidder(
+    String listingId,
+    String title,
+    String? targetUserId,
+  ) async {
+    try {
+      final chatService = ChatService();
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUserId = authService.currentUser?.id;
+
+      if (currentUserId == null) return;
+
+      if (targetUserId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('대화할 상대방 정보를 찾을 수 없습니다.')),
+        );
+        return;
+      }
+
+      final chatRoomId = await chatService.ensureChatRoom(
+        customerId: currentUserId,
+        businessId: targetUserId,
+        listingId: listingId,
+        title: title,
+      );
+
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            chatRoomId: chatRoomId,
+            chatRoomTitle: title,
+          ),
+        ),
+      );
+    } catch (e) {
+      print('❌ 채팅방 이동 실패: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('채팅방을 열 수 없습니다.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendReviewRequestNotification({
+    required String userId,
+    required String orderTitle,
+    String? listingId,
+    String? jobId,
+  }) async {
+    try {
+      await Supabase.instance.client.from('notifications').insert({
+        'userid': userId,
+        'title': '후기/평점 작성 안내',
+        'body': '$orderTitle 공사가 완료되었습니다. 후기와 평점을 작성해 주세요.',
+        'type': 'review_request',
+        if (listingId != null) 'listingid': listingId,
+        if (jobId != null) 'jobid': jobId,
+        'isread': false,
+        'createdat': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('⚠️ [MyOrderManagement] 후기 요청 알림 전송 실패: $e');
+    }
+  }
+
+  Future<void> _completeOrderAsOwner(Map<String, dynamic> order) async {
+    if (_isCompleting) return;
+
+    final listingId = order['id']?.toString();
+    final title = order['title']?.toString() ?? '오더';
+    final selectedBidderId = order['selected_bidder_id']?.toString();
+    final claimedBy = order['claimed_by']?.toString();
+    final revieweeId = selectedBidderId ?? claimedBy;
+    final jobId = order['jobid']?.toString();
+
+    if (listingId == null || revieweeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('낙찰된 사업자 정보를 찾을 수 없습니다.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('공사 완료'),
+        content: const Text(
+          '이 공사를 완료 처리하시겠습니까?\n완료 후 후기와 평점을 작성할 수 있습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('완료하기'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isCompleting = true);
+
+    try {
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      final authService = context.read<AuthService>();
+      final currentUserId = authService.currentUser?.id;
+      if (currentUserId == null) throw Exception('로그인이 필요합니다');
+
+      final now = DateTime.now().toIso8601String();
+
+      await Supabase.instance.client
+          .from('marketplace_listings')
+          .update({
+            'status': 'awaiting_confirmation',
+            'completed_at': now,
+            'completed_by': revieweeId,
+            'updatedat': now,
+          })
+          .eq('id', listingId);
+
+      if (jobId != null && jobId.isNotEmpty) {
+        await Supabase.instance.client
+            .from('jobs')
+            .update({
+              'status': 'awaiting_confirmation',
+              'updated_at': now,
+            })
+            .eq('id', jobId);
+      }
+
+      await _sendReviewRequestNotification(
+        userId: currentUserId,
+        orderTitle: title,
+        listingId: listingId,
+        jobId: jobId,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('공사가 완료 처리되었습니다. 후기와 평점을 작성해 주세요.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadMyOrders();
+      }
+    } catch (e) {
+      print('❌ [MyOrderManagement] 공사 완료 처리 실패: $e');
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).maybePop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('공사 완료 처리 실패: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCompleting = false);
+    }
+  }
+
   Future<void> _openReviewScreen(Map<String, dynamic> order) async {
     final listingId = order['id']?.toString();
     final completedBy = order['completed_by']?.toString();
@@ -1289,6 +1551,22 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           ),
         ),
         actions: [
+          if (myReview != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _openReviewScreen(order);
+              },
+              child: const Text('후기 수정하기'),
+            ),
+          if (myReview == null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _openReviewScreen(order);
+              },
+              child: const Text('후기 작성하기'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('닫기'),

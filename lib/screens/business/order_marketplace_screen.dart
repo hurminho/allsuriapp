@@ -1184,6 +1184,31 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                 filled: true, fillColor: Colors.grey[50],
               ),
             ),
+            if (isWebOrder) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFDBA74)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline, color: Color(0xFFEA580C), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '소비자로부터 견적을 낙찰 받을 경우 10%의 시스템 유지비가 발생합니다. 이 비용은 낙찰된 사업자에게 부과됩니다.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[800], height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             Row(
               children: [
@@ -1540,49 +1565,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                 children: [
                   // 이미지 갤러리
                   if (mediaUrls.isNotEmpty)
-                    SizedBox(
-                      height: 350,
-                      child: Stack(
-                        children: [
-                          PageView.builder(
-                            itemCount: mediaUrls.length,
-                            itemBuilder: (context, index) {
-                              return Container(
-                                color: Colors.grey[200],
-                                child: Image.network(
-                                  mediaUrls[index],
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    color: Colors.grey[300],
-                                    child: const Icon(Icons.image_not_supported_outlined),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          // 이미지 개수 표시
-                          Positioned(
-                            bottom: 16,
-                            right: 16,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '1 / ${mediaUrls.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
+                    _OrderImageGallery(mediaUrls: mediaUrls)
                   else
                     Container(
                       height: 350,
@@ -1865,6 +1848,99 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
               fontSize: 12,
               color: config.textColor,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 오더 상세 이미지 갤러리 — 스와이프 가능 + 현재 페이지 인디케이터
+class _OrderImageGallery extends StatefulWidget {
+  final List<String> mediaUrls;
+
+  const _OrderImageGallery({required this.mediaUrls});
+
+  @override
+  State<_OrderImageGallery> createState() => _OrderImageGalleryState();
+}
+
+class _OrderImageGalleryState extends State<_OrderImageGallery> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 350,
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.mediaUrls.length,
+            onPageChanged: (index) => setState(() => _currentPage = index),
+            itemBuilder: (context, index) {
+              return Container(
+                color: Colors.grey[200],
+                child: Image.network(
+                  widget.mediaUrls[index],
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image_not_supported_outlined),
+                  ),
+                ),
+              );
+            },
+          ),
+          if (widget.mediaUrls.length > 1)
+            Positioned(
+              bottom: 16,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  widget.mediaUrls.length,
+                  (i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: i == _currentPage ? 18 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: i == _currentPage ? Colors.white : Colors.white54,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          // 이미지 개수 표시
+          Positioned(
+            bottom: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_currentPage + 1} / ${widget.mediaUrls.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ],

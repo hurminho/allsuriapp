@@ -35,18 +35,21 @@ class MediaService {
     return _validate(file) ? file : null;
   }
 
+  /// 갤러리에서 여러 장의 이미지를 한 번에 선택합니다.
+  /// image_picker 1.x 의 pickMultiImage 사용.
   Future<List<File>?> pickMultipleImages() async {
-    // 현재 image_picker 버전에서는 pickMultipleImages를 지원하지 않으므로
-    // 단일 이미지 선택으로 대체 (UI에서 여러 번 호출)
-    final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-    if (image == null) return null;
-    
-    final file = File(image.path);
-    if (_validate(file)) {
-      return [file];
+    final picked = await _picker.pickMultiImage(imageQuality: 85);
+    if (picked.isEmpty) return null;
+
+    final List<File> valid = [];
+    for (final x in picked) {
+      final file = File(x.path);
+      if (_validate(file)) {
+        valid.add(file);
+      }
     }
-    
-    return null;
+
+    return valid.isEmpty ? null : valid;
   }
 
   bool _validate(File file) {

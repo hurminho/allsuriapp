@@ -738,23 +738,45 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickAndSendImage() async {
     try {
-      final x = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-      if (x == null) return;
+      final picked = await _picker.pickMultiImage(imageQuality: 85);
+      if (picked.isEmpty) return;
       setState(() => _isSending = true);
-      final file = File(x.path);
       final media = MediaService();
       final myId = Provider.of<AuthService>(context, listen: false).currentUser?.id ?? '';
-      final url = await media.uploadMessageImage(roomId: widget.chatRoomId, userId: myId, file: file);
-      if (url == null) throw Exception('이미지 업로드 실패');
 
-      await Supabase.instance.client.from('chat_messages').insert({
-        'room_id': widget.chatRoomId,
-        'sender_id': myId,
-        'content': '[이미지]',
-        'image_url': url,
-        'createdat': DateTime.now().toIso8601String(),
-      });
-      // 실시간 stream이 받아서 _mergeRows 처리
+      int failed = 0;
+      for (final x in picked) {
+        try {
+          final file = File(x.path);
+          final url = await media.uploadMessageImage(
+            roomId: widget.chatRoomId,
+            userId: myId,
+            file: file,
+          );
+          if (url == null) {
+            failed++;
+            continue;
+          }
+
+          await Supabase.instance.client.from('chat_messages').insert({
+            'room_id': widget.chatRoomId,
+            'sender_id': myId,
+            'content': '[이미지]',
+            'image_url': url,
+            'createdat': DateTime.now().toIso8601String(),
+          });
+          // 실시간 stream이 받아서 _mergeRows 처리
+        } catch (e) {
+          failed++;
+          debugPrint('❌ 이미지 전송 실패: $e');
+        }
+      }
+
+      if (failed > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$failed장의 이미지 전송에 실패했습니다.')),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

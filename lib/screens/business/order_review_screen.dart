@@ -29,6 +29,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   final Set<String> _selectedTags = {};
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmitting = false;
+  bool _isLoadingReview = true;
 
   final List<Map<String, dynamic>> _availableTags = [
     {'label': '시간을 제대로 지켜요', 'icon': Icons.access_time},
@@ -38,6 +39,41 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     {'label': '의사소통이 원활해요', 'icon': Icons.chat_bubble_outline},
     {'label': '전문성이 뛰어나요', 'icon': Icons.workspace_premium},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingReview();
+  }
+
+  Future<void> _loadExistingReview() async {
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUserId = authService.currentUser?.id;
+      if (currentUserId == null) return;
+
+      final existingReview = await Supabase.instance.client
+          .from('order_reviews')
+          .select('rating, tags, comment')
+          .eq('listing_id', widget.listingId)
+          .eq('reviewer_id', currentUserId)
+          .maybeSingle();
+
+      if (existingReview != null && mounted) {
+        setState(() {
+          _rating = (existingReview['rating'] as num?)?.toInt() ?? 0;
+          _selectedTags
+            ..clear()
+            ..addAll(((existingReview['tags'] as List?) ?? []).map((t) => t.toString()));
+          _commentController.text = existingReview['comment']?.toString() ?? '';
+        });
+      }
+    } catch (e) {
+      print('⚠️ [OrderReview] 기존 리뷰 로드 실패: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingReview = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -215,10 +251,24 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingReview) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('후기/평점'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final hasExistingReview = _rating > 0;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('리뷰 작성'),
+        title: Text(hasExistingReview ? '후기/평점 수정' : '후기/평점 작성'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,

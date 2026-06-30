@@ -136,9 +136,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ),
         );
       }
-    } else if (type == 'order_completed') {
-      // 📝 공사 완료 - 내 오더 관리 > 완료된 공사 (해당 오더 포커싱)
-      final orderId = notification['orderid']?.toString() ?? notification['jobid']?.toString() ?? '';
+    } else if (type == 'order_completed' || type == 'review_request') {
+      // 📝 공사 완료 / 후기 작성 요청 - 내 오더 관리 (해당 오더 포커싱)
+      final orderId = notification['listingid']?.toString() ??
+          notification['orderid']?.toString() ??
+          notification['jobid']?.toString() ??
+          '';
       if (orderId.isNotEmpty && mounted) {
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -326,6 +329,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Icons.swap_horiz;
       case 'order_completed':
         return Icons.done_all;
+      case 'review_request':
+        return Icons.rate_review;
       case 'review_received':
         return Icons.star;
       case 'order_status':
@@ -357,6 +362,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Colors.teal;
       case 'order_completed':
         return Colors.green;
+      case 'review_request':
+        return Colors.amber;
       case 'review_received':
         return Colors.amber;
       case 'order_status':
@@ -709,10 +716,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       context,
                       MaterialPageRoute(builder: (_) => const OrderMarketplaceScreen()),
                     );
-                  } else if (type == 'order_completed') {
-                    // 📝 공사 완료 → 내 오더 관리 > 완료된 공사 (해당 오더 포커싱)
-                    final orderId = notification['orderid']?.toString() ?? notification['jobid']?.toString() ?? '';
-                    print('🔔 [order_completed] 내 오더 관리로 이동 (완료됨 필터): orderId=$orderId');
+                  } else if (type == 'order_completed' || type == 'review_request') {
+                    // 📝 공사 완료 / 후기 작성 요청 → 내 오더 관리 (해당 오더 포커싱)
+                    final orderId = notification['listingid']?.toString() ??
+                        notification['orderid']?.toString() ??
+                        notification['jobid']?.toString() ??
+                        '';
+                    print('🔔 [$type] 내 오더 관리로 이동 (완료 필터): orderId=$orderId');
                     
                     if (orderId.isNotEmpty) {
                       Navigator.push(
