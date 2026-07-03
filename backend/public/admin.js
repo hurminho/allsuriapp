@@ -3616,6 +3616,36 @@ function togglePushTarget() {
     }
 }
 
+// 앱 업데이트 알림 체크박스: 전체 사용자(사업자+소비자) 대상으로 강제 전환
+function toggleUpdateAnnouncement() {
+    const isUpdate = document.getElementById('pushIsUpdateAnnouncement')?.checked || false;
+    const allRadio = document.querySelector('input[name="pushTarget"][value="all"]');
+    const specificRadio = document.getElementById('pushTargetSpecificRadio');
+    const targetAllLabelText = document.getElementById('pushTargetAllLabelText');
+
+    if (isUpdate) {
+        if (allRadio) allRadio.checked = true;
+        if (specificRadio) specificRadio.disabled = true;
+        if (targetAllLabelText) targetAllLabelText.textContent = '전체 사용자 (사업자+소비자)';
+        togglePushTarget();
+
+        // 제목/내용이 비어 있으면 업데이트 안내 기본 문구를 채워줌
+        const titleEl = document.getElementById('pushTitle');
+        const bodyEl = document.getElementById('pushBody');
+        if (titleEl && !titleEl.value.trim()) {
+            titleEl.value = '업데이트 안내';
+            document.getElementById('pushTitleCount').textContent = titleEl.value.length + ' / 30';
+        }
+        if (bodyEl && !bodyEl.value.trim()) {
+            bodyEl.value = '새 버전이 나왔어요! 지금 업데이트하세요';
+            document.getElementById('pushBodyCount').textContent = bodyEl.value.length + ' / 30';
+        }
+    } else {
+        if (specificRadio) specificRadio.disabled = false;
+        if (targetAllLabelText) targetAllLabelText.textContent = '전체 사업자';
+    }
+}
+
 let _pushBizTimer = null;
 function searchPushBiz(q) {
     clearTimeout(_pushBizTimer);
@@ -3662,9 +3692,15 @@ async function sendPushNotification() {
     if (!title) { alert('제목을 입력해 주세요.'); return; }
     if (!body) { alert('내용을 입력해 주세요.'); return; }
     if (title.length > 30 || body.length > 30) { alert('텍스트는 30자 이하로 입력해 주세요.'); return; }
-    const targetAll = document.querySelector('input[name="pushTarget"]:checked')?.value === 'all';
+
+    const isUpdateAnnouncement = document.getElementById('pushIsUpdateAnnouncement')?.checked || false;
+    const targetAll = isUpdateAnnouncement ? true : document.querySelector('input[name="pushTarget"]:checked')?.value === 'all';
     if (!targetAll && _selectedPushUserIds.length === 0) { alert('발송 대상 사업자를 선택해 주세요.'); return; }
-    if (!confirm(`${targetAll ? '전체 사업자' : `${_selectedPushUserIds.length}명`}에게 푸시 알림을 보내시겠습니까?`)) return;
+
+    const confirmMsg = isUpdateAnnouncement
+        ? '전체 사용자(사업자+소비자)에게 앱 업데이트 알림을 보내시겠습니까?\n탭하면 스토어로 이동합니다.'
+        : `${targetAll ? '전체 사업자' : `${_selectedPushUserIds.length}명`}에게 푸시 알림을 보내시겠습니까?`;
+    if (!confirm(confirmMsg)) return;
 
     const resultEl = document.getElementById('pushResult');
     if (resultEl) { resultEl.style.display = 'block'; resultEl.style.background = '#f0f7ff'; resultEl.style.color = '#1e3a8a'; resultEl.innerHTML = '⏳ 발송 중...'; }
@@ -3672,7 +3708,12 @@ async function sendPushNotification() {
     try {
         const result = await apiCall('/push-notifications/send', {
             method: 'POST',
-            body: JSON.stringify({ title, body, targetAll, userIds: _selectedPushUserIds }),
+            body: JSON.stringify({
+                title, body, targetAll,
+                userIds: _selectedPushUserIds,
+                notificationType: isUpdateAnnouncement ? 'app_update' : undefined,
+                allUserRoles: isUpdateAnnouncement,
+            }),
         });
         if (resultEl) {
             resultEl.style.background = '#dcfce7'; resultEl.style.color = '#166534';
@@ -3684,6 +3725,8 @@ async function sendPushNotification() {
         document.getElementById('pushBodyCount').textContent = '0 / 30';
         _selectedPushUserIds = [];
         document.getElementById('pushSelectedBizList').innerHTML = '';
+        document.getElementById('pushIsUpdateAnnouncement').checked = false;
+        toggleUpdateAnnouncement();
     } catch(e) {
         if (resultEl) { resultEl.style.background = '#fee2e2'; resultEl.style.color = '#991b1b'; resultEl.innerHTML = `❌ 발송 실패: ${e.message}`; }
     }

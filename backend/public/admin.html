@@ -1160,6 +1160,17 @@
                             📱 앱을 설치한 사업자에게 직접 푸시 알림을 보냅니다. 제목과 내용은 각각 <strong>30자 이하</strong>로 입력해 주세요.
                         </div>
 
+                        <!-- 앱 업데이트 알림 옵션 -->
+                        <div style="margin-bottom:1.5rem;padding:0.9rem 1rem;background:#fef9f0;border:1px solid #fde68a;border-radius:10px;">
+                            <label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;">
+                                <input id="pushIsUpdateAnnouncement" type="checkbox" onchange="toggleUpdateAnnouncement()" style="margin-top:0.2rem;accent-color:#1e3a8a;"/>
+                                <span style="font-size:0.875rem;color:#92400e;">
+                                    <strong>📲 앱 업데이트 알림으로 보내기</strong><br/>
+                                    체크하면 <strong>전체 사용자(사업자+소비자)</strong>에게 발송되고, 사용자가 알림을 탭하면 앱스토어/플레이스토어로 바로 이동해 업데이트할 수 있습니다.
+                                </span>
+                            </label>
+                        </div>
+
                         <!-- 제목 -->
                         <div style="margin-bottom:1rem;">
                             <label style="display:flex;justify-content:space-between;font-weight:600;margin-bottom:0.4rem;">
@@ -1184,12 +1195,12 @@
                         <div style="margin-bottom:1.5rem;">
                             <label style="font-weight:600;display:block;margin-bottom:0.6rem;">발송 대상</label>
                             <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-                                <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;padding:0.6rem 1rem;border:2px solid var(--gray-200);border-radius:10px;font-size:0.9rem;">
+                                <label id="pushTargetAllLabel" style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;padding:0.6rem 1rem;border:2px solid var(--gray-200);border-radius:10px;font-size:0.9rem;">
                                     <input type="radio" name="pushTarget" value="all" checked onchange="togglePushTarget()" style="accent-color:#1e3a8a;"/>
-                                    전체 사업자
+                                    <span id="pushTargetAllLabelText">전체 사업자</span>
                                 </label>
                                 <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;padding:0.6rem 1rem;border:2px solid var(--gray-200);border-radius:10px;font-size:0.9rem;">
-                                    <input type="radio" name="pushTarget" value="specific" onchange="togglePushTarget()" style="accent-color:#1e3a8a;"/>
+                                    <input id="pushTargetSpecificRadio" type="radio" name="pushTarget" value="specific" onchange="togglePushTarget()" style="accent-color:#1e3a8a;"/>
                                     특정 사업자 선택
                                 </label>
                             </div>

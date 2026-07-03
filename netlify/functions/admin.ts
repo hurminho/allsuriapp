@@ -1097,15 +1097,26 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       }
 
       // POST /push-notifications/send
+      // notificationType: 알림 type (기본 'admin_announcement'). 'app_update'로 보내면
+      //   앱에서 탭 시 스토어로 바로 이동하는 업데이트 안내 알림이 됩니다.
+      // allUserRoles: true면 역할(사업자/소비자) 구분 없이 전체 사용자 대상 (기본은 사업자만)
       if (event.httpMethod === 'POST' && sub === '/send') {
-        const { title, body: msgBody, targetAll, userIds: targetIds } = JSON.parse(event.body || '{}')
+        const {
+          title,
+          body: msgBody,
+          targetAll,
+          userIds: targetIds,
+          notificationType,
+          allUserRoles,
+        } = JSON.parse(event.body || '{}')
         if (!title || !msgBody) return { statusCode: 400, body: JSON.stringify({ error: 'title, body 필수' }), headers: { 'Content-Type': 'application/json' } }
         if (title.length > 30 || msgBody.length > 30) return { statusCode: 400, body: JSON.stringify({ error: '텍스트는 30자 이하' }), headers: { 'Content-Type': 'application/json' } }
 
         // 대상 user ID 목록 결정
         let userIds: string[] = []
         if (targetAll) {
-          const usersRes = await fetch(`${SUPABASE_URL}/rest/v1/users?select=id&eq.role=business&limit=500`, { headers: sbHeaders })
+          const roleFilter = allUserRoles ? '' : '&role=eq.business'
+          const usersRes = await fetch(`${SUPABASE_URL}/rest/v1/users?select=id${roleFilter}&limit=500`, { headers: sbHeaders })
           const users = await usersRes.json() as { id: string }[]
           userIds = Array.isArray(users) ? users.map(u => u.id) : []
         } else {
@@ -1121,7 +1132,7 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
             Authorization: `Bearer ${ADMIN_TOKEN}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ userIds, title, body: msgBody, data: { type: 'admin_announcement' } }),
+          body: JSON.stringify({ userIds, title, body: msgBody, data: { type: notificationType || 'admin_announcement' } }),
         })
         const bulkJson = await bulkRes.json()
         return { statusCode: 200, body: JSON.stringify({ success: true, ...bulkJson }), headers: { 'Content-Type': 'application/json' } }

@@ -1,12 +1,15 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../firebase_options.dart';
 import '../screens/chat_screen.dart';
 import '../screens/business/job_management_screen.dart';
+import 'version_service.dart';
 
 /// Firebase Cloud Messaging 서비스
 /// 실시간 푸시 알림을 처리하고 FCM 토큰을 관리합니다.
@@ -270,11 +273,38 @@ class FCMService {
           // 오더 목록은 대시보드에서 접근 가능하므로 별도 네비게이션 생략
           break;
 
+        // 앱 업데이트 안내(관리자 발송) → 화면 이동 없이 스토어로 바로 이동
+        case 'app_update':
+          print('📲 업데이트 알림 클릭 - 스토어로 이동');
+          _openAppStoreForUpdate();
+          break;
+
         default:
           break;
       }
     } catch (e) {
       print('❌ 알림 데이터 파싱 실패: $e');
+    }
+  }
+
+  /// 관리자가 보낸 "앱 업데이트" 알림을 탭했을 때 플랫폼에 맞는 스토어로 이동합니다.
+  /// 스토어 URL은 항상 Supabase `app_version` 테이블에서 최신 값을 조회합니다
+  /// (알림 발송 시점의 URL이 아니라 탭하는 시점의 최신 URL을 사용하기 위함).
+  Future<void> _openAppStoreForUpdate() async {
+    try {
+      final info = await VersionService().fetchLatestVersionInfo();
+      final storeUrl = Platform.isIOS ? info?.iosStoreUrl : info?.androidStoreUrl;
+      if (storeUrl == null || storeUrl.isEmpty) {
+        print('⚠️ [FCMService] 스토어 URL이 설정되어 있지 않습니다.');
+        return;
+      }
+      final uri = Uri.parse(storeUrl);
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        print('⚠️ [FCMService] 스토어 링크를 열지 못했습니다: $storeUrl');
+      }
+    } catch (e) {
+      print('❌ [FCMService] 업데이트 스토어 이동 실패: $e');
     }
   }
 

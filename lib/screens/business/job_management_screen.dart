@@ -15,7 +15,6 @@ import '../../widgets/modern_button.dart';
 import '../../config/app_constants.dart';
 import 'order_bidders_screen.dart';
 import 'order_review_screen.dart';
-import '../../services/api_service.dart';
 import '../chat_screen.dart'; // 추가
 
 class JobManagementScreen extends StatefulWidget {
@@ -44,7 +43,6 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
   @override
   void initState() {
     super.initState();
-    // 초기 필터 설정
     _filter = widget.initialFilter ?? 'in_progress';
     _loadJobs();
   }
@@ -53,6 +51,95 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  static const _listingOnlyPrefix = 'listing:';
+
+  String _listingOnlyJobId(String listingId) => '$_listingOnlyPrefix$listingId';
+
+  bool _isListingOnlyJobId(String? jobId) =>
+      jobId != null && jobId.startsWith(_listingOnlyPrefix);
+
+  String? _listingIdFromJobId(String? jobId) {
+    if (jobId == null) return null;
+    if (_isListingOnlyJobId(jobId)) {
+      return jobId.substring(_listingOnlyPrefix.length);
+    }
+    return _listingByJobId[jobId]?['id']?.toString();
+  }
+
+  Map<String, dynamic>? _listingForJob(Job job) {
+    if (job.id != null) {
+      final byJobId = _listingByJobId[job.id];
+      if (byJobId != null) return byJobId;
+    }
+    final listingId = _listingIdFromJobId(job.id);
+    if (listingId != null) {
+      return _listingByJobId[_listingOnlyJobId(listingId)] ??
+          _listingByJobId[listingId];
+    }
+    return null;
+  }
+
+  bool _isAssignee(Job job, String userId, Map<String, dynamic>? listing) {
+    if (job.assignedBusinessId == userId) return true;
+    if (listing == null) return false;
+    final selected = listing['selected_bidder_id']?.toString();
+    final claimed = listing['claimed_by']?.toString();
+    return selected == userId || claimed == userId;
+  }
+
+  String _jobStatusFromListing(String? listingStatus, {String fallback = 'assigned'}) {
+    switch (listingStatus) {
+      case 'assigned':
+      case 'in_progress':
+      case 'awaiting_confirmation':
+      case 'completed':
+      case 'cancelled':
+        return listingStatus!;
+      default:
+        return fallback;
+    }
+  }
+
+  Job _jobFromListing(
+    Map<String, dynamic> listing,
+    String assigneeId, {
+    required String storageJobId,
+    Job? existingJob,
+  }) {
+    final budgetRaw = listing['budget_amount'] ?? listing['estimate_amount'];
+    final createdRaw = listing['createdat'] ?? listing['createdAt'];
+
+    return Job(
+      id: storageJobId,
+      title: listing['title']?.toString() ?? existingJob?.title ?? '오더',
+      description: listing['description']?.toString() ?? existingJob?.description ?? '',
+      ownerBusinessId: listing['posted_by']?.toString() ?? existingJob?.ownerBusinessId ?? '',
+      assignedBusinessId: assigneeId,
+      budgetAmount: budgetRaw != null ? (budgetRaw as num).toDouble() : existingJob?.budgetAmount,
+      status: _jobStatusFromListing(
+        listing['status']?.toString(),
+        fallback: existingJob?.status ?? 'assigned',
+      ),
+      location: listing['region']?.toString() ?? existingJob?.location,
+      category: listing['category']?.toString() ?? existingJob?.category,
+      mediaUrls: existingJob?.mediaUrls,
+      createdAt: DateTime.tryParse(createdRaw?.toString() ?? '') ??
+          existingJob?.createdAt ??
+          DateTime.now(),
+      updatedAt: existingJob?.updatedAt,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchMyAssignedListings(String userId) async {
+    final rows = await Supabase.instance.client
+        .from('marketplace_listings')
+        .select('*')
+        .or('claimed_by.eq.$userId,selected_bidder_id.eq.$userId')
+        .inFilter('status', ['assigned', 'in_progress', 'awaiting_confirmation', 'completed']);
+
+    return rows.map((row) => Map<String, dynamic>.from(row)).toList();
   }
 
   Future<void> _loadJobs() async {
@@ -66,96 +153,94 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
       if (currentUserId == null) return;
 
       final allJobs = await jobService.getJobs();
-      print('🔍 [JobManagement] 전체 공사: ${allJobs.length}개');
-      
-      // 내가 가져간 공사만 필터링 (assignedBusinessId == currentUserId)
-      final myJobs = allJobs.where((job) {
-        return job.assignedBusinessId == currentUserId;
-      }).toList();
-      
-      // 완료된 공사 (awaiting_confirmation + completed)
+      final assignedListings = await _fetchMyAssignedListings(currentUserId);
+      print('🔍 [JobManagement] jobs=${allJobs.length}, 내 낙찰 listings=${assignedListings.length}');
+
+      final jobsById = {
+        for (final job in allJobs)
+          if (job.id != null) job.id!: job,
+      };
+
+      final Map<String, Job> mergedByKey = {};
+      final Map<String, Map<String, dynamic>> tempListingByJobId = {};
+
+      void registerJobListing(Job job, Map<String, dynamic> listing) {
+        final listingId = listing['id']?.toString();
+        final realJobId = listing['jobid']?.toString();
+
+        mergedByKey[job.id ?? listingId ?? UniqueKey().toString()] = job;
+
+        if (realJobId != null) {
+          tempListingByJobId[realJobId] = listing;
+        }
+        if (listingId != null) {
+          tempListingByJobId[_listingOnlyJobId(listingId)] = listing;
+        }
+        if (job.id != null) {
+          tempListingByJobId[job.id!] = listing;
+        }
+      }
+
+      // 1) marketplace_listings 기준 — 낙찰/클레임된 오더 (jobs.assigned_business_id 미동기화 대비)
+      for (final listing in assignedListings) {
+        final listingId = listing['id']?.toString();
+        if (listingId == null) continue;
+
+        final realJobId = listing['jobid']?.toString();
+        final existingJob = realJobId != null ? jobsById[realJobId] : null;
+        final storageJobId = realJobId ?? _listingOnlyJobId(listingId);
+
+        final job = existingJob != null
+            ? existingJob.copyWith(
+                assignedBusinessId: currentUserId,
+                status: _jobStatusFromListing(
+                  listing['status']?.toString(),
+                  fallback: existingJob.status,
+                ),
+              )
+            : _jobFromListing(
+                listing,
+                currentUserId,
+                storageJobId: storageJobId,
+              );
+
+        registerJobListing(job, listing);
+      }
+
+      // 2) jobs.assigned_business_id 기준 — listing 조회에 누락된 공사 보완
+      for (final job in allJobs.where((j) => j.assignedBusinessId == currentUserId)) {
+        if (job.id != null && mergedByKey.containsKey(job.id)) continue;
+        mergedByKey[job.id ?? UniqueKey().toString()] = job;
+      }
+
+      final myJobs = mergedByKey.values.toList();
+
       _completedJobs = myJobs.where((job) {
-        return job.status == 'completed' || job.status == 'awaiting_confirmation';
+        final listing = _listingForJobFromMaps(job, tempListingByJobId);
+        final listingStatus = listing?['status']?.toString();
+        return job.status == 'completed' ||
+            job.status == 'awaiting_confirmation' ||
+            listingStatus == 'completed' ||
+            listingStatus == 'awaiting_confirmation';
       }).toList();
-      
-      // 진행 중인 공사 (완료 제외)
-      final related = myJobs.where((job) {
-        final isNotCompleted = job.status != 'completed' && job.status != 'awaiting_confirmation';
-        
-        if (!isNotCompleted) {
-          print('   완료됨 필터로 이동: ${job.title} (status: ${job.status})');
-        }
-        
-        return isNotCompleted;
+
+      _combinedJobs = myJobs.where((job) {
+        final listing = _listingForJobFromMaps(job, tempListingByJobId);
+        final listingStatus = listing?['status']?.toString();
+        final isDone = job.status == 'completed' ||
+            job.status == 'awaiting_confirmation' ||
+            listingStatus == 'completed' ||
+            listingStatus == 'awaiting_confirmation';
+        return !isDone;
       }).toList();
-      
-      final Map<String, Job> byId = {};
-      for (final j in related) {
-        final id = j.id ?? UniqueKey().toString();
-        byId[id] = j;
-      }
-      _combinedJobs = byId.values.toList();
-      
+
+      _listingByJobId = tempListingByJobId;
+
       print('🔍 [JobManagement] 진행중 공사: ${_combinedJobs.length}개, 완료된 공사: ${_completedJobs.length}개');
-
-      // fetch marketplace listings for all related jobs (내가 올린 것 + 받은 것)
-      final jobIds = _combinedJobs
-          .map((job) => job.id)
-          .whereType<String>()
-          .toList();
-
-      print('🔍 [JobManagement] jobIds: $jobIds');
-
-      if (jobIds.isNotEmpty) {
-        final api = ApiService();
-        final Map<String, Map<String, dynamic>> tempMap = {};
-
-        const chunkSize = 25;
-        final List<List<String>> chunks = [
-          for (var i = 0; i < jobIds.length; i += chunkSize)
-            jobIds.sublist(i, i + chunkSize > jobIds.length ? jobIds.length : i + chunkSize),
-        ];
-
-        final responses = await Future.wait(chunks.map((chunk) async {
-          final jobIdsParam = chunk.join(',');
-          try {
-            final response = await api.get('/market/listings?jobIds=$jobIdsParam&limit=${chunk.length}');
-            if (response['success'] == true) {
-              return List<Map<String, dynamic>>.from(response['data'] ?? []);
-            } else {
-              print('⚠️ [JobManagement] listing API 실패 (chunk=$chunk): ${response['error']}');
-              return <Map<String, dynamic>>[];
-            }
-          } catch (e) {
-            print('⚠️ [JobManagement] listing 조회 실패 (chunk=$chunk): $e');
-            return <Map<String, dynamic>>[];
-          }
-        }));
-
-        for (final list in responses) {
-          for (final listing in list) {
-            final jobId = listing['jobid']?.toString();
-            if (jobId != null) {
-              tempMap[jobId] = Map<String, dynamic>.from(listing);
-            }
-          }
-        }
-
-        _listingByJobId = tempMap;
-
-        print('🔍 [JobManagement] 조회된 listings: ${_listingByJobId.length}개');
-        if (_listingByJobId.isNotEmpty) {
-          print('   첫 번째 listing: ${_listingByJobId.values.first}');
-        }
-        
-        print('✅ [JobManagement] ${_listingByJobId.length}개 listing 매핑 완료');
-        print('   매핑된 jobIds: ${_listingByJobId.keys.toList()}');
-      } else {
-        _listingByJobId = {};
-        print('⚠️ [JobManagement] jobIds가 비어있음');
-      }
+      print('   listing 매핑: ${_listingByJobId.length}개');
       
     } catch (e) {
+      print('❌ [JobManagement] 공사 로드 실패: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('공사 목록을 불러오는데 실패했습니다: ${e.toString()}')),
@@ -165,7 +250,6 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         
-        // 🎯 포커싱: highlightedJobId가 있으면 해당 공사로 스크롤
         if (widget.highlightedJobId != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToHighlightedJob();
@@ -173,6 +257,21 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         }
       }
     }
+  }
+
+  Map<String, dynamic>? _listingForJobFromMaps(
+    Job job,
+    Map<String, Map<String, dynamic>> listingMap,
+  ) {
+    if (job.id != null) {
+      final direct = listingMap[job.id];
+      if (direct != null) return direct;
+    }
+    final listingId = _listingIdFromJobId(job.id);
+    if (listingId != null) {
+      return listingMap[_listingOnlyJobId(listingId)] ?? listingMap[listingId];
+    }
+    return null;
   }
 
   void _scrollToHighlightedJob() {
@@ -183,7 +282,12 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
       if (!mounted || !_scrollController.hasClients) return;
       
       final filteredJobs = _filteredByBadge(_combinedJobs, context.read<AuthService>().currentUser?.id ?? '');
-      final index = filteredJobs.indexWhere((job) => job.id == widget.highlightedJobId);
+      final highlightId = widget.highlightedJobId;
+      final index = filteredJobs.indexWhere((job) {
+        if (job.id == highlightId) return true;
+        final listing = _listingForJob(job);
+        return listing?['id']?.toString() == highlightId;
+      });
 
       print('🔍 [_scrollToHighlightedJob] 찾는 중...');
       print('   highlightedJobId: ${widget.highlightedJobId}');
@@ -410,7 +514,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
 
   /// 공사 취소 처리
   Future<void> _cancelJob(Job job) async {
-    final listing = _listingByJobId[job.id];
+    final listing = _listingForJob(job);
     if (listing == null) return;
     
     final listingId = listing['id']?.toString() ?? '';
@@ -518,24 +622,27 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
       print('🔄 [JobManagement] 공사 완료 처리 시작: jobId=${job.id}');
       print('   listingByJobId: ${_listingByJobId.keys.toList()}');
       
-      // marketplace_listings 찾기 (job.id로 직접 조회)
-      String? listingId = _listingByJobId[job.id]?['id']?.toString();
+      final listing = _listingForJob(job);
+      String? listingId = listing?['id']?.toString() ?? _listingIdFromJobId(job.id);
+      late final String? realJobId;
+      if (_isListingOnlyJobId(job.id)) {
+        realJobId = listing == null ? null : listing['jobid']?.toString();
+      } else {
+        realJobId = job.id;
+      }
       
-      if (listingId == null && job.id != null) {
-        // 직접 조회
-        print('   listingId 없음, 직접 조회 시도 (jobid=${job.id})');
+      if (listingId == null && realJobId != null && !_isListingOnlyJobId(realJobId)) {
+        print('   listingId 없음, 직접 조회 시도 (jobid=$realJobId)');
         final listings = await Supabase.instance.client
             .from('marketplace_listings')
-            .select('id, jobid, claimed_by')
-            .eq('jobid', job.id!)
-            .eq('claimed_by', currentUserId); // 내가 가져간 것만
+            .select('id, jobid, claimed_by, selected_bidder_id')
+            .eq('jobid', realJobId)
+            .or('claimed_by.eq.$currentUserId,selected_bidder_id.eq.$currentUserId');
         
         print('   직접 조회 결과: ${listings.length}개');
         if (listings.isNotEmpty) {
           listingId = listings.first['id']?.toString();
           print('   직접 조회로 listingId 찾음: $listingId');
-        } else {
-          print('   ❌ 직접 조회 실패 - claimed_by로 조회해도 없음');
         }
       }
       
@@ -570,7 +677,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
             'body': '${job.title} 공사가 완료되었습니다. 후기와 평점을 작성해 주세요.',
             'type': 'review_request',
             if (listingId != null) 'listingid': listingId,
-            if (job.id != null) 'jobid': job.id,
+            if (realJobId != null && !_isListingOnlyJobId(realJobId)) 'jobid': realJobId,
             'isread': false,
             'createdat': DateTime.now().toIso8601String(),
           });
@@ -594,8 +701,8 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         print('⚠️ [JobManagement] listingId를 찾을 수 없음');
       }
 
-      // jobs 테이블도 업데이트
-      if (job.id != null) {
+      // jobs 테이블도 업데이트 (실제 job이 연결된 경우만)
+      if (realJobId != null && realJobId.isNotEmpty && !_isListingOnlyJobId(realJobId)) {
         print('   jobs 테이블 업데이트 중');
         final jobUpdateResult = await Supabase.instance.client
             .from('jobs')
@@ -603,7 +710,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
               'status': 'awaiting_confirmation',
               'updated_at': DateTime.now().toIso8601String(),
             })
-            .eq('id', job.id!)
+            .eq('id', realJobId)
             .select();
         
         print('   jobs 업데이트 결과: ${jobUpdateResult.length}개 행');
@@ -648,7 +755,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
   }
 
   Future<void> _openReviewScreen(Job job) async {
-    final listing = _listingByJobId[job.id];
+    final listing = _listingForJob(job);
     if (listing == null) return;
     
     final listingId = listing['id']?.toString() ?? '';
@@ -678,7 +785,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         MaterialPageRoute(
           builder: (_) => OrderReviewScreen(
             listingId: listingId,
-            jobId: job.id ?? '',
+            jobId: _isListingOnlyJobId(job.id) ? null : job.id,
             revieweeId: revieweeId,
             revieweeName: revieweeName,
             orderTitle: job.title,
@@ -770,8 +877,12 @@ class _ModernJobsList extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final job = jobs[index];
-        final isHighlighted = highlightedJobId != null && job.id == highlightedJobId;
+        final isHighlighted = highlightedJobId != null &&
+            (job.id == highlightedJobId ||
+                (listingsByJobId[job.id ?? '']?['id']?.toString() == highlightedJobId));
         final listing = job.id != null ? listingsByJobId[job.id] : null;
+        final listingStatus = listing?['status']?.toString();
+        final effectiveStatus = listingStatus ?? job.status;
         final badge = _badgeFor(job, currentUserId, listing);
         final listingId = listing != null ? listing['id']?.toString() : null;
         final listingTitle = listing != null ? (listing['title']?.toString() ?? job.title) : job.title;
@@ -781,6 +892,9 @@ class _ModernJobsList extends StatelessWidget {
                 : int.tryParse(listing['bid_count']?.toString() ?? '0') ?? 0)
             : 0;
         final canViewBidders = job.ownerBusinessId == currentUserId && listingId != null;
+        final isAssignee = job.assignedBusinessId == currentUserId ||
+            listing?['selected_bidder_id']?.toString() == currentUserId ||
+            listing?['claimed_by']?.toString() == currentUserId;
         
         // 액션 버튼 빌드
         Widget? actionButton;
@@ -808,10 +922,18 @@ class _ModernJobsList extends StatelessWidget {
               onPressed: () => onViewBidders(listingId!, listingTitle),
             ),
           );
-        } else if (job.assignedBusinessId == currentUserId && 
-                   (job.status == 'assigned' || job.status == 'in_progress' || job.status == 'awaiting_confirmation')) {
-          final canComplete = (job.status == 'assigned' || job.status == 'in_progress');
-          print('🔍 [BuildButton] jobId=${job.id}, status=${job.status}, canComplete=$canComplete');
+        } else if (isAssignee &&
+                   (effectiveStatus == 'assigned' ||
+                    effectiveStatus == 'in_progress' ||
+                    effectiveStatus == 'awaiting_confirmation' ||
+                    job.status == 'assigned' ||
+                    job.status == 'in_progress' ||
+                    job.status == 'awaiting_confirmation')) {
+          final canComplete = effectiveStatus == 'assigned' ||
+              effectiveStatus == 'in_progress' ||
+              job.status == 'assigned' ||
+              job.status == 'in_progress';
+          print('🔍 [BuildButton] jobId=${job.id}, status=$effectiveStatus, canComplete=$canComplete');
           
           actionButton = Column(
             children: [
@@ -819,7 +941,8 @@ class _ModernJobsList extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: job.status == 'awaiting_confirmation' 
+                    backgroundColor: effectiveStatus == 'awaiting_confirmation' ||
+                            job.status == 'awaiting_confirmation'
                         ? Colors.grey[400] 
                         : const Color(0xFF10B981),
                     foregroundColor: Colors.white,
@@ -829,9 +952,16 @@ class _ModernJobsList extends StatelessWidget {
                     ),
                     elevation: 0,
                   ),
-                  icon: Icon(job.status == 'awaiting_confirmation' ? Icons.check_circle : Icons.check_circle_outline, size: 18),
+                  icon: Icon(
+                    effectiveStatus == 'awaiting_confirmation' || job.status == 'awaiting_confirmation'
+                        ? Icons.check_circle
+                        : Icons.check_circle_outline,
+                    size: 18,
+                  ),
                   label: Text(
-                    job.status == 'awaiting_confirmation' ? '확인 대기 중' : '공사 완료',
+                    effectiveStatus == 'awaiting_confirmation' || job.status == 'awaiting_confirmation'
+                        ? '확인 대기 중'
+                        : '공사 완료',
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   onPressed: canComplete ? () => onCompleteJob(job) : null,

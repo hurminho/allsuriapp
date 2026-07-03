@@ -28,7 +28,7 @@ import 'firebase_options.dart';
 import 'providers/user_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/auth/login_screen.dart';
-import 'utils/app_deep_links.dart';
+import 'screens/splash_screen.dart';
 import 'app_navigator_key.dart';
 
 /// 앱 포그라운드 진입 시 앱 아이콘 배지 제거 (iOS/Android)
@@ -398,98 +398,6 @@ class MyApp extends StatelessWidget {
              home: const SplashScreen(), // 스플래시 화면으로 변경하여 자동 로그인 체크
           );
         },
-      ),
-    );
-  }
-}
-
-/// 자동 로그인을 체크하는 스플래시 화면
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _checkAutoLogin();
-  }
-
-  /// 홈이 올라온 뒤 딥링크를 붙여 [Splash, 마켓] 같은 잘못된 스택을 방지합니다.
-  void _scheduleDeepLinksAfterHome() {
-    Future.delayed(const Duration(milliseconds: 400), initAppDeepLinksAfterSplash);
-  }
-
-  Future<void> _checkAutoLogin() async {
-    await Future.delayed(const Duration(milliseconds: 150)); // 최소 스플래시 시간(깜빡임 방지)
-    
-    if (!mounted) return;
-    
-    final authService = Provider.of<AuthService>(context, listen: false);
-    
-    // Supabase 세션 확인
-    final session = Supabase.instance.client.auth.currentSession;
-    
-    if (session != null) {
-      print('✅ [SplashScreen] 기존 세션 발견 - 자동 로그인 시도');
-      try {
-        // AuthService에서 사용자 정보 로드 (타임아웃은 AuthService.loadUserFromSession 내부)
-        await authService.loadUserFromSession();
-        
-        if (mounted && authService.isAuthenticated) {
-          print('✅ [SplashScreen] 자동 로그인 성공');
-          // 홈 화면으로 이동 (역할에 따라 자동으로 대시보드 표시)
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
-          _scheduleDeepLinksAfterHome();
-          return;
-        }
-      } catch (e) {
-        print('⚠️ [SplashScreen] 자동 로그인 실패: $e');
-      }
-    }
-    
-    // 세션이 없거나 실패한 경우 홈 화면으로 (온보딩/로그인 표시)
-    if (mounted) {
-      print('ℹ️ [SplashScreen] 세션 없음 - 홈 화면으로 이동');
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
-      _scheduleDeepLinksAfterHome();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // 로고 또는 앱 이름
-            Icon(
-              Icons.construction,
-              size: 80,
-              color: Theme.of(context).primaryColor,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              '올수리',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(),
-          ],
-        ),
       ),
     );
   }

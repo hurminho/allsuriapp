@@ -1,8 +1,11 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/version_service.dart';
 import '../business/job_management_screen.dart';
 import '../business/my_order_management_screen.dart';
 import '../business/order_marketplace_screen.dart';
@@ -177,6 +180,41 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ),
         );
       }
+    } else if (type == 'app_update') {
+      // 📲 앱 업데이트 안내 - 화면 이동 없이 스토어로 바로 이동
+      await _openStoreForUpdate();
+    }
+  }
+
+  /// "앱 업데이트" 알림을 탭했을 때 플랫폼에 맞는 스토어로 이동합니다.
+  Future<void> _openStoreForUpdate() async {
+    try {
+      final info = await VersionService().fetchLatestVersionInfo();
+      final storeUrl = Platform.isIOS ? info?.iosStoreUrl : info?.androidStoreUrl;
+
+      if (storeUrl == null || storeUrl.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('스토어 링크를 찾을 수 없습니다. 잠시 후 다시 시도해 주세요.')),
+          );
+        }
+        return;
+      }
+
+      final uri = Uri.parse(storeUrl);
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('스토어를 열 수 없습니다.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [NotificationScreen] 스토어 이동 실패: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('스토어를 열 수 없습니다.')),
+        );
+      }
     }
   }
 
@@ -335,6 +373,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Icons.star;
       case 'order_status':
         return Icons.update;
+      case 'app_update':
+        return Icons.system_update_rounded;
       default:
         return Icons.notifications;
     }
@@ -368,6 +408,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Colors.amber;
       case 'order_status':
         return Colors.orange;
+      case 'app_update':
+        return const Color(0xFF1A73E8);
       default:
         return Colors.grey;
     }
@@ -770,6 +812,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       context,
                       MaterialPageRoute(builder: (_) => const OrderMarketplaceScreen()),
                     );
+                  } else if (type == 'app_update') {
+                    // 📲 앱 업데이트 알림은 위 _markAsRead()에서 이미 스토어 이동을 처리했으므로
+                    // 여기서는 추가 동작(화면 이동) 없이 종료합니다.
                   } else {
                     Navigator.push(
                       context,
