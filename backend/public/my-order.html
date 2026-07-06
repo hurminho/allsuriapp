@@ -314,7 +314,7 @@ let authPhone = '';
 let authPwd = '';
 let currentOrderId = '';
 let currentOrderData = null;
-let pendingAward = null; // { estimateId, businessId, bizName }
+let pendingAward = null; // { bidId, businessId, bizName }
 let selectedRating = 0;
 
 // ── 로그인 ──────────────────────────────────────────────────
@@ -457,7 +457,7 @@ function goBack() {
 }
 
 function renderDashboard(data) {
-  const { order, estimates, awardedBusiness } = data;
+  const { order, bids, awardedBusiness } = data;
 
   // 요약 카드
   document.getElementById('orderSummaryCard').innerHTML = `
@@ -477,10 +477,10 @@ function renderDashboard(data) {
     </div>`;
 
   // 스테퍼
-  renderStepper(order, estimates);
+  renderStepper(order, bids);
 
   // 입찰 섹션
-  renderBids(order, estimates, awardedBusiness);
+  renderBids(order, bids, awardedBusiness);
 
   // 완료 확인 버튼
   if (order.status === 'in_progress' && order.isAwarded) {
@@ -508,13 +508,13 @@ function maskAddress(addr) {
 }
 
 function statusLabel(s) {
-  return { pending: '대기중', in_progress: '진행중', completed: '완료', cancelled: '취소' }[s] || s;
+  return { pending: '대기중', bidding: '입찰중', in_progress: '진행중', awaiting_confirmation: '완료대기', completed: '완료', cancelled: '취소' }[s] || s;
 }
 function statusBadgeClass(s) {
-  return { pending: 'badge-warning', in_progress: 'badge-primary', completed: 'badge-success', cancelled: '' }[s] || '';
+  return { pending: 'badge-warning', bidding: 'badge-warning', in_progress: 'badge-primary', awaiting_confirmation: 'badge-primary', completed: 'badge-success', cancelled: '' }[s] || '';
 }
 
-function renderStepper(order, estimates) {
+function renderStepper(order, bids) {
   const steps = [
     { key: 'requested', label: '견적\n요청' },
     { key: 'bidding',   label: '입찰\n대기' },
@@ -525,9 +525,9 @@ function renderStepper(order, estimates) {
   ];
 
   let currentStep = 0;
-  if (estimates.length > 0) currentStep = 1;         // 입찰 대기 → 실제론 "입찰 접수됨"
+  if (bids.length > 0) currentStep = 1;              // 입찰 대기 → 실제론 "입찰 접수됨"
   if (order.isAwarded) currentStep = 2;              // 업체 선택
-  if (order.status === 'in_progress') currentStep = 3; // 공사 진행
+  if (order.status === 'in_progress' || order.status === 'awaiting_confirmation') currentStep = 3; // 공사 진행
   if (order.status === 'completed') currentStep = 4;  // 완료 확인
   if (order.adminRating) currentStep = 5;            // 평점
 
@@ -549,7 +549,14 @@ function renderStepper(order, estimates) {
   document.getElementById('stepperContainer').innerHTML = html;
 }
 
-function renderBids(order, estimates, awardedBusiness) {
+function ratingStarsHtml(avgRating, reviewCount) {
+  if (!avgRating) return `<span style="font-size:0.78rem;color:var(--gray-500);">후기 없음</span>`;
+  const rounded = Math.round(avgRating);
+  return `<span style="color:#f59e0b;font-size:0.85rem;">${'★'.repeat(rounded)}${'☆'.repeat(5-rounded)}</span>
+          <span style="font-size:0.78rem;color:var(--gray-500);">${avgRating} (${reviewCount||0}건)</span>`;
+}
+
+function renderBids(order, bids, awardedBusiness) {
   const section = document.getElementById('bidsSection');
   const container = document.getElementById('bidsContainer');
 
@@ -566,12 +573,15 @@ function renderBids(order, estimates, awardedBusiness) {
           </div>
           <span class="badge badge-success">낙찰</span>
         </div>
+        <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.4rem;">
+          ${ratingStarsHtml(awardedBusiness.avgRating, awardedBusiness.reviewCount)}
+        </div>
         <div style="font-size:0.8rem;color:var(--gray-500);margin-top:0.5rem;">클릭하여 상세 정보 보기 →</div>
       </div>`;
     return;
   }
 
-  if (!estimates.length) {
+  if (!bids.length) {
     section.classList.remove('hidden');
     document.getElementById('bidsTitle').textContent = '입찰 대기중';
     container.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--gray-500);">
@@ -583,27 +593,30 @@ function renderBids(order, estimates, awardedBusiness) {
   }
 
   section.classList.remove('hidden');
-  document.getElementById('bidsTitle').textContent = `접수된 견적 (${estimates.length}건)`;
-  container.innerHTML = estimates.map(e => `
-    <div class="estimate-card ${e.isAwarded ? 'awarded' : ''}" onclick="openBizModal('${e.businessId}', '${e.id}', ${JSON.stringify(e).replace(/'/g, "\\'")} )">
+  document.getElementById('bidsTitle').textContent = `접수된 견적 (${bids.length}건)`;
+  container.innerHTML = bids.map(b => `
+    <div class="estimate-card ${b.isAwarded ? 'awarded' : ''}" onclick="openBizModal('${b.businessId}', '${b.id}', ${JSON.stringify(b).replace(/'/g, "\\'")} )">
       <div class="est-header">
         <div>
-          <div class="est-name">${e.businessName || '사업자'}</div>
-          <div class="est-meta">${e.equipmentType||''} · 예상 ${e.estimatedDays||'-'}일</div>
+          <div class="est-name">${b.businessName || '사업자'}</div>
+          <div class="est-meta">${b.category||''} ${b.region ? '· '+b.region : ''} · 예상 ${b.estimatedDays||'-'}일</div>
         </div>
-        <div class="est-amount">${e.amount ? Number(e.amount).toLocaleString()+'원' : '협의'}</div>
+        <div class="est-amount">${b.amount ? Number(b.amount).toLocaleString()+'원' : '협의'}</div>
       </div>
-      ${e.description ? `<div class="est-desc">${e.description}</div>` : ''}
+      <div style="margin-top:0.35rem;display:flex;align-items:center;gap:0.4rem;">
+        ${ratingStarsHtml(b.avgRating, b.reviewCount)}
+      </div>
+      ${b.message ? `<div class="est-desc">${b.message}</div>` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.75rem;">
-        <span style="font-size:0.78rem;color:var(--gray-500);">${(e.createdAt||'').slice(0,10)}</span>
-        ${!order.isAwarded ? `<button class="btn-primary" style="padding:0.5rem 1.25rem;font-size:0.85rem;border-radius:10px;" onclick="event.stopPropagation();openAwardModal('${e.id}','${e.businessId}','${(e.businessName||'사업자').replace(/'/g,"\\'")}')">선택하기</button>` : ''}
+        <span style="font-size:0.78rem;color:var(--gray-500);">${(b.createdAt||'').slice(0,10)}</span>
+        ${!order.isAwarded ? `<button class="btn-primary" style="padding:0.5rem 1.25rem;font-size:0.85rem;border-radius:10px;" onclick="event.stopPropagation();openAwardModal('${b.id}','${b.businessId}','${(b.businessName||'사업자').replace(/'/g,"\\'")}')">선택하기</button>` : ''}
       </div>
     </div>
   `).join('');
 }
 
 // ── 사업자 상세 모달 ─────────────────────────────────────────
-async function openBizModal(bizId, estimateId, estimateData) {
+async function openBizModal(bizId, bidId, bidData) {
   document.getElementById('bizModalContent').innerHTML = '<div class="loading-center">로딩 중...</div>';
   document.getElementById('bizModal').classList.add('open');
   try {
@@ -624,15 +637,15 @@ async function openBizModal(bizId, estimateId, estimateData) {
         <div class="info-row"><span class="info-label">지역</span><span class="info-value">${b.region||'-'}</span></div>
         ${b.description ? `<div class="info-row"><span class="info-label">소개</span><span class="info-value" style="text-align:right;max-width:200px;">${b.description}</span></div>` : ''}
       </div>
-      ${estimateData ? `
+      ${bidData ? `
         <div style="background:var(--primary-light);border-radius:10px;padding:1rem;margin-bottom:1.25rem;">
           <div style="font-size:0.8rem;font-weight:700;color:var(--primary);margin-bottom:0.5rem;">제출한 견적</div>
-          <div style="font-size:1.2rem;font-weight:700;">${estimateData.amount ? Number(estimateData.amount).toLocaleString()+'원' : '협의'}</div>
-          <div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.25rem;">예상 ${estimateData.estimatedDays||'-'}일 · ${estimateData.equipmentType||''}</div>
-          ${estimateData.description ? `<div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.5rem;line-height:1.5;">${estimateData.description}</div>` : ''}
+          <div style="font-size:1.2rem;font-weight:700;">${bidData.amount ? Number(bidData.amount).toLocaleString()+'원' : '협의'}</div>
+          <div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.25rem;">예상 ${bidData.estimatedDays||'-'}일</div>
+          ${bidData.message ? `<div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.5rem;line-height:1.5;">${bidData.message}</div>` : ''}
         </div>
         ${!currentOrderData?.order?.isAwarded ? `
-          <button class="btn-primary" style="margin-bottom:0.75rem;" onclick="openAwardModal('${estimateId}','${bizId}','${(b.businessname||b.name).replace(/'/g,"\\'")}');closeBizModal()">이 사업자 선택하기</button>
+          <button class="btn-primary" style="margin-bottom:0.75rem;" onclick="openAwardModal('${bidId}','${bizId}','${(b.businessname||b.name).replace(/'/g,"\\'")}');closeBizModal()">이 사업자 선택하기</button>
         ` : ''}
       ` : ''}
       ${reviews.length ? `
@@ -658,8 +671,8 @@ function closeBizModal(e) {
 }
 
 // ── 낙찰 확인 모달 ──────────────────────────────────────────
-function openAwardModal(estimateId, businessId, bizName) {
-  pendingAward = { estimateId, businessId, bizName };
+function openAwardModal(bidId, businessId, bizName) {
+  pendingAward = { bidId, businessId, bizName };
   document.getElementById('awardConfirmText').textContent =
     `[${bizName}] 사업자를 선택하시겠습니까?\n낙찰 후 연락처와 상세 주소가 해당 사업자에게 전달됩니다.`;
   document.getElementById('awardModal').classList.add('open');
@@ -681,7 +694,7 @@ async function doAward() {
     const res = await fetch(`${API}/order/${currentOrderId}/award`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: authPhone, password: authPwd, estimateId: pendingAward.estimateId, businessId: pendingAward.businessId }),
+      body: JSON.stringify({ phone: authPhone, password: authPwd, bidId: pendingAward.bidId }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '낙찰 처리 실패');

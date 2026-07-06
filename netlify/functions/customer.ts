@@ -2,10 +2,84 @@
 // Netlify function: 웹 비로그인 고객용 API
 // 4자리 PIN으로 본인 확인 후 견적 요청 조회/낙찰/완료/평점 처리
 
+import crypto from 'crypto'
+
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || 'devtoken'
 const SITE_URL = process.env.URL || 'https://allsuricommerce.netlify.app'
+
+// ─────────────────────────────────────────────────────────────
+// 카카오 알림톡 (Solapi) - 설정이 없으면 조용히 스킵 (앱 동작에 영향 없음)
+// 필요 환경변수: SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER_PHONE, SOLAPI_PF_ID,
+//              SOLAPI_TEMPLATE_BID_AWARDED, SOLAPI_TEMPLATE_WORK_DONE, SOLAPI_TEMPLATE_REVIEW_REQUEST
+// ─────────────────────────────────────────────────────────────
+const SOLAPI_API_KEY = process.env.SOLAPI_API_KEY || ''
+const SOLAPI_API_SECRET = process.env.SOLAPI_API_SECRET || ''
+const SOLAPI_SENDER_PHONE = process.env.SOLAPI_SENDER_PHONE || ''
+const SOLAPI_PF_ID = process.env.SOLAPI_PF_ID || ''
+
+function buildSolapiAuthHeader(): string {
+  const date = new Date().toISOString()
+  const salt = crypto.randomBytes(16).toString('hex')
+  const signature = crypto.createHmac('sha256', SOLAPI_API_SECRET).update(date + salt).digest('hex')
+  return `HMAC-SHA256 apiKey=${SOLAPI_API_KEY}, date=${date}, salt=${salt}, signature=${signature}`
+}
+
+function toAlimtalkVariables(vars: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(vars)) out[`#{${k}}`] = v ?? ''
+  return out
+}
+
+// 카카오 알림톡 즉시 발송 (실패 시 SMS 대체발송, 설정 미비 시 로그만 남기고 무시)
+async function sendKakaoAlimtalk(opts: {
+  to: string
+  templateId: string
+  variables: Record<string, string>
+  fallbackText?: string
+}): Promise<void> {
+  const { to, templateId, variables, fallbackText } = opts
+  if (!SOLAPI_API_KEY || !SOLAPI_API_SECRET || !SOLAPI_PF_ID || !templateId) {
+    console.warn('[kakao-alimtalk] SOLAPI 환경변수/템플릿 미설정 - 발송 스킵')
+    return
+  }
+  const toNormalized = (to || '').replace(/[^0-9]/g, '')
+  if (!toNormalized) {
+    console.warn('[kakao-alimtalk] 수신번호 없음 - 발송 스킵')
+    return
+  }
+  try {
+    const res = await fetch('https://api.solapi.com/messages/v4/send', {
+      method: 'POST',
+      headers: {
+        Authorization: buildSolapiAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: {
+          to: toNormalized,
+          from: SOLAPI_SENDER_PHONE,
+          kakaoOptions: {
+            pfId: SOLAPI_PF_ID,
+            templateId,
+            variables: toAlimtalkVariables(variables),
+            disableSms: false,
+          },
+          ...(fallbackText ? { text: fallbackText } : {}),
+        },
+      }),
+    })
+    const result = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      console.warn('[kakao-alimtalk] 발송 실패:', JSON.stringify(result))
+    } else {
+      console.log(`[kakao-alimtalk] 발송 성공 → ${toNormalized} (${templateId})`)
+    }
+  } catch (e: any) {
+    console.warn('[kakao-alimtalk] 발송 오류 (무시):', e.message)
+  }
+}
 
 const sbHeaders = {
   apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -114,6 +188,7 @@ export const handler = async (event: any) => {
 
     // ─────────────────────────────────────────────────────────────
     // GET /order/:orderId  - 주문 상세 + 입찰 목록 (phone+pwd 인증)
+    // order_bids를 단일 소스로 사용 (앱 사업자 입찰과 동일한 데이터)
     // ─────────────────────────────────────────────────────────────
     if (event.httpMethod === 'GET' && /^\/order\/[^/]+$/.test(path)) {
       const orderId = path.split('/')[2]
@@ -124,23 +199,72 @@ export const handler = async (event: any) => {
       const order = await verifyOrder(orderId, phone, password)
       if (!order) return err('인증 실패 또는 주문을 찾을 수 없습니다.', 401)
 
-      // estimates (사업자 입찰 목록) 조회
-      const estRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/estimates?orderId=eq.${encodeURIComponent(orderId)}&select=id,businessid,businessname,businessphone,equipmenttype,amount,description,estimateddays,createdat,visitdate,status,awardedAt&order=createdat.asc`,
+      // 1. 이 오더에 연결된 marketplace_listings 조회 (web_order_id로 역참조)
+      const listingRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/marketplace_listings?web_order_id=eq.${encodeURIComponent(orderId)}&select=id&limit=1`,
         { headers: sbHeaders }
       )
-      const estimates = await estRes.json()
+      const listingArr = await listingRes.json()
+      const listingId = Array.isArray(listingArr) && listingArr[0] ? listingArr[0].id : null
 
-      // 낙찰된 사업자 정보 조회 (technicianId)
+      // 2. order_bids (사업자 입찰 목록) 조회 - 앱 입찰과 동일한 단일 소스
+      let bids: any[] = []
+      if (listingId) {
+        const bidsRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${encodeURIComponent(listingId)}&status=neq.withdrawn&select=id,bidder_id,message,bid_amount,estimated_days,status,created_at&order=created_at.asc`,
+          { headers: sbHeaders }
+        )
+        const bidsRaw = await bidsRes.json()
+        bids = Array.isArray(bidsRaw) ? bidsRaw : []
+      }
+
+      // 3. 입찰 사업자들의 프로필 + 평점 일괄 조회
+      const bidderIds = Array.from(new Set(bids.map((b) => b.bidder_id).filter(Boolean)))
+      let bidderProfiles: Record<string, any> = {}
+      let bidderRatings: Record<string, { avg: number | null; count: number; recent: any[] }> = {}
+      if (bidderIds.length > 0) {
+        const idsFilter = bidderIds.map((id) => encodeURIComponent(id)).join(',')
+        const [usersRes, reviewsRes] = await Promise.all([
+          fetch(
+            `${SUPABASE_URL}/rest/v1/users?id=in.(${idsFilter})&select=id,name,businessname,phonenumber,category,region,description,profile_image_url,projects_awarded_count`,
+            { headers: sbHeaders }
+          ),
+          fetch(
+            `${SUPABASE_URL}/rest/v1/business_reviews?business_id=in.(${idsFilter})&select=business_id,rating,comment,created_at&order=created_at.desc`,
+            { headers: sbHeaders }
+          ),
+        ])
+        const usersArr = await usersRes.json()
+        const reviewsArr = await reviewsRes.json()
+        if (Array.isArray(usersArr)) {
+          for (const u of usersArr) bidderProfiles[u.id] = u
+        }
+        if (Array.isArray(reviewsArr)) {
+          for (const bid of bidderIds) {
+            const rs = reviewsArr.filter((r: any) => r.business_id === bid)
+            const avg = rs.length ? Math.round((rs.reduce((s: number, r: any) => s + (r.rating || 0), 0) / rs.length) * 10) / 10 : null
+            bidderRatings[bid] = { avg, count: rs.length, recent: rs.slice(0, 3) }
+          }
+        }
+      }
+
+      // 4. 낙찰된 사업자 정보 (technicianId 기준)
       let awardedBusiness: any = null
       const techId = order.technicianId || order.technicianid
       if (techId) {
-        const bRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(techId)}&select=id,name,businessname,phonenumber,email,category,region,description,profile_image_url,projects_awarded_count&limit=1`,
-          { headers: sbHeaders }
-        )
-        const bArr = await bRes.json()
-        awardedBusiness = Array.isArray(bArr) ? bArr[0] : null
+        awardedBusiness = bidderProfiles[techId] || null
+        if (!awardedBusiness) {
+          const bRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(techId)}&select=id,name,businessname,phonenumber,email,category,region,description,profile_image_url,projects_awarded_count&limit=1`,
+            { headers: sbHeaders }
+          )
+          const bArr = await bRes.json()
+          awardedBusiness = Array.isArray(bArr) ? bArr[0] : null
+        }
+        if (awardedBusiness) {
+          const r = bidderRatings[techId]
+          awardedBusiness = { ...awardedBusiness, avgRating: r?.avg ?? null, reviewCount: r?.count ?? 0 }
+        }
       }
 
       return ok({
@@ -150,23 +274,32 @@ export const handler = async (event: any) => {
           visitDate: order.visitDate || order.visitdate,
           createdAt: order.createdAt || order.createdat,
           isAwarded: order.isAwarded ?? false,
-          awardedEstimateId: order.awardedEstimateId || order.awardedEstimateId,
+          awardedBidId: order.awarded_bid_id || null,
           images: order.images || [],
           adminRating: order.adminRating,
+          adminRatingComment: order.adminRatingComment,
           matchedJobId: order.matchedJobId,
         },
-        estimates: Array.isArray(estimates) ? estimates.map((e: any) => ({
-          id: e.id,
-          businessId: e.businessid,
-          businessName: e.businessname,
-          equipmentType: e.equipmenttype,
-          amount: e.amount,
-          description: e.description,
-          estimatedDays: e.estimateddays,
-          createdAt: e.createdat,
-          status: e.status,
-          isAwarded: e.status === 'awarded',
-        })) : [],
+        bids: bids.map((b) => {
+          const profile = bidderProfiles[b.bidder_id] || {}
+          const rating = bidderRatings[b.bidder_id] || { avg: null, count: 0, recent: [] }
+          return {
+            id: b.id,
+            businessId: b.bidder_id,
+            businessName: profile.businessname || profile.name || '사업자',
+            category: profile.category,
+            region: profile.region,
+            amount: b.bid_amount,
+            message: b.message,
+            estimatedDays: b.estimated_days,
+            createdAt: b.created_at,
+            status: b.status,
+            isAwarded: b.status === 'selected',
+            avgRating: rating.avg,
+            reviewCount: rating.count,
+            recentReviews: rating.recent,
+          }
+        }),
         awardedBusiness,
       })
     }
@@ -201,29 +334,41 @@ export const handler = async (event: any) => {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // POST /order/:orderId/award  - 사업자 선택 (낙찰)
+    // POST /order/:orderId/award  - 사업자 선택 (낙찰) - order_bids.id(bidId) 기준
     // ─────────────────────────────────────────────────────────────
     if (event.httpMethod === 'POST' && /^\/order\/[^/]+\/award$/.test(path)) {
       const orderId = path.split('/')[2]
       const body = JSON.parse(event.body || '{}')
       const phone = (body.phone || '').replace(/[^0-9]/g, '')
       const password = String(body.password || '').trim()
-      const { estimateId, businessId } = body
+      const { bidId } = body
 
       if (!phone || !password) return err('인증 정보가 필요합니다.', 401)
-      if (!estimateId || !businessId) return err('견적 ID와 사업자 ID가 필요합니다.')
+      if (!bidId) return err('입찰 ID가 필요합니다.')
 
       const order = await verifyOrder(orderId, phone, password)
       if (!order) return err('인증 실패 또는 주문을 찾을 수 없습니다.', 401)
       if (order.isAwarded) return err('이미 낙찰된 요청입니다.')
 
+      // 0. 입찰(order_bids) 조회 + 해당 오더 소속 검증
+      const bidRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/order_bids?id=eq.${encodeURIComponent(bidId)}&select=id,listing_id,bidder_id,status,marketplace_listings!inner(web_order_id)&limit=1`,
+        { headers: sbHeaders }
+      )
+      const bidArr = await bidRes.json()
+      const bid = Array.isArray(bidArr) ? bidArr[0] : null
+      const bidOrderId = bid?.marketplace_listings?.web_order_id
+      if (!bid || bidOrderId !== orderId) return err('입찰 정보를 찾을 수 없습니다.', 404)
+      if (bid.status !== 'pending') return err('이미 처리된 입찰입니다.')
+
+      const businessId = bid.bidder_id
       const now = new Date().toISOString()
 
-      // 1. estimate 낙찰 처리
-      await fetch(`${SUPABASE_URL}/rest/v1/estimates?id=eq.${encodeURIComponent(estimateId)}`, {
+      // 1. order_bids 낙찰 처리 (트리거가 marketplace_listings.selected_bidder_id 설정 + 다른 입찰 rejected 처리)
+      await fetch(`${SUPABASE_URL}/rest/v1/order_bids?id=eq.${encodeURIComponent(bidId)}`, {
         method: 'PATCH',
         headers: { ...sbHeaders, Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: 'awarded', awardedAt: now }),
+        body: JSON.stringify({ status: 'selected', updated_at: now }),
       })
 
       // 2. 사업자 정보 조회 (알림 전송용)
@@ -242,7 +387,7 @@ export const handler = async (event: any) => {
         body: JSON.stringify({
           isAwarded: true,
           awardedAt: now,
-          awardedEstimateId: estimateId,
+          awarded_bid_id: bidId,
           technicianId: businessId,
           status: 'in_progress',
         }),
@@ -294,13 +439,18 @@ export const handler = async (event: any) => {
         } catch {}
       }
 
-      // 5. order 에 matchedJobId 업데이트
+      // 5. order 에 matchedJobId 업데이트 + order_bids에 job_id 연결
       if (jobId) {
         await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
           method: 'PATCH',
           headers: { ...sbHeaders, Prefer: 'return=minimal' },
           body: JSON.stringify({ matchedJobId: jobId }),
         })
+        await fetch(`${SUPABASE_URL}/rest/v1/order_bids?id=eq.${encodeURIComponent(bidId)}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, Prefer: 'return=minimal' },
+          body: JSON.stringify({ job_id: jobId }),
+        }).catch(() => {})
       }
 
       // 6. 사업자 앱 알림 (고객 연락처 포함)
@@ -315,11 +465,25 @@ export const handler = async (event: any) => {
 
       // FCM은 notifications INSERT Webhook이 1회 발송
 
+      // 7. 고객에게 카카오 알림톡 (낙찰 안내) - 즉시 발송
+      await sendKakaoAlimtalk({
+        to: customerPhone,
+        templateId: process.env.SOLAPI_TEMPLATE_BID_AWARDED || '',
+        variables: {
+          고객명: customerName,
+          오더명: order.title || '견적 요청',
+          사업자명: bizName,
+          링크: `${SITE_URL}/my-order`,
+        },
+        fallbackText: `[올수리] ${customerName}님, "${order.title || '견적 요청'}"에 ${bizName} 사업자가 선정되었습니다. 공사 진행 후 완료 확인을 부탁드립니다.\n${SITE_URL}/my-order`,
+      })
+
       return ok({ success: true, jobId, message: `${bizName}에게 낙찰되었습니다.` })
     }
 
     // ─────────────────────────────────────────────────────────────
-    // POST /order/:orderId/complete  - 공사 완료 확인
+    // POST /order/:orderId/complete  - 공사 완료 확인 (소비자만 최종 확정 가능)
+    // 완료 정책: 사업자의 "완료 유도" 여부와 무관하게, 소비자의 이 확인 1회로 최종 완료 처리됨
     // ─────────────────────────────────────────────────────────────
     if (event.httpMethod === 'POST' && /^\/order\/[^/]+\/complete$/.test(path)) {
       const orderId = path.split('/')[2]
@@ -331,6 +495,9 @@ export const handler = async (event: any) => {
       const order = await verifyOrder(orderId, phone, password)
       if (!order) return err('인증 실패', 401)
       if (!order.isAwarded) return err('낙찰 전에는 완료 처리할 수 없습니다.')
+      if (order.status === 'completed') return err('이미 완료 처리된 요청입니다.')
+
+      const now = new Date().toISOString()
 
       await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
         method: 'PATCH',
@@ -338,13 +505,26 @@ export const handler = async (event: any) => {
         body: JSON.stringify({ status: 'completed' }),
       })
 
-      // job 상태도 awaiting_confirmation 으로 변경
+      // jobs / marketplace_listings 상태도 최종 completed로 동기화 (소비자 확인 = 최종 완료)
       const jobId = order.matchedJobId
       if (jobId) {
         await fetch(`${SUPABASE_URL}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}`, {
           method: 'PATCH',
           headers: { ...sbHeaders, Prefer: 'return=minimal' },
-          body: JSON.stringify({ status: 'awaiting_confirmation', updated_at: new Date().toISOString() }),
+          body: JSON.stringify({ status: 'completed', updated_at: now }),
+        })
+      }
+      const listingRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/marketplace_listings?web_order_id=eq.${encodeURIComponent(orderId)}&select=id&limit=1`,
+        { headers: sbHeaders }
+      )
+      const listingArr = await listingRes.json()
+      const listingId = Array.isArray(listingArr) && listingArr[0] ? listingArr[0].id : null
+      if (listingId) {
+        await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=eq.${encodeURIComponent(listingId)}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, Prefer: 'return=minimal' },
+          body: JSON.stringify({ status: 'completed', updatedat: now }),
         })
       }
 
@@ -353,7 +533,54 @@ export const handler = async (event: any) => {
         await insertNotification(techId, '공사 완료 확인', '고객이 공사 완료를 확인했습니다.', 'job_complete', jobId)
       }
 
+      // 고객에게 카카오 알림톡 (후기 요청) - 즉시 발송
+      const customerName = order.customerName || order.customername || '고객'
+      const customerPhone = order.customerPhone || order.customerphone || phone
+      await sendKakaoAlimtalk({
+        to: customerPhone,
+        templateId: process.env.SOLAPI_TEMPLATE_REVIEW_REQUEST || '',
+        variables: {
+          고객명: customerName,
+          오더명: order.title || '견적 요청',
+          링크: `${SITE_URL}/my-order`,
+        },
+        fallbackText: `[올수리] ${customerName}님, 공사 완료를 확인해 주셔서 감사합니다. 서비스는 어떠셨나요? 후기를 남겨주세요.\n${SITE_URL}/my-order`,
+      })
+
       return ok({ success: true, message: '공사 완료가 확인되었습니다.' })
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // POST /order/:orderId/notify-work-done  - 사업자가 "공사 완료"를 눌렀을 때
+    // 소비자에게 완료 확인을 요청하는 카카오 알림톡 발송 (인증 불필요, 앱 내부 호출용)
+    // ─────────────────────────────────────────────────────────────
+    if (event.httpMethod === 'POST' && /^\/order\/[^/]+\/notify-work-done$/.test(path)) {
+      const orderId = path.split('/')[2]
+
+      const orderRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=id,title,customerName,customerPhone,isAwarded,status&limit=1`,
+        { headers: sbHeaders }
+      )
+      const orderArr = await orderRes.json()
+      const order = Array.isArray(orderArr) ? orderArr[0] : null
+      if (!order) return err('요청을 찾을 수 없습니다.', 404)
+      if (!order.isAwarded) return err('낙찰 전 요청입니다.')
+      if (order.status !== 'in_progress') return err('이미 처리된 요청입니다.')
+
+      const customerName = order.customerName || '고객'
+      const customerPhone = order.customerPhone || ''
+      await sendKakaoAlimtalk({
+        to: customerPhone,
+        templateId: process.env.SOLAPI_TEMPLATE_WORK_DONE || '',
+        variables: {
+          고객명: customerName,
+          오더명: order.title || '견적 요청',
+          링크: `${SITE_URL}/my-order`,
+        },
+        fallbackText: `[올수리] ${customerName}님, 신청하신 "${order.title || '견적 요청'}" 공사가 완료되었다고 사업자가 알려왔습니다. 확인 후 완료 버튼을 눌러주세요.\n${SITE_URL}/my-order`,
+      })
+
+      return ok({ success: true })
     }
 
     // ─────────────────────────────────────────────────────────────

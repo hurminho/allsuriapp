@@ -8,6 +8,7 @@ import '../../widgets/shimmer_widgets.dart';
 import '../../services/auth_service.dart';
 import '../../services/job_service.dart';
 import '../../services/chat_service.dart'; // 추가
+import '../../services/api_service.dart';
 import '../../models/job.dart';
 import '../../widgets/interactive_card.dart';
 import '../../widgets/modern_order_card.dart';
@@ -668,9 +669,10 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         }
 
         // 오더 소유자(생성자)에게 후기/평점 작성 push 알림
+        // (웹 고객 낙찰 건은 owner_business_id == 낙찰 사업자 본인이므로 자기 자신에게는 보내지 않음)
         final ownerId = job.ownerBusinessId;
         print('   알림 전송 중: $ownerId');
-        if (ownerId != null && ownerId.isNotEmpty) {
+        if (ownerId != null && ownerId.isNotEmpty && ownerId != currentUserId) {
           await Supabase.instance.client.from('notifications').insert({
             'userid': ownerId,
             'title': '후기/평점 작성 안내',
@@ -682,7 +684,27 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
             'createdat': DateTime.now().toIso8601String(),
           });
         } else {
-          print('⚠️ [JobManagement] ownerId 없어 알림을 건너뜀');
+          print('⚠️ [JobManagement] ownerId 없거나 본인이라 알림을 건너뜀');
+        }
+
+        // 웹 고객이 낙찰한 공사라면, 고객에게 "공사 완료 확인 요청" 카카오 알림톡 발송
+        // (최종 완료 처리는 고객이 웹에서 직접 확인해야 확정됨)
+        if (realJobId != null && !_isListingOnlyJobId(realJobId)) {
+          try {
+            final jobRow = await Supabase.instance.client
+                .from('jobs')
+                .select('web_order_id')
+                .eq('id', realJobId)
+                .maybeSingle();
+            final webOrderId = jobRow?['web_order_id']?.toString();
+            if (webOrderId != null && webOrderId.isNotEmpty && mounted) {
+              // 실패해도 완료 처리 자체는 계속 진행 (알림 발송은 best-effort)
+              // ignore: use_build_context_synchronously
+              await context.read<ApiService>().post('/customer/order/$webOrderId/notify-work-done', {});
+            }
+          } catch (e) {
+            print('⚠️ [JobManagement] 웹 오더 완료유도 알림 발송 실패 (무시): $e');
+          }
         }
 
         print('✅ [JobManagement] 공사 완료 처리 완료 (awaiting_confirmation)');
