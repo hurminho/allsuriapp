@@ -88,6 +88,38 @@ async function getGoogleAccessToken(): Promise<string | null> {
   }
 }
 
+// notifications row를 "발송 처리 중"으로 원자적으로 선점(claim)한다.
+// push_sent_at이 이미 채워져 있으면(= 다른 요청이 먼저 처리함) false를 반환해
+// 같은 row에 대해 FCM이 중복 발송되는 것을 막는다.
+// (Webhook 재시도, 대시보드 중복 webhook 설정 등 원인 불문 방어)
+async function claimNotificationForPush(id: string): Promise<boolean> {
+  if (!id) return true // id가 없으면(구버전 payload 등) 가드 없이 통과
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/notifications?id=eq.${encodeURIComponent(id)}&push_sent_at=is.null`,
+      {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify({ push_sent_at: new Date().toISOString() }),
+      }
+    )
+    if (!res.ok) {
+      console.warn(`[FCM] push_sent_at claim 실패 (${res.status}) - 가드 없이 진행`)
+      return true // 컬럼 미존재(마이그레이션 전) 등의 경우 발송은 계속 진행
+    }
+    const rows = (await res.json()) as any[]
+    return Array.isArray(rows) && rows.length > 0
+  } catch (e: any) {
+    console.warn('[FCM] push_sent_at claim 예외 - 가드 없이 진행:', e.message)
+    return true
+  }
+}
+
 // Supabase Webhook 경로 처리 (/send-push-webhook)
 async function handleSupabaseWebhook(event: any) {
   const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
@@ -105,6 +137,13 @@ async function handleSupabaseWebhook(event: any) {
 
     if (!record?.userid || !record?.title || !record?.body) {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'missing_fields' }), headers: JSON_HEADERS }
+    }
+
+    // 같은 notifications row에 대한 중복 webhook 호출(재시도/중복 설정) 방지
+    const claimed = await claimNotificationForPush(record.id)
+    if (!claimed) {
+      console.log(`[webhook] 이미 발송된 알림 (id=${record.id}) - 중복 발송 스킵`)
+      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'already_sent' }), headers: JSON_HEADERS }
     }
 
     return await sendFCMToUser(record.userid, record.title, record.body, {
