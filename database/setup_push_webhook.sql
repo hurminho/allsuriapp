@@ -13,9 +13,10 @@
 --   Type: HTTP Request
 --   URL: https://api.allsuri.app/api/notifications/send-push-webhook
 --   HTTP Method: POST
---   Headers:
+--   Timeout: 15000 (5초면 FCM 지연 시 Supabase가 재시도 → 푸시 2회)
+--   Headers (둘 다 필수):
 --     Content-Type: application/json
---     Authorization: Bearer allsuri-admin-2024
+--     Authorization: Bearer <ADMIN_TOKEN>   ← Content-Type만 있으면 401로 FCM 미발송
 --
 -- Payload (자동으로 Supabase가 보내는 형식):
 -- {

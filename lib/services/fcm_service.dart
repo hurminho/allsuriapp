@@ -75,6 +75,14 @@ class FCMService {
       // 로컬 알림 초기화
       await _initializeLocalNotifications();
 
+      // 포그라운드에서는 시스템 배너 끄고, 아래 onMessage → 로컬 알림만 표시.
+      // alert:true 이면 iOS가 시스템 알림 + 로컬 알림을 둘 다 띄워 2회처럼 보임.
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: false,
+        badge: true,
+        sound: false,
+      );
+
       // 메시지 핸들러 설정
       _setupMessageHandlers();
 
@@ -173,13 +181,8 @@ class FCMService {
   /// iOS 앱 아이콘 뱃지 클리어
   Future<void> _clearBadge() async {
     try {
-      // iOS: FCM에 badge=0 설정 요청
-      await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      // flutter_local_notifications로 뱃지 초기화
+      // 주의: setForegroundNotificationPresentationOptions(alert:true)를 여기서
+      // 호출하면 이후 포그라운드 알림이 시스템+로컬로 2회 표시됨. 호출 금지.
       await _localNotifications
           .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(badge: true);
