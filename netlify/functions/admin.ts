@@ -474,6 +474,27 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       return u ? (u.businessname || u.name || '알 수 없음') : '알 수 없음'
     }
 
+    // 푸시 발송 대상 user id 목록 (PostgREST 페이지네이션)
+    // 주의: &eq.role=business 는 잘못된 문법 → 항상 0건 반환됨. role=eq.business 사용.
+    const fetchTargetUserIds = async (businessOnly: boolean): Promise<string[]> => {
+      const roleFilter = businessOnly ? '&role=eq.business' : ''
+      const pageSize = 1000
+      const ids: string[] = []
+      for (let offset = 0; offset < 20000; offset += pageSize) {
+        const url = `${SUPABASE_URL}/rest/v1/users?select=id${roleFilter}&limit=${pageSize}&offset=${offset}`
+        const res = await fetch(url, { headers: sbHeaders })
+        const body = await res.json()
+        if (!res.ok) {
+          console.error('[push] users 조회 실패:', res.status, body)
+          throw new Error(typeof body?.message === 'string' ? body.message : `users 조회 실패 (${res.status})`)
+        }
+        if (!Array.isArray(body) || body.length === 0) break
+        ids.push(...body.map((u: { id?: string }) => u.id).filter(Boolean) as string[])
+        if (body.length < pageSize) break
+      }
+      return ids
+    }
+
     // Call 오더 목록 (marketplace_listings 테이블)
     if (event.httpMethod === 'GET' && path === '/calls') {
       const listRes = await fetch(
@@ -1089,7 +1110,7 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       // GET /push-notifications/users?q=검색어 – 사업자 목록 (발송 대상 선택용)
       if (event.httpMethod === 'GET' && sub.startsWith('/users')) {
         const q = event.queryStringParameters?.q || ''
-        let url = `${SUPABASE_URL}/rest/v1/users?select=id,name,businessname&eq.role=business&order=businessname.asc&limit=50`
+        let url = `${SUPABASE_URL}/rest/v1/users?select=id,name,businessname&role=eq.business&order=businessname.asc&limit=50`
         if (q) url += `&or=(name.ilike.*${encodeURIComponent(q)}*,businessname.ilike.*${encodeURIComponent(q)}*)`
         const res = await fetch(url, { headers: sbHeaders })
         const json = await res.json()
@@ -1115,10 +1136,11 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
         // 대상 user ID 목록 결정
         let userIds: string[] = []
         if (targetAll) {
-          const roleFilter = allUserRoles ? '' : '&role=eq.business'
-          const usersRes = await fetch(`${SUPABASE_URL}/rest/v1/users?select=id${roleFilter}&limit=500`, { headers: sbHeaders })
-          const users = await usersRes.json() as { id: string }[]
-          userIds = Array.isArray(users) ? users.map(u => u.id) : []
+          try {
+            userIds = await fetchTargetUserIds(!allUserRoles)
+          } catch (e: any) {
+            return { statusCode: 500, body: JSON.stringify({ error: e.message || '발송 대상 조회 실패' }), headers: { 'Content-Type': 'application/json' } }
+          }
         } else {
           userIds = Array.isArray(targetIds) ? targetIds : []
         }
