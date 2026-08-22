@@ -29,7 +29,6 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         title: const Text('AI 도우미', style: TextStyle(fontWeight: FontWeight.w600)),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -140,7 +139,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
-                                color: isUser ? const Color(0xFF1976D2) : Colors.white,
+                                color: isUser ? const Color(0xFF2E74B5) : Colors.white,
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(

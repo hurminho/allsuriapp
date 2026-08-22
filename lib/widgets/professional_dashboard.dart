@@ -3,14 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:percent_indicator/percent_indicator.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import '../services/ad_service.dart';
 import '../models/ad.dart';
 import 'announcement_banner.dart';
+import '../theme/business_theme.dart';
+import 'business/business_metric_card.dart';
+import 'business/business_primary_button.dart';
 import '../screens/business/estimate_requests_screen.dart';
-import '../screens/business/estimate_management_screen.dart';
-import '../screens/business/transfer_estimate_screen.dart';
+import '../screens/business/my_estimates_screen.dart';
+import '../screens/chat/chat_list_page.dart';
 import '../screens/notification/notification_screen.dart';
 import '../screens/business/job_management_screen.dart';
 import '../screens/business/order_marketplace_screen.dart';
@@ -21,9 +23,7 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/marketplace_service.dart';
 import '../services/order_service.dart';
-import '../services/api_service.dart';
 import '../services/push_permission_service.dart';
-import '../screens/home/home_screen.dart';
 import '../widgets/bottom_navigation.dart';
 import '../screens/community/community_board_screen.dart';
 
@@ -131,6 +131,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         _getNewOrdersCount(currentUserId),
         _getMyBidsCount(currentUserId),
         _getMyOrdersCount(currentUserId),
+        _getEstimateRequestsCount(),
       ]);
 
       return {
@@ -139,10 +140,21 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         'newOrders': results[2],
         'myBids': results[3],
         'myOrders': results[4],
+        'estimateRequests': results[5],
       };
     } catch (e) {
       debugPrint('❌ [_loadDashboardData] 에러: $e');
       return {};
+    }
+  }
+
+  Future<int> _getEstimateRequestsCount() async {
+    try {
+      final orderService = Provider.of<OrderService>(context, listen: false);
+      final all = await orderService.getOrders();
+      return all.where((o) => o.status == 'pending' && !o.isAwarded).length;
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -269,12 +281,9 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             : (user?.name ?? "사업자");
         
         return WillPopScope(
-          onWillPop: () async {
-            // 대시보드가 홈이므로 뒤로가기 방지
-            return false;
-          },
+          onWillPop: () async => false,
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8F9FA),
+            backgroundColor: BusinessTheme.background,
             appBar: _buildAppBar(context, user),
             body: FutureBuilder<Map<String, int>>(
               future: _dashboardDataFuture,
@@ -282,11 +291,9 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                
                 final data = snapshot.data ?? {};
                 return Column(
                   children: [
-                    // 관리자 공지 배너 (앱 업데이트 없이 즉시 반영)
                     const AnnouncementBanner(),
                     Expanded(
                       child: RefreshIndicator(
@@ -297,11 +304,33 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildAdBanner(context),
-                        const SizedBox(height: 20),
+                        Text(
+                          '$businessName 님',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: BusinessTheme.navy,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          '오늘 처리할 일감을 한눈에 확인하세요',
+                          style: TextStyle(color: BusinessTheme.textMuted),
+                        ),
+                        const SizedBox(height: 16),
                         _buildKPICards(data),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
+                        BusinessPrimaryButton(
+                          label: '새 일감 보기',
+                          icon: Icons.arrow_forward,
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const EstimateRequestsScreen()));
+                          },
+                        ),
+                        const SizedBox(height: 16),
                         _buildMainMenu(context, data),
+                        const SizedBox(height: 24),
+                        _buildAdBanner(context),
                         const SizedBox(height: 20),
                       ],
                     ),
@@ -326,46 +355,22 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
 
   PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user) {
     return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0,
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E3A8A),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.dashboard, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 12),
-          const Text(
-            '올수리 프로',
-            style: TextStyle(
-              color: Color(0xFF1E3A8A),
-              fontWeight: FontWeight.w700,
-              fontSize: 20,
-            ),
-          ),
-        ],
-      ),
+      title: const Text('오늘의 업무'),
       actions: [
         FutureBuilder<int>(
           future: _notifCountFuture,
           builder: (context, snapshot) {
             final unread = snapshot.data ?? 0;
-
             return Stack(
               clipBehavior: Clip.none,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.notifications_outlined, color: Color(0xFF1E3A8A)),
+                  icon: const Icon(Icons.notifications_outlined),
                   onPressed: () async {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const NotificationScreen()),
                     );
-                    // 알림 화면에서 돌아오면 대시보드 새로고침
                     if (mounted) {
                       setState(() {
                         _dashboardDataFuture = _loadDashboardData();
@@ -380,20 +385,13 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: const BoxDecoration(
-                        color: Colors.red,
+                        color: BusinessTheme.danger,
                         shape: BoxShape.circle,
                       ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                       child: Text(
                         unread > 9 ? '9+' : unread.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -402,308 +400,91 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             );
           },
         ),
-        IconButton(
-          icon: const Icon(Icons.person_outline, color: Color(0xFF1E3A8A)),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            );
-          },
-        ),
       ],
     );
   }
 
   Widget _buildKPICards(Map<String, int> data) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _buildKPICard(
-            '완료한 공사',
-            data['completed'] ?? 0,
-            Icons.check_circle,
-            const Color(0xFFCCF5F5), // 아주 연한 민트 (초연한 파스텔)
-            null, // trend
-            () {
-              // 완료된 공사 필터로 내 공사 관리 화면 열기
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const JobManagementScreen()));
-            },
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: BusinessMetricCard(
+                label: '신규 견적 요청',
+                value: '${data['estimateRequests'] ?? 0}',
+                icon: Icons.inbox_outlined,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstimateRequestsScreen())),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: BusinessMetricCard(
+                label: '입찰 대기',
+                value: '${data['myBids'] ?? 0}',
+                icon: Icons.hourglass_empty,
+                accent: BusinessTheme.warning,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessMyEstimatesScreen(initialStatus: 'pending'))),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildKPICard(
-            '진행 중',
-            data['inProgress'] ?? 0,
-            Icons.construction,
-            const Color(0xFFEDE9FE), // 아주 연한 라벤더 (초연한 파스텔)
-            null,
-            () {
-              // 진행 중 필터로 내 공사 관리 화면 열기
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const JobManagementScreen()));
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildKPICard(
-            '낙찰 대기',
-            data['myBids'] ?? 0,
-            Icons.access_time,
-            const Color(0xFFFEE2E2), // 아주 연한 핑크 (초연한 파스텔)
-            null,
-            () {
-              // 오더 마켓플레이스로 이동 (내가 입찰한 오더들)
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const OrderMarketplaceScreen(showSuccessMessage: false)));
-            },
-          ),
+        const SizedBox(height: 12),
+        BusinessMetricCard(
+          label: '수주 진행 작업',
+          value: '${data['inProgress'] ?? 0}',
+          icon: Icons.handyman_outlined,
+          accent: BusinessTheme.success,
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JobManagementScreen())),
         ),
       ],
     );
   }
-
-  Widget _buildKPICard(String title, int value, IconData icon, Color color, String? trend, VoidCallback onTap) {
-    // 색상에 따라 그라데이션 및 텍스트 색상 결정 (초연한 파스텔 톤)
-    List<Color> gradientColors;
-    Color textColor;
-    Color iconColor;
-    
-    if (color == const Color(0xFFCCF5F5)) {
-      // 완료한 공사 - 아주 연한 민트
-      gradientColors = [const Color(0xFFCCF5F5), const Color(0xFFB2F5EA)];
-      textColor = const Color(0xFF0D9488); // 진한 민트 (가독성)
-      iconColor = const Color(0xFF14B8A6);
-    } else if (color == const Color(0xFFEDE9FE)) {
-      // 진행 중 - 아주 연한 라벤더
-      gradientColors = [const Color(0xFFEDE9FE), const Color(0xFFDDD6FE)];
-      textColor = const Color(0xFF7C3AED); // 진한 보라 (가독성)
-      iconColor = const Color(0xFF8B5CF6);
-    } else if (color == const Color(0xFFFEE2E2)) {
-      // 낙찰 대기 - 아주 연한 핑크
-      gradientColors = [const Color(0xFFFEE2E2), const Color(0xFFFECACA)];
-      textColor = const Color(0xFFDC2626); // 진한 핑크/레드 (가독성)
-      iconColor = const Color(0xFFEF4444);
-    } else {
-      gradientColors = [color, color];
-      textColor = Colors.white;
-      iconColor = Colors.white;
-    }
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.08), // 초연한 파스텔 톤에 맞게 그림자 더 연하게
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.15), // 아이콘 색상 톤의 연한 배경
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: iconColor, size: 24),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              value.toString(),
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-                height: 1.0,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: textColor.withOpacity(0.7),
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (trend != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: textColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  trend,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: textColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
 
   Widget _buildMainMenu(BuildContext context, Map<String, int> data) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        const SizedBox(height: 12),
-        _buildMenuItem(
-          context,
-          '오더 마켓플레이스',
-          '새로운 공사 찾기',
-          Icons.shopping_bag_outlined,
-          const Color(0xFFF59E0B),
-          data['newOrders'] ?? 0,
-          () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const OrderMarketplaceScreen(showSuccessMessage: false)),
-            );
-            if (!mounted) return;
-            _refreshData();
+        ActionChip(
+          avatar: const Icon(Icons.shopping_bag_outlined, size: 16),
+          label: Text('오더 ${(data['newOrders'] ?? 0)}'),
+          onPressed: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderMarketplaceScreen(showSuccessMessage: false)));
+            if (mounted) _refreshData();
           },
         ),
-        const SizedBox(height: 12),
-        _buildMenuItem(
-          context,
-          '내 공사 관리',
-          '낙찰받은 공사 확인',
-          Icons.construction_outlined,
-          const Color(0xFF10B981),
-          data['inProgress'] ?? 0,
-          () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const JobManagementScreen()));
-          },
+        ActionChip(
+          avatar: const Icon(Icons.description_outlined, size: 16),
+          label: const Text('내 견적'),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessMyEstimatesScreen())),
         ),
-        const SizedBox(height: 12),
-        _buildMenuItem(
-          context,
-          '내 오더 관리',
-          '등록한 오더 확인',
-          Icons.assignment_outlined,
-          const Color(0xFF3B82F6),
-          data['myOrders'] ?? 0,
-          () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const MyOrderManagementScreen()));
-          },
+        ActionChip(
+          avatar: const Icon(Icons.work_outline, size: 16),
+          label: const Text('수주 관리'),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JobManagementScreen())),
         ),
-        const SizedBox(height: 12),
-        _buildMenuItem(
-          context,
-          '커뮤니티',
-          '동료들과 소통하기',
-          Icons.people_outline,
-          const Color(0xFF7C3AED),
-          null,
-          () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const CommunityBoardScreen()));
-          },
+        ActionChip(
+          avatar: const Icon(Icons.folder_open_outlined, size: 16),
+          label: const Text('내 오더'),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrderManagementScreen())),
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.chat_bubble_outline, size: 16),
+          label: const Text('채팅'),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatListPage())),
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.person_outline, size: 16),
+          label: const Text('프로필'),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.groups_outlined, size: 16),
+          label: const Text('커뮤니티'),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityBoardScreen())),
         ),
       ],
-    );
-  }
-
-  Widget _buildMenuItem(
-    BuildContext context,
-    String title,
-    String subtitle,
-    IconData icon,
-    Color color,
-    int? badge,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E3A8A),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (badge != null && badge > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  badge.toString(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            const SizedBox(width: 8),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
-          ],
-        ),
-      ),
     );
   }
 
@@ -870,7 +651,7 @@ class _DashboardAdCarouselState extends State<_DashboardAdCarousel> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: _current == entry.key
-                      ? const Color(0xFF1E3A8A)
+                      ? const Color(0xFF0B2545)
                       : Colors.grey.withOpacity(0.4),
                 ),
               );

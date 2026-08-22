@@ -2,84 +2,11 @@
 // Netlify function: 웹 비로그인 고객용 API
 // 4자리 PIN으로 본인 확인 후 견적 요청 조회/낙찰/완료/평점 처리
 
-import crypto from 'crypto'
+import { customerOrderUrl, formatPhoneDisplay, sendSms, smsBidAwarded, smsWorkDoneReview } from '../lib/solapi_sms'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || 'devtoken'
-const SITE_URL = process.env.URL || 'https://allsuricommerce.netlify.app'
-
-// ─────────────────────────────────────────────────────────────
-// 카카오 알림톡 (Solapi) - 설정이 없으면 조용히 스킵 (앱 동작에 영향 없음)
-// 필요 환경변수: SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER_PHONE, SOLAPI_PF_ID,
-//              SOLAPI_TEMPLATE_BID_AWARDED, SOLAPI_TEMPLATE_WORK_DONE, SOLAPI_TEMPLATE_REVIEW_REQUEST
-// ─────────────────────────────────────────────────────────────
-const SOLAPI_API_KEY = process.env.SOLAPI_API_KEY || ''
-const SOLAPI_API_SECRET = process.env.SOLAPI_API_SECRET || ''
-const SOLAPI_SENDER_PHONE = process.env.SOLAPI_SENDER_PHONE || ''
-const SOLAPI_PF_ID = process.env.SOLAPI_PF_ID || ''
-
-function buildSolapiAuthHeader(): string {
-  const date = new Date().toISOString()
-  const salt = crypto.randomBytes(16).toString('hex')
-  const signature = crypto.createHmac('sha256', SOLAPI_API_SECRET).update(date + salt).digest('hex')
-  return `HMAC-SHA256 apiKey=${SOLAPI_API_KEY}, date=${date}, salt=${salt}, signature=${signature}`
-}
-
-function toAlimtalkVariables(vars: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(vars)) out[`#{${k}}`] = v ?? ''
-  return out
-}
-
-// 카카오 알림톡 즉시 발송 (실패 시 SMS 대체발송, 설정 미비 시 로그만 남기고 무시)
-async function sendKakaoAlimtalk(opts: {
-  to: string
-  templateId: string
-  variables: Record<string, string>
-  fallbackText?: string
-}): Promise<void> {
-  const { to, templateId, variables, fallbackText } = opts
-  if (!SOLAPI_API_KEY || !SOLAPI_API_SECRET || !SOLAPI_PF_ID || !templateId) {
-    console.warn('[kakao-alimtalk] SOLAPI 환경변수/템플릿 미설정 - 발송 스킵')
-    return
-  }
-  const toNormalized = (to || '').replace(/[^0-9]/g, '')
-  if (!toNormalized) {
-    console.warn('[kakao-alimtalk] 수신번호 없음 - 발송 스킵')
-    return
-  }
-  try {
-    const res = await fetch('https://api.solapi.com/messages/v4/send', {
-      method: 'POST',
-      headers: {
-        Authorization: buildSolapiAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: {
-          to: toNormalized,
-          from: SOLAPI_SENDER_PHONE,
-          kakaoOptions: {
-            pfId: SOLAPI_PF_ID,
-            templateId,
-            variables: toAlimtalkVariables(variables),
-            disableSms: false,
-          },
-          ...(fallbackText ? { text: fallbackText } : {}),
-        },
-      }),
-    })
-    const result = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      console.warn('[kakao-alimtalk] 발송 실패:', JSON.stringify(result))
-    } else {
-      console.log(`[kakao-alimtalk] 발송 성공 → ${toNormalized} (${templateId})`)
-    }
-  } catch (e: any) {
-    console.warn('[kakao-alimtalk] 발송 오류 (무시):', e.message)
-  }
-}
 
 const sbHeaders = {
   apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -465,18 +392,22 @@ export const handler = async (event: any) => {
 
       // FCM은 notifications INSERT Webhook이 1회 발송
 
-      // 7. 고객에게 카카오 알림톡 (낙찰 안내) - 즉시 발송
-      await sendKakaoAlimtalk({
-        to: customerPhone,
-        templateId: process.env.SOLAPI_TEMPLATE_BID_AWARDED || '',
-        variables: {
-          고객명: customerName,
-          오더명: order.title || '견적 요청',
-          사업자명: bizName,
-          링크: `${SITE_URL}/my-order`,
-        },
-        fallbackText: `[올수리] ${customerName}님, "${order.title || '견적 요청'}"에 ${bizName} 사업자가 선정되었습니다. 공사 진행 후 완료 확인을 부탁드립니다.\n${SITE_URL}/my-order`,
-      })
+      // 7. 고객에게 낙찰 문자 (사업자 연락처 + 웹 링크)
+      try {
+        const bizPhone = formatPhoneDisplay(biz?.phonenumber || '')
+        const awardLink = customerOrderUrl(customerPhone)
+        await sendSms(
+          customerPhone,
+          smsBidAwarded({
+            orderTitle: order.title || '견적 요청',
+            businessName: bizName,
+            phoneLabel: bizPhone || '웹에서 확인',
+            link: awardLink,
+          })
+        )
+      } catch (e: any) {
+        console.warn('[customer] 낙찰 문자 발송 실패 (무시):', e.message)
+      }
 
       return ok({ success: true, jobId, message: `${bizName}에게 낙찰되었습니다.` })
     }
@@ -533,26 +464,12 @@ export const handler = async (event: any) => {
         await insertNotification(techId, '공사 완료 확인', '고객이 공사 완료를 확인했습니다.', 'job_complete', jobId)
       }
 
-      // 고객에게 카카오 알림톡 (후기 요청) - 즉시 발송
-      const customerName = order.customerName || order.customername || '고객'
-      const customerPhone = order.customerPhone || order.customerphone || phone
-      await sendKakaoAlimtalk({
-        to: customerPhone,
-        templateId: process.env.SOLAPI_TEMPLATE_REVIEW_REQUEST || '',
-        variables: {
-          고객명: customerName,
-          오더명: order.title || '견적 요청',
-          링크: `${SITE_URL}/my-order`,
-        },
-        fallbackText: `[올수리] ${customerName}님, 공사 완료를 확인해 주셔서 감사합니다. 서비스는 어떠셨나요? 후기를 남겨주세요.\n${SITE_URL}/my-order`,
-      })
-
       return ok({ success: true, message: '공사 완료가 확인되었습니다.' })
     }
 
     // ─────────────────────────────────────────────────────────────
     // POST /order/:orderId/notify-work-done  - 사업자가 "공사 완료"를 눌렀을 때
-    // 소비자에게 완료 확인을 요청하는 카카오 알림톡 발송 (인증 불필요, 앱 내부 호출용)
+    // 소비자에게 완료 확인 + 평점 요청 문자 발송 (인증 불필요, 앱 내부 호출용)
     // ─────────────────────────────────────────────────────────────
     if (event.httpMethod === 'POST' && /^\/order\/[^/]+\/notify-work-done$/.test(path)) {
       const orderId = path.split('/')[2]
@@ -567,18 +484,19 @@ export const handler = async (event: any) => {
       if (!order.isAwarded) return err('낙찰 전 요청입니다.')
       if (order.status !== 'in_progress') return err('이미 처리된 요청입니다.')
 
-      const customerName = order.customerName || '고객'
       const customerPhone = order.customerPhone || ''
-      await sendKakaoAlimtalk({
-        to: customerPhone,
-        templateId: process.env.SOLAPI_TEMPLATE_WORK_DONE || '',
-        variables: {
-          고객명: customerName,
-          오더명: order.title || '견적 요청',
-          링크: `${SITE_URL}/my-order`,
-        },
-        fallbackText: `[올수리] ${customerName}님, 신청하신 "${order.title || '견적 요청'}" 공사가 완료되었다고 사업자가 알려왔습니다. 확인 후 완료 버튼을 눌러주세요.\n${SITE_URL}/my-order`,
-      })
+      try {
+        const link = customerOrderUrl(customerPhone)
+        await sendSms(
+          customerPhone,
+          smsWorkDoneReview({
+            orderTitle: order.title || '견적 요청',
+            link,
+          })
+        )
+      } catch (e: any) {
+        console.warn('[customer] 공사완료 문자 발송 실패 (무시):', e.message)
+      }
 
       return ok({ success: true })
     }

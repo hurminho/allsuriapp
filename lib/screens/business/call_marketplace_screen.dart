@@ -12,6 +12,8 @@ import 'package:allsuriapp/models/estimate.dart';
 import 'package:allsuriapp/services/estimate_service.dart';
 import 'package:allsuriapp/screens/chat_screen.dart';
 import 'package:allsuriapp/services/notification_service.dart';
+import 'package:allsuriapp/services/auth_service.dart';
+import '../../theme/business_theme.dart';
 
 class CallMarketplaceScreen extends StatefulWidget {
   final bool showSuccessMessage;
@@ -129,10 +131,7 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Call 공사 현황', style: TextStyle(fontWeight: FontWeight.w600)),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.white,
+        title: const Text('Call 공사 현황'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -285,7 +284,7 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                                       category,
                                       style: const TextStyle(
                                         fontSize: 12,
-                                        color: Color(0xFFF57C00),
+                                        color: Color(0xFFE6A700),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -383,13 +382,13 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.payments_outlined, size: 16, color: Color(0xFF1976D2)),
+                                            const Icon(Icons.payments_outlined, size: 16, color: Color(0xFF2E74B5)),
                                             const SizedBox(width: 6),
                                             Flexible(
                                               child: Text(
                                                 '${estimateAmount is num ? estimateAmount.toInt().toString() : estimateAmount.toString()}원',
                                                 style: const TextStyle(
-                                                  color: Color(0xFF1976D2),
+                                                  color: Color(0xFF2E74B5),
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 13,
                                                 ),
@@ -457,7 +456,7 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                                     width: 100,
                                     child: ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFFF57C00),
+                                        backgroundColor: const Color(0xFFE6A700),
                                         foregroundColor: Colors.white,
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -465,11 +464,12 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                                       ),
                                       onPressed: (status == 'open' || status == 'withdrawn')
                                           ? () async {
-                                              final ok = await _market.claimListing(id);
+                                              final me = Supabase.instance.client.auth.currentUser?.id;
+                                              if (me == null || me.isEmpty) return;
+                                              final ok = await _market.claimListing(id, businessId: me);
                                               if (!mounted) return;
                                               if (ok) {
-                                                final me = Supabase.instance.client.auth.currentUser?.id;
-                                                if (postedBy != null && postedBy.isNotEmpty && me != null && me.isNotEmpty) {
+                                                if (postedBy != null && postedBy.isNotEmpty) {
                                                   try {
                                                     await ChatService().createChatRoom('call_$id', postedBy, me);
                                                   } catch (_) {}
@@ -590,7 +590,7 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
       }
       
       print('   → marketplace_service에서 공사 잡기 요청 중...');
-      final ok = await _market.claimListing(id);
+      final ok = await _market.claimListing(id, businessId: currentUserId);
       
       if (!mounted) return;
       
@@ -682,12 +682,10 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: BusinessTheme.background,
           appBar: AppBar(
-            elevation: 0,
-            backgroundColor: Colors.white,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black, size: 20),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
@@ -799,7 +797,7 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                                 category,
                                 style: const TextStyle(
                                   fontSize: 13,
-                                  color: Color(0xFFF57C00),
+                                  color: Color(0xFFE6A700),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -849,7 +847,7 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFFF57C00),
+                              color: Color(0xFFE6A700),
                             ),
                           ),
                         
@@ -946,7 +944,7 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF57C00),
+                          backgroundColor: const Color(0xFFE6A700),
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(

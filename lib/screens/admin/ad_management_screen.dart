@@ -396,7 +396,7 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('광고 관리'),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF0B2545),
       ),
       body: FutureBuilder<List<Ad>>(
         future: _adsFuture,
@@ -498,7 +498,7 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddEditDialog(),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF0B2545),
         icon: const Icon(Icons.add),
         label: const Text('광고 추가'),
       ),

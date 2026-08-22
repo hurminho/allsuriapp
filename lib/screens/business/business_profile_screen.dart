@@ -5,7 +5,8 @@ import '../../models/user.dart';
 import '../../providers/user_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/business_verify_service.dart';
-import '../../widgets/common_app_bar.dart';
+import '../../theme/business_theme.dart';
+import '../../widgets/business/business_status_badge.dart';
 import 'package:go_router/go_router.dart';
 import '../../utils/navigation_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -378,11 +379,16 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         NavigationUtils.navigateToRoleHome(context);
         return false;
       },
-      child: Scaffold(
-      appBar: CommonAppBar(
-        title: '사업자 프로필',
-        showBackButton: true,
-        showHomeButton: true,
+      child: Theme(
+        data: BusinessTheme.theme(Theme.of(context)),
+        child: Scaffold(
+      backgroundColor: BusinessTheme.background,
+      appBar: AppBar(
+        title: const Text('사업자 프로필'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () => NavigationUtils.navigateToRoleHome(context),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -434,6 +440,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                     Text('$_avgRating ($_reviewCount)', style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
+              const SizedBox(height: 12),
+              _buildCompletenessCard(),
               const SizedBox(height: 16),
               // 기본 정보 섹션
               _buildSection(
@@ -771,7 +779,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
           ),
         ),
       ),
-    ));
+    )));
   }
 
   Future<void> _pickOpenDate() async {
@@ -1078,6 +1086,55 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     } catch (_) {}
   }
 
+  Widget _buildCompletenessCard() {
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final items = <String, bool>{
+      '인증': user?.hasBusinessNumber == true,
+      '상호': _businessNameController.text.trim().isNotEmpty,
+      '전문 공정': _selectedSpecialties.isNotEmpty,
+      '서비스 지역': _selectedServiceAreas.isNotEmpty,
+      '연락처': _phoneController.text.trim().isNotEmpty,
+    };
+    final done = items.values.where((v) => v).length;
+    final total = items.length;
+    final pct = total == 0 ? 0.0 : done / total;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BusinessTheme.cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('프로필 완성도', style: TextStyle(fontWeight: FontWeight.w800)),
+              const Spacer(),
+              Text('${(pct * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w800, color: BusinessTheme.blue)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: pct,
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(8),
+            color: BusinessTheme.blue,
+            backgroundColor: BusinessTheme.lightBlue,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: items.entries.map((e) {
+              return BusinessStatusBadge(
+                label: e.key,
+                color: e.value ? BusinessTheme.success : BusinessTheme.textMuted,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSection(String title, List<Widget> children) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1087,7 +1144,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF222B45),
+            color: Color(0xFF102A43),
           ),
         ),
         const SizedBox(height: 16),

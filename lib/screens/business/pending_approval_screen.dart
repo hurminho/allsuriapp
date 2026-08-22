@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../theme/business_theme.dart';
 import '../../services/auth_service.dart';
 
 /// 사업자 승인 대기 화면
@@ -39,13 +40,13 @@ class PendingApprovalScreen extends StatelessWidget {
                 width: 160,
                 height: 160,
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
+                  color: BusinessTheme.warning.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.access_time_rounded,
                   size: 80,
-                  color: Colors.orange[700],
+                  color: BusinessTheme.warning,
                 ),
               ),
               

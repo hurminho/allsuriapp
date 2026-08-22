@@ -33,6 +33,8 @@ class Estimate {
   double get price => amount;
   String get technicianId => businessId;
   String get technicianName => businessName;
+  bool get isTransferEstimate =>
+      status == STATUS_TRANSFERRED || (transferredBy != null && transferredBy!.isNotEmpty);
 
   Estimate({
     required this.id,

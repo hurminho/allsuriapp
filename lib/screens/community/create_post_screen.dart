@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/community_service.dart';
 import '../../services/auth_service.dart';
@@ -18,9 +19,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(middle: Text('새 글 작성')),
-      child: SafeArea(
+    return Scaffold(
+      appBar: AppBar(title: const Text('새 글 작성')),
+      body: SafeArea(
         child: DefaultTextStyle(
           style: const TextStyle(fontFamily: 'Arial', fontSize: 15, color: CupertinoColors.black),
           child: Padding(

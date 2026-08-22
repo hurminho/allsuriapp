@@ -28,21 +28,11 @@ class ProfileScreen extends StatelessWidget {
         // 로그인하지 않은 사용자에게 안내
         if (user == null) {
           return Scaffold(
-            backgroundColor: const Color(0xFFF8F9FA),
+            backgroundColor: const Color(0xFFF7FAFC),
             appBar: AppBar(
-              title: const Text(
-                '프로필',
-                style: TextStyle(
-                  color: Color(0xFF1E3A8A),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                ),
-              ),
-              centerTitle: true,
-              elevation: 0,
-              backgroundColor: Colors.white,
+              title: const Text('프로필'),
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 onPressed: () => Navigator.pop(context),
               ),
             ),
@@ -51,21 +41,11 @@ class ProfileScreen extends StatelessWidget {
         }
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF8F9FA),
+          backgroundColor: const Color(0xFFF7FAFC),
           appBar: AppBar(
-            title: const Text(
-              '프로필',
-              style: TextStyle(
-                color: Color(0xFF1E3A8A),
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-              ),
-            ),
-            centerTitle: true,
-            elevation: 0,
-            backgroundColor: Colors.white,
+            title: const Text('프로필'),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -100,7 +80,7 @@ class ProfileScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A8A),
+              backgroundColor: const Color(0xFF0B2545),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               shape: RoundedRectangleBorder(
@@ -149,13 +129,13 @@ class ProfileScreen extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Color(0xFF1E3A8A),
-                Color(0xFF3B82F6),
+                Color(0xFF0B2545),
+                Color(0xFF2E74B5),
               ],
             ),
             boxShadow: [
               BoxShadow(
-                color: Color(0xFF1E3A8A).withOpacity(0.3),
+                color: Color(0xFF0B2545).withOpacity(0.3),
                 blurRadius: 12,
                 offset: Offset(0, 6),
               ),
@@ -189,7 +169,7 @@ class ProfileScreen extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 40,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A8A),
+                        color: Color(0xFF0B2545),
                       ),
                     ),
                   ),
@@ -346,7 +326,7 @@ class ProfileScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isDestructive
                       ? const Color(0xFFFF6B6B).withOpacity(0.1)
-                      : const Color(0xFF4F8CFF).withOpacity(0.1),
+                      : const Color(0xFF2E74B5).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -354,7 +334,7 @@ class ProfileScreen extends StatelessWidget {
                   size: 24,
                   color: isDestructive
                       ? const Color(0xFFFF6B6B)
-                      : const Color(0xFF4F8CFF),
+                      : const Color(0xFF2E74B5),
                 ),
               ),
               const SizedBox(width: 16),
@@ -364,14 +344,14 @@ class ProfileScreen extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF222B45),
+                    color: Color(0xFF102A43),
                   ),
                 ),
               ),
               const Icon(
                 Icons.arrow_forward_ios,
                 size: 16,
-                color: Color(0xFF222B45),
+                color: Color(0xFF102A43),
               ),
             ],
           ),

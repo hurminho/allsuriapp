@@ -24,7 +24,7 @@ COMMENT ON COLUMN public.app_version.minimum_supported_version IS '이 버전 �
 COMMENT ON COLUMN public.app_version.force_update IS 'true면 최신 버전이 아닌 모든 사용자에게 강제 업데이트 요구';
 
 -- 초기 데이터 삽입 (이미 있으면 건너뜀) — 현재 배포 버전(1.0.6)에 맞춰 최초 값 세팅
--- ⚠️ ios_store_url의 id123456789 부분은 실제 App Store 앱 ID로 교체하세요.
+-- ⚠️ ios_store_url은 App Store Connect → 앱 정보 → Apple ID (예: 6760454320) 로 교체하세요.
 INSERT INTO public.app_version (
   id, latest_version, minimum_supported_version, force_update,
   android_store_url, ios_store_url, update_message
@@ -34,7 +34,7 @@ INSERT INTO public.app_version (
   '1.0.0',
   false,
   'market://details?id=com.allsuri.app',
-  'itms-apps://itunes.apple.com/app/id123456789',
+  'https://apps.apple.com/kr/app/id6760454320',
   '더 안정적인 사용을 위해 최신 버전으로 업데이트해 주세요.'
 )
 ON CONFLICT (id) DO NOTHING;

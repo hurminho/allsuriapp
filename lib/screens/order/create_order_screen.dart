@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/order.dart' as app_models;
 import '../../services/auth_service.dart';
@@ -146,11 +147,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('견적 요청'),
-      ),
-      child: SafeArea(
+    return Scaffold(
+      appBar: AppBar(title: const Text('견적 요청')),
+      body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Form(

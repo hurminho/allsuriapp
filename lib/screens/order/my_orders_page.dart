@@ -72,7 +72,7 @@ class MyOrdersPage extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF222B45),
+                        color: Color(0xFF102A43),
                       ),
                     ),
                   ),
@@ -144,7 +144,7 @@ class MyOrdersPage extends StatelessWidget {
         break;
       case 'in_progress':
         statusText = '진행 중';
-        statusColor = const Color(0xFF4F8CFF);
+        statusColor = const Color(0xFF2E74B5);
         statusIcon = Icons.work;
         break;
       case 'completed':
@@ -212,13 +212,13 @@ class MyOrdersPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF4F8CFF).withOpacity(0.1),
+              color: const Color(0xFF2E74B5).withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
               Icons.shopping_cart_outlined,
               size: 48,
-              color: const Color(0xFF4F8CFF),
+              color: const Color(0xFF2E74B5),
             ),
           ),
           const SizedBox(height: 16),
@@ -227,7 +227,7 @@ class MyOrdersPage extends StatelessWidget {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF222B45),
+              color: Color(0xFF102A43),
             ),
           ),
           const SizedBox(height: 8),
@@ -244,7 +244,7 @@ class MyOrdersPage extends StatelessWidget {
             icon: const Icon(Icons.add),
             label: const Text('주문하기'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F8CFF),
+              backgroundColor: const Color(0xFF2E74B5),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(

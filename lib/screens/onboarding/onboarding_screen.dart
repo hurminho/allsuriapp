@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../theme/business_theme.dart';
 
 /// Onboarding 화면 데이터 모델
 class OnboardingData {
@@ -51,29 +52,29 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       title: '환영합니다! 올수리입니다',
       description: '전문가와 빠르게 연결되어\n신뢰할 수 있는 서비스를 받아보세요',
       icon: Icons.handyman_rounded,
-      backgroundColor: const Color(0xFFFFF3E0),
-      iconColor: const Color(0xFFF57C00),
+      backgroundColor: BusinessTheme.lightBlue,
+      iconColor: BusinessTheme.navy,
     ),
     OnboardingData(
       title: '오더에 입찰하세요',
       description: '고객의 요청을 확인하고\n경쟁력 있는 견적으로 공사를 수주하세요',
       icon: Icons.work_outline_rounded,
-      backgroundColor: const Color(0xFFE3F2FD),
-      iconColor: const Color(0xFF1976D2),
+      backgroundColor: BusinessTheme.lightBlue,
+      iconColor: BusinessTheme.blue,
     ),
     OnboardingData(
       title: '실시간 채팅으로 소통',
       description: '고객과 빠르게 소통하고\n원활한 공사 진행을 경험하세요',
       icon: Icons.chat_bubble_outline_rounded,
-      backgroundColor: const Color(0xFFF3E5F5),
-      iconColor: const Color(0xFF7B1FA2),
+      backgroundColor: BusinessTheme.lightBlue,
+      iconColor: BusinessTheme.navy,
     ),
     OnboardingData(
       title: '지금 바로 시작하세요!',
       description: '올수리에서 더 많은 일감을 찾고\n성공적인 사업을 만들어가세요',
       icon: Icons.rocket_launch_rounded,
-      backgroundColor: const Color(0xFFE8F5E9),
-      iconColor: const Color(0xFF388E3C),
+      backgroundColor: BusinessTheme.lightBlue,
+      iconColor: BusinessTheme.success,
     ),
   ];
 
@@ -107,7 +108,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: BusinessTheme.background,
       body: SafeArea(
         child: Column(
           children: [

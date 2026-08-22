@@ -10,6 +10,10 @@ import '../services/estimate_service.dart';
 import '../services/auth_service.dart';
 import '../services/media_service.dart';
 import '../utils/business_verify_guard.dart';
+import '../theme/business_theme.dart';
+import '../widgets/business/business_app_shell.dart';
+import '../widgets/business/business_primary_button.dart';
+import '../widgets/business/business_status_badge.dart';
 
 class CreateEstimateScreen extends StatefulWidget {
   final Order order;
@@ -166,6 +170,83 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
     setState(() => _uploadedImageUrls.removeAt(index));
   }
 
+  Future<void> _confirmAndSubmit() async {
+    if (_amountController.text.trim().isEmpty) {
+      _showError('견적 금액을 입력해주세요');
+      return;
+    }
+    if (_descriptionController.text.trim().isEmpty) {
+      _showError('견적 설명을 입력해주세요');
+      return;
+    }
+    if (_estimatedDaysController.text.trim().isEmpty) {
+      _showError('예상 소요일을 입력해주세요');
+      return;
+    }
+    if (_selectedImages.isNotEmpty) {
+      _showError('모든 사진을 먼저 업로드해주세요');
+      return;
+    }
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: BusinessTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(ctx).padding.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '입찰 제출 전 확인',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: BusinessTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('금액  ${_amountController.text}원'),
+              Text('방문 일정  ${widget.order.visitDate.toString().split(' ').first}'),
+              Text('예상 소요  ${_estimatedDaysController.text.trim()}일'),
+              const SizedBox(height: 8),
+              const Text(
+                'AS 조건은 아래 메시지에 포함된 내용으로 고객에게 전달됩니다.',
+                style: TextStyle(fontSize: 12, color: BusinessTheme.textMuted),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _descriptionController.text.trim(),
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: BusinessTheme.textMuted),
+              ),
+              const SizedBox(height: 20),
+              BusinessPrimaryButton(
+                label: '입찰 제출',
+                onPressed: () => Navigator.pop(ctx, true),
+              ),
+              const SizedBox(height: 8),
+              BusinessPrimaryButton(
+                label: '수정하기',
+                secondary: true,
+                onPressed: () => Navigator.pop(ctx, false),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _submitEstimate();
+    }
+  }
+
   Future<void> _submitEstimate() async {
     if (_amountController.text.trim().isEmpty) {
       _showError('견적 금액을 입력해주세요');
@@ -267,236 +348,233 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
     );
   }
 
+  Widget _sectionCard({required String title, required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BusinessTheme.cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: BusinessTheme.navy,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('견적 작성'),
-      ),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey6,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '견적 요청 정보',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.label,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '제목: ${widget.order.title}',
-                        style: const TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        '요청자: 비공개',
-                        style: TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '카테고리: ${widget.order.equipmentType}',
-                        style: const TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        '방문 주소: 낙찰 후 공유',
-                        style: TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '방문일: ${widget.order.visitDate.toString().split(' ')[0]}',
-                        style: const TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '설명: ${widget.order.description}',
-                        style: const TextStyle(fontSize: 12, color: CupertinoColors.secondaryLabel),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-                
-                const Text(
-                  '견적 정보',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: CupertinoColors.label),
-                ),
-                const SizedBox(height: 16),
-                
-                CupertinoTextField(
-                  controller: _amountController,
-                  placeholder: '견적 금액 (원)',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,]')),
-                    _ThousandsSeparatorInputFormatter(),
-                  ],
-                  onChanged: (v) {
-                    final parsed = double.tryParse(v.replaceAll(',', '')) ?? 0.0;
-                    setState(() => _amountValue = parsed);
-                  },
-                  decoration: BoxDecoration(
-                    border: Border.all(color: CupertinoColors.separator),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _EstimateFeePreview(amount: _amountValue),
-                const SizedBox(height: 16),
-                
-                CupertinoTextField(
-                  controller: _descriptionController,
-                  placeholder: '견적 설명을 입력해주세요',
-                  decoration: BoxDecoration(
-                    border: Border.all(color: CupertinoColors.separator),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                
-                CupertinoTextField(
-                  controller: _estimatedDaysController,
-                  placeholder: '예상 소요일 (일)',
-                  keyboardType: TextInputType.number,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: CupertinoColors.separator),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                const Text(
-                  '사진 첨부 (선택)',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: CupertinoColors.label),
-                ),
-                const SizedBox(height: 12),
-
-                if (_uploadedImageUrls.isNotEmpty) ...[
-                  SizedBox(
-                    height: 120,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _uploadedImageUrls.length,
-                      itemBuilder: (context, index) {
-                        return Stack(
+    final order = widget.order;
+    return BusinessAppShell(
+      title: '입찰 제출',
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    _sectionCard(
+                      title: '고객 요청 요약',
+                      children: [
+                        Text(order.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
                           children: [
-                            Container(
-                              margin: const EdgeInsets.only(right: 12),
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
+                            BusinessStatusBadge(label: order.equipmentType, color: BusinessTheme.blue),
+                            if (order.images.isNotEmpty)
+                              const BusinessStatusBadge(label: '사진 있음', color: BusinessTheme.navy),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(order.description, style: const TextStyle(color: BusinessTheme.textMuted)),
+                        const SizedBox(height: 8),
+                        Text('지역  ${BusinessTheme.regionFromAddress(order.address)}'),
+                        Text('방문 요청일  ${order.visitDate.toString().split(' ').first}'),
+                      ],
+                    ),
+                    if (order.images.isNotEmpty)
+                      _sectionCard(
+                        title: '사진 및 증상',
+                        children: [
+                          SizedBox(
+                            height: 88,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: order.images.length,
+                              separatorBuilder: (_, __) => const SizedBox(width: 8),
+                              itemBuilder: (_, i) => ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                color: CupertinoColors.systemGrey5,
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  _uploadedImageUrls[index],
-                                  width: 120,
-                                  height: 120,
-                                  fit: BoxFit.cover,
-                                  loadingBuilder: (_, child, progress) =>
-                                      progress == null
-                                          ? child
-                                          : const Center(
-                                              child: CupertinoActivityIndicator(),
-                                            ),
-                                  errorBuilder: (_, __, ___) => const Center(
-                                    child: Icon(
-                                      CupertinoIcons.photo,
-                                      color: CupertinoColors.systemGrey,
-                                      size: 36,
-                                    ),
-                                  ),
-                                ),
+                                child: Image.network(order.images[i], width: 88, height: 88, fit: BoxFit.cover),
                               ),
                             ),
-                            Positioned(
-                              top: 4,
-                              right: 16,
-                              child: GestureDetector(
-                                onTap: () => _removeImage(index),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: CupertinoColors.systemRed,
-                                    borderRadius: BorderRadius.circular(12),
+                          ),
+                        ],
+                      ),
+                    if (order.estimatedPrice > 0)
+                      _sectionCard(
+                        title: 'AI 참고 가격 범위',
+                        children: [
+                          Text(
+                            BusinessTheme.formatWon(order.estimatedPrice),
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: BusinessTheme.blue,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            '참고 금액이며, 실제 견적과 다를 수 있습니다.',
+                            style: TextStyle(fontSize: 12, color: BusinessTheme.textMuted),
+                          ),
+                        ],
+                      ),
+                    _sectionCard(
+                      title: '견적 금액',
+                      children: [
+                        TextField(
+                          controller: _amountController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[0-9,]')),
+                            _ThousandsSeparatorInputFormatter(),
+                          ],
+                          onChanged: (v) {
+                            final parsed = double.tryParse(v.replaceAll(',', '')) ?? 0.0;
+                            setState(() => _amountValue = parsed);
+                          },
+                          decoration: const InputDecoration(
+                            hintText: '견적 금액 (원)',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _EstimateFeePreview(amount: _amountValue),
+                      ],
+                    ),
+                    _sectionCard(
+                      title: '방문 가능 일정',
+                      children: [
+                        Text('고객 요청일: ${order.visitDate.toString().split(' ').first}'),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _estimatedDaysController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            hintText: '예상 소요일 (일)',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    _sectionCard(
+                      title: '작업 범위 · 제외 항목 · AS · 메시지',
+                      children: [
+                        TextField(
+                          controller: _descriptionController,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            hintText: '작업 범위, 제외 항목, AS 조건, 고객에게 보낼 메시지를 입력하세요',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    _sectionCard(
+                      title: '사진 첨부 (선택)',
+                      children: [
+                        if (_uploadedImageUrls.isNotEmpty)
+                          SizedBox(
+                            height: 88,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _uploadedImageUrls.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(_uploadedImageUrls[index], width: 88, height: 88, fit: BoxFit.cover),
+                                      ),
+                                      Positioned(
+                                        right: 0,
+                                        child: GestureDetector(
+                                          onTap: () => _removeImage(index),
+                                          child: const CircleAvatar(
+                                            radius: 10,
+                                            backgroundColor: BusinessTheme.danger,
+                                            child: Icon(Icons.close, size: 12, color: Colors.white),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  padding: const EdgeInsets.all(4),
-                                  child: const Icon(
-                                    CupertinoIcons.xmark,
-                                    color: CupertinoColors.white,
-                                    size: 12,
-                                  ),
-                                ),
+                                );
+                              },
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _isUploadingImages ? null : _showImageSourceOptions,
+                                child: const Text('사진 선택'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: (_selectedImages.isEmpty || _isUploadingImages) ? null : _uploadImages,
+                                child: _isUploadingImages
+                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : Text('업로드 (${_selectedImages.length})'),
                               ),
                             ),
                           ],
-                        );
-                      },
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: CupertinoButton(
-                        onPressed: _isUploadingImages ? null : _showImageSourceOptions,
-                        color: CupertinoColors.systemBlue,
-                        child: const Text('사진 선택'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CupertinoButton(
-                        onPressed: (_selectedImages.isEmpty || _isUploadingImages) ? null : _uploadImages,
-                        color: _selectedImages.isEmpty ? CupertinoColors.systemGrey : CupertinoColors.systemGreen,
-                        child: _isUploadingImages
-                            ? const CupertinoActivityIndicator()
-                            : Text('업로드 (${_selectedImages.length})'),
-                      ),
-                    ),
+                    const SizedBox(height: 72),
                   ],
                 ),
-                const SizedBox(height: 32),
-                
-                SizedBox(
-                  width: double.infinity,
-                  child: CupertinoButton.filled(
-                    onPressed: _isSubmitting ? null : _submitEstimate,
-                    child: _isSubmitting
-                        ? const CupertinoActivityIndicator()
-                        : const Text('견적 제출', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+          Container(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
+            decoration: const BoxDecoration(
+              color: BusinessTheme.surface,
+              border: Border(top: BorderSide(color: BusinessTheme.border)),
+            ),
+            child: BusinessPrimaryButton(
+              label: '입찰 제출',
+              loading: _isSubmitting,
+              onPressed: _isSubmitting ? null : _confirmAndSubmit,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
 
 class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
   @override

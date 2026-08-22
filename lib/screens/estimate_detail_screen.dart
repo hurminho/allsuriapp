@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/estimate.dart';
 import '../models/order.dart';
@@ -27,11 +28,9 @@ class _EstimateDetailScreenState extends State<EstimateDetailScreen> {
     final e = widget.estimate;
     final isAwarded = order.isAwarded && order.awardedEstimateId == e.id;
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text('견적 상세'),
-      ),
-      child: SafeArea(
+    return Scaffold(
+      appBar: AppBar(title: const Text('견적 상세')),
+      body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [

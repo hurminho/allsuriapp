@@ -93,12 +93,12 @@ class PushPermissionService {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
+                    color: const Color(0xFF0B2545).withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.notifications_active_rounded,
-                    color: Color(0xFF1E3A8A),
+                    color: Color(0xFF0B2545),
                     size: 34,
                   ),
                 ),
@@ -108,7 +108,7 @@ class PushPermissionService {
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E3A8A)),
+                      color: Color(0xFF0B2545)),
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -137,7 +137,7 @@ class PushPermissionService {
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E3A8A),
+                  backgroundColor: const Color(0xFF0B2545),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
@@ -184,7 +184,7 @@ class PushPermissionService {
               AppSettings.openAppSettings(type: AppSettingsType.notification);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A8A),
+              backgroundColor: const Color(0xFF0B2545),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),

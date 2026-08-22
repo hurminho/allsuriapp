@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/review_service.dart';
 import '../../models/business_review.dart';
@@ -35,9 +36,9 @@ class _ReviewListScreenState extends State<ReviewListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(middle: Text('후기')),
-      child: SafeArea(
+    return Scaffold(
+      appBar: AppBar(title: const Text('후기')),
+      body: SafeArea(
         child: _loading
             ? const Center(child: CupertinoActivityIndicator())
             : _reviews.isEmpty

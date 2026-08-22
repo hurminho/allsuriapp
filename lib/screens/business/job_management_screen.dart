@@ -13,7 +13,8 @@ import '../../models/job.dart';
 import '../../widgets/interactive_card.dart';
 import '../../widgets/modern_order_card.dart';
 import '../../widgets/modern_button.dart';
-import '../../config/app_constants.dart';
+import '../../theme/business_theme.dart';
+import '../../widgets/business/business_filter_chip.dart';
 import 'order_bidders_screen.dart';
 import 'order_review_screen.dart';
 import '../chat_screen.dart'; // 추가
@@ -322,27 +323,21 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+    return Theme(
+      data: BusinessTheme.theme(Theme.of(context)),
+      child: Scaffold(
+      backgroundColor: BusinessTheme.background,
       appBar: AppBar(
-        title: const Text(
-          '내 공사 관리',
-          style: TextStyle(
-            color: Color(0xFF1E3A8A),
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
+        title: const Text('내 공사 관리'),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E3A8A)),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadJobs,
             tooltip: '새로고침',
           ),
@@ -368,7 +363,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
                 ),
               ],
             ),
-    );
+    ));
   }
 
   void _showCheck() {
@@ -391,41 +386,35 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
   }
 
   Widget _buildModernFilterChips() {
-    final me = context.read<AuthService>().currentUser?.id ?? '';
-    
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '필터',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
+      color: BusinessTheme.surface,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            BusinessFilterChip(
+              label: '작업 진행',
+              selected: _filter == 'in_progress',
+              count: _combinedJobs.length,
+              onTap: () => setState(() => _filter = 'in_progress'),
             ),
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildModernChip('진행 중', 'in_progress', Icons.construction_outlined, _combinedJobs.length),
-                const SizedBox(width: 10),
-                _buildModernChip('완료됨', 'completed', Icons.check_circle_outline, _completedJobs.length),
-              ],
+            const SizedBox(width: 8),
+            BusinessFilterChip(
+              label: '완료',
+              selected: _filter == 'completed',
+              count: _completedJobs.length,
+              onTap: () => setState(() => _filter = 'completed'),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildModernChip(String label, String value, IconData icon, int count) {
     final isSelected = _filter == value;
-    final color = const Color(0xFF1E3A8A); // Navy for professional style
+    final color = const Color(0xFF0B2545); // Navy for professional style
     
     return GestureDetector(
       onTap: () => setState(() => _filter = value),
@@ -687,7 +676,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
           print('⚠️ [JobManagement] ownerId 없거나 본인이라 알림을 건너뜀');
         }
 
-        // 웹 고객이 낙찰한 공사라면, 고객에게 "공사 완료 확인 요청" 카카오 알림톡 발송
+        // 웹 고객이 낙찰한 공사라면, 고객에게 공사 완료·평점 요청 문자 발송
         // (최종 완료 처리는 고객이 웹에서 직접 확인해야 확정됨)
         if (realJobId != null && !_isListingOnlyJobId(realJobId)) {
           try {
@@ -926,7 +915,7 @@ class _ModernJobsList extends StatelessWidget {
             height: 44,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E3A8A),
+                backgroundColor: const Color(0xFF0B2545),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -966,7 +955,7 @@ class _ModernJobsList extends StatelessWidget {
                     backgroundColor: effectiveStatus == 'awaiting_confirmation' ||
                             job.status == 'awaiting_confirmation'
                         ? Colors.grey[400] 
-                        : const Color(0xFF10B981),
+                        : const Color(0xFF1F8A70),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
@@ -1052,11 +1041,11 @@ class _ModernJobsList extends StatelessWidget {
               AnimatedContainer(
                 duration: const Duration(milliseconds: 800),
                 decoration: BoxDecoration(
-                  border: isHighlighted ? Border.all(color: const Color(0xFF1E3A8A), width: 3) : null,
+                  border: isHighlighted ? Border.all(color: const Color(0xFF0B2545), width: 3) : null,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: isHighlighted ? [
                     BoxShadow(
-                      color: const Color(0xFF1E3A8A).withOpacity(0.3),
+                      color: const Color(0xFF0B2545).withOpacity(0.3),
                       blurRadius: 12,
                       spreadRadius: 2,
                     ),
@@ -1087,7 +1076,7 @@ class _ModernJobsList extends StatelessWidget {
                     margin: const EdgeInsets.symmetric(horizontal: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A8A),
+                      color: const Color(0xFF0B2545),
                       borderRadius: const BorderRadius.only(
                         bottomLeft: Radius.circular(14),
                         bottomRight: Radius.circular(14),
@@ -1112,7 +1101,7 @@ class _ModernJobsList extends StatelessWidget {
                 child: Material(
                   elevation: isHighlighted ? 6 : 2,
                   borderRadius: BorderRadius.circular(20),
-                  color: isHighlighted ? const Color(0xFF1E3A8A) : null,
+                  color: isHighlighted ? const Color(0xFF0B2545) : null,
                   child: InkWell(
                     onTap: () async {
                       // 채팅방 이동 로직
@@ -1161,7 +1150,7 @@ class _ModernJobsList extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: isHighlighted
                             ? const Color(0xFFFF6B35) // 강조: 주황색
-                            : const Color(0xFF1E3A8A),
+                            : const Color(0xFF0B2545),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: isHighlighted
                             ? [BoxShadow(color: const Color(0xFFFF6B35).withOpacity(0.5), blurRadius: 8, spreadRadius: 2)]
@@ -1188,11 +1177,11 @@ class _ModernJobsList extends StatelessWidget {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 800),
           decoration: BoxDecoration(
-            border: isHighlighted ? Border.all(color: const Color(0xFF1E3A8A), width: 3) : null,
+            border: isHighlighted ? Border.all(color: const Color(0xFF0B2545), width: 3) : null,
             borderRadius: BorderRadius.circular(16),
             boxShadow: isHighlighted ? [
               BoxShadow(
-                color: const Color(0xFF1E3A8A).withOpacity(0.3),
+                color: const Color(0xFF0B2545).withOpacity(0.3),
                 blurRadius: 12,
                 spreadRadius: 2,
               ),
@@ -1319,7 +1308,7 @@ class _ModernJobsList extends StatelessWidget {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                        colors: [Color(0xFF0B2545), Color(0xFF2563EB)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -1464,7 +1453,7 @@ class _ModernJobsList extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1976D2),
+                      backgroundColor: const Color(0xFF2E74B5),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1515,10 +1504,10 @@ class _ModernJobsList extends StatelessWidget {
                     Container(
                       width: 38, height: 38,
                       decoration: BoxDecoration(
-                        color: i <= current ? const Color(0xFF1E3A8A) : Colors.grey[200],
+                        color: i <= current ? const Color(0xFF0B2545) : Colors.grey[200],
                         shape: BoxShape.circle,
                         boxShadow: i == current
-                            ? [BoxShadow(color: const Color(0xFF1E3A8A).withOpacity(0.35), blurRadius: 8, spreadRadius: 1)]
+                            ? [BoxShadow(color: const Color(0xFF0B2545).withOpacity(0.35), blurRadius: 8, spreadRadius: 1)]
                             : null,
                       ),
                       child: Center(
@@ -1542,7 +1531,7 @@ class _ModernJobsList extends StatelessWidget {
                         fontSize: 10,
                         height: 1.3,
                         fontWeight: i == current ? FontWeight.bold : FontWeight.normal,
-                        color: i <= current ? const Color(0xFF1E3A8A) : Colors.grey[400],
+                        color: i <= current ? const Color(0xFF0B2545) : Colors.grey[400],
                       ),
                     ),
                   ],
@@ -1552,7 +1541,7 @@ class _ModernJobsList extends StatelessWidget {
                 Container(
                   height: 2, width: 14,
                   margin: const EdgeInsets.only(bottom: 30),
-                  color: i < current ? const Color(0xFF1E3A8A) : Colors.grey[300],
+                  color: i < current ? const Color(0xFF0B2545) : Colors.grey[300],
                 ),
             ],
           ],

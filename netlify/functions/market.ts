@@ -3,80 +3,10 @@
 
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
 
-import crypto from 'crypto'
+import { customerOrderUrl, formatRating, formatWon, sendSms, smsBidReceived } from '../lib/solapi_sms'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
-const SITE_URL = process.env.URL || 'https://allsuricommerce.netlify.app'
-
-// ─────────────────────────────────────────────────────────────
-// 카카오 알림톡 (Solapi) - 설정이 없으면 조용히 스킵 (앱 동작에 영향 없음)
-// ─────────────────────────────────────────────────────────────
-const SOLAPI_API_KEY = process.env.SOLAPI_API_KEY || ''
-const SOLAPI_API_SECRET = process.env.SOLAPI_API_SECRET || ''
-const SOLAPI_SENDER_PHONE = process.env.SOLAPI_SENDER_PHONE || ''
-const SOLAPI_PF_ID = process.env.SOLAPI_PF_ID || ''
-
-function buildSolapiAuthHeader(): string {
-  const date = new Date().toISOString()
-  const salt = crypto.randomBytes(16).toString('hex')
-  const signature = crypto.createHmac('sha256', SOLAPI_API_SECRET).update(date + salt).digest('hex')
-  return `HMAC-SHA256 apiKey=${SOLAPI_API_KEY}, date=${date}, salt=${salt}, signature=${signature}`
-}
-
-function toAlimtalkVariables(vars: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(vars)) out[`#{${k}}`] = v ?? ''
-  return out
-}
-
-async function sendKakaoAlimtalk(opts: {
-  to: string
-  templateId: string
-  variables: Record<string, string>
-  fallbackText?: string
-}): Promise<void> {
-  const { to, templateId, variables, fallbackText } = opts
-  if (!SOLAPI_API_KEY || !SOLAPI_API_SECRET || !SOLAPI_PF_ID || !templateId) {
-    console.warn('[kakao-alimtalk] SOLAPI 환경변수/템플릿 미설정 - 발송 스킵')
-    return
-  }
-  const toNormalized = (to || '').replace(/[^0-9]/g, '')
-  if (!toNormalized) {
-    console.warn('[kakao-alimtalk] 수신번호 없음 - 발송 스킵')
-    return
-  }
-  try {
-    const res = await fetch('https://api.solapi.com/messages/v4/send', {
-      method: 'POST',
-      headers: {
-        Authorization: buildSolapiAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: {
-          to: toNormalized,
-          from: SOLAPI_SENDER_PHONE,
-          kakaoOptions: {
-            pfId: SOLAPI_PF_ID,
-            templateId,
-            variables: toAlimtalkVariables(variables),
-            disableSms: false,
-          },
-          ...(fallbackText ? { text: fallbackText } : {}),
-        },
-      }),
-    })
-    const result = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      console.warn('[kakao-alimtalk] 발송 실패:', JSON.stringify(result))
-    } else {
-      console.log(`[kakao-alimtalk] 발송 성공 → ${toNormalized} (${templateId})`)
-    }
-  } catch (e: any) {
-    console.warn('[kakao-alimtalk] 발송 오류 (무시):', e.message)
-  }
-}
 
 export const handler = async (event: any, context: any) => {
   // Netlify redirects: /api/market/* -> /.netlify/functions/market/*
@@ -336,7 +266,7 @@ async function handleBidListing(event: any, path: string) {
       console.log(`   - 오더 소유자: ${listing?.posted_by}`)
       console.log(`   - 입찰자: ${businessId}`)
 
-      // 웹 견적 요청(오더)인 경우: 앱 push 대신 고객에게 카카오 알림톡 발송
+      // 웹 견적 요청인 경우: 고객에게 입찰 문자 발송
       if (listing?.web_order_id) {
         try {
           // 최초 입찰 시에만 orders.status 를 'bidding'으로 전환 (이미 진행 중이면 무시)
@@ -363,20 +293,49 @@ async function handleBidListing(event: any, path: string) {
           const orderArr = await orderRes.json()
           const webOrder = Array.isArray(orderArr) ? orderArr[0] : null
           if (webOrder?.customerPhone) {
-            const customerName = webOrder.customerName || '고객'
-            await sendKakaoAlimtalk({
-              to: webOrder.customerPhone,
-              templateId: process.env.SOLAPI_TEMPLATE_BID_RECEIVED || '',
-              variables: {
-                고객명: customerName,
-                오더명: webOrder.title || listing.title || '견적 요청',
-                링크: `${SITE_URL}/my-order`,
-              },
-              fallbackText: `[올수리] ${customerName}님, "${webOrder.title || listing.title || '견적 요청'}"에 새로운 견적이 도착했습니다.\n${SITE_URL}/my-order`,
-            })
+            const [bizRes, reviewsRes] = await Promise.all([
+              fetch(
+                `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(businessId)}&select=businessname,name&limit=1`,
+                {
+                  headers: {
+                    apikey: SUPABASE_SERVICE_ROLE_KEY,
+                    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  },
+                }
+              ),
+              fetch(
+                `${SUPABASE_URL}/rest/v1/business_reviews?business_id=eq.${encodeURIComponent(businessId)}&select=rating`,
+                {
+                  headers: {
+                    apikey: SUPABASE_SERVICE_ROLE_KEY,
+                    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  },
+                }
+              ),
+            ])
+            const bizArr = await bizRes.json().catch(() => [])
+            const biz = Array.isArray(bizArr) ? bizArr[0] : null
+            const bizName = biz?.businessname || biz?.name || '사업자'
+            const reviewsArr = await reviewsRes.json().catch(() => [])
+            const ratings = Array.isArray(reviewsArr) ? reviewsArr.map((r: any) => Number(r.rating) || 0) : []
+            const avg = ratings.length
+              ? Math.round((ratings.reduce((s: number, n: number) => s + n, 0) / ratings.length) * 10) / 10
+              : null
+            const orderTitle = webOrder.title || listing.title || '견적 요청'
+            const link = customerOrderUrl(webOrder.customerPhone)
+            await sendSms(
+              webOrder.customerPhone,
+              smsBidReceived({
+                orderTitle,
+                businessName: bizName,
+                priceLabel: formatWon(bid_amount),
+                ratingLabel: formatRating(avg, ratings.length),
+                link,
+              })
+            )
           }
         } catch (e: any) {
-          console.warn('[market] 웹 오더 알림톡 발송 실패 (무시):', e.message)
+          console.warn('[market] 웹 오더 문자 발송 실패 (무시):', e.message)
         }
       }
 

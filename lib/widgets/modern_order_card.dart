@@ -92,7 +92,7 @@ class ModernOrderCard extends StatelessWidget {
                     Text(
                       '₩${budget!.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                       style: const TextStyle(
-                        color: Color(0xFF1E3A8A),
+                        color: Color(0xFF0B2545),
                         fontSize: AppConstants.titleFontSize,
                         fontWeight: FontWeight.w700,
                       ),

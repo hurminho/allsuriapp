@@ -255,9 +255,6 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('후기/평점'),
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0,
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -269,9 +266,6 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(hasExistingReview ? '후기/평점 수정' : '후기/평점 작성'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

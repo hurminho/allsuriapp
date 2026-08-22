@@ -378,7 +378,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('공사 만들기'),
-        backgroundColor: Theme.of(context).colorScheme.surface,
       ),
       body: SafeArea(
         child: Form(

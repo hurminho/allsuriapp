@@ -190,26 +190,21 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: const Color(0xFFF7FAFC),
       appBar: AppBar(
         title: const Text(
           '내 매출',
-          style: TextStyle(
-            color: Color(0xFF1E3A8A),
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E3A8A)),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadRevenueData,
             tooltip: '새로고침',
           ),
@@ -251,7 +246,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
               '완료한 공사',
               '$_completedJobsCount건',
               Icons.check_circle_outline,
-              const Color(0xFF10B981),
+              const Color(0xFF1F8A70),
             )),
             const SizedBox(width: 12),
             Expanded(child: _buildStatCard(
@@ -451,7 +446,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E3A8A),
+                  color: Color(0xFF0B2545),
                 ),
               ),
               Container(
@@ -576,7 +571,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
                 lineTouchData: LineTouchData(
                   enabled: true,
                   touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (touchedSpot) => const Color(0xFF1E3A8A),
+                    getTooltipColor: (touchedSpot) => const Color(0xFF0B2545),
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
                         final index = spot.x.toInt();
@@ -626,7 +621,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E3A8A),
+                  color: Color(0xFF0B2545),
                 ),
               ),
               Container(
@@ -699,7 +694,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E3A8A),
+                    color: Color(0xFF0B2545),
                   ),
                 ),
                 const SizedBox(width: 4),

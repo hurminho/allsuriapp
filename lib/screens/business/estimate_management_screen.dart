@@ -12,7 +12,9 @@ import '../../services/payment_service.dart';
 import '../chat_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // Call(마켓) 분리는 홈의 별도 버튼로 이동
-import '../../widgets/common_app_bar.dart';
+import '../../theme/business_theme.dart';
+import '../../widgets/business/business_empty_state.dart';
+import '../../widgets/business/business_filter_chip.dart';
 
 // 통합 아이템 제거 (고객 견적만 관리)
 
@@ -237,13 +239,14 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
+    return Theme(
+      data: BusinessTheme.theme(Theme.of(context)),
+      child: Scaffold(
+      backgroundColor: BusinessTheme.background,
       appBar: AppBar(
-        title: const Text('견적 관리', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('견적 관리'),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -263,42 +266,10 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
             child: _isLoading
                 ? const ShimmerList(itemCount: 6, itemHeight: 110)
                 : _filteredEstimates.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                color: Colors.pink[50],
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.folder_open_outlined,
-                                size: 50,
-                                color: Colors.pink[300],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            const Text(
-                              '견적이 없습니다',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '고객 견적 요청에 응답해보세요',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
+                    ? const BusinessEmptyState(
+                        icon: Icons.folder_open_outlined,
+                        title: '견적이 없습니다',
+                        subtitle: '고객 견적 요청에 응답해보세요',
                       )
                     : ListView.builder(
                         itemCount: _filteredEstimates.length,
@@ -310,7 +281,7 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   void _showCheck() {
@@ -334,37 +305,25 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
 
   Widget _buildModernFilterChips() {
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '상태',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildModernFilterChip('전체', 'all', Icons.dashboard_outlined, Colors.grey[700]!),
-                const SizedBox(width: 10),
-                _buildModernFilterChip('대기중', Estimate.STATUS_PENDING, Icons.pending_outlined, const Color(0xFFF57C00)),
-                const SizedBox(width: 10),
-                _buildModernFilterChip('선택됨', Estimate.STATUS_AWARDED, Icons.check_circle_outline, const Color(0xFF388E3C)),
-                const SizedBox(width: 10),
-                _buildModernFilterChip('거절됨', Estimate.STATUS_REJECTED, Icons.cancel_outlined, const Color(0xFFD32F2F)),
-                const SizedBox(width: 10),
-                _buildModernFilterChip('완료', Estimate.STATUS_COMPLETED, Icons.task_alt_rounded, const Color(0xFF1976D2)),
-              ],
-            ),
-          ),
-        ],
+      color: BusinessTheme.surface,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            BusinessFilterChip(label: '전체', selected: _selectedStatus == 'all', count: _estimates.length, onTap: () => setState(() => _selectedStatus = 'all')),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '입찰 대기', selected: _selectedStatus == Estimate.STATUS_PENDING, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_PENDING)),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '채택됨', selected: _selectedStatus == Estimate.STATUS_AWARDED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_AWARDED)),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '작업 진행', selected: _selectedStatus == Estimate.STATUS_ACCEPTED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_ACCEPTED)),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '완료', selected: _selectedStatus == Estimate.STATUS_COMPLETED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_COMPLETED)),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '미선정', selected: _selectedStatus == Estimate.STATUS_REJECTED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_REJECTED)),
+          ],
+        ),
       ),
     );
   }
@@ -450,13 +409,13 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
     
     switch (estimate.status.toLowerCase()) {
       case 'pending':
-        statusColor = const Color(0xFFF57C00);
+        statusColor = const Color(0xFFE6A700);
         statusBg = const Color(0xFFFFF3E0);
         statusIcon = Icons.pending_outlined;
         statusLabel = '대기중';
         break;
       case 'awarded':
-        statusColor = const Color(0xFF388E3C);
+        statusColor = const Color(0xFF1F8A70);
         statusBg = const Color(0xFFE8F5E9);
         statusIcon = Icons.check_circle_outline;
         statusLabel = '선택됨';
@@ -468,7 +427,7 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
         statusLabel = '거절됨';
         break;
       case 'completed':
-        statusColor = const Color(0xFF1976D2);
+        statusColor = const Color(0xFF2E74B5);
         statusBg = const Color(0xFFE3F2FD);
         statusIcon = Icons.task_alt_rounded;
         statusLabel = '완료';
@@ -535,7 +494,7 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1976D2),
+                        color: Color(0xFF2E74B5),
                       ),
                     ),
                   ],

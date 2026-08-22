@@ -66,6 +66,7 @@
       border-radius: 12px; font-size: 1rem; font-family: inherit; outline: none; transition: border-color 0.2s;
     }
     .form-input:focus { border-color: var(--primary); }
+    .form-input[readonly] { background: var(--gray-50); color: var(--gray-600); }
     .pin-input { letter-spacing: 0.5rem; font-size: 1.5rem; font-weight: 700; text-align: center; }
     .btn-primary {
       width: 100%; padding: 1rem; background: var(--primary); color: white; border: none;
@@ -196,7 +197,7 @@
   <div id="loginScreen">
     <div class="hero">
       <h1>내 공사 현황 조회</h1>
-      <p>견적 요청 시 입력한 전화번호와<br>4자리 비밀번호로 확인하세요</p>
+      <p id="loginHint">견적 요청 시 입력한 전화번호와<br>4자리 비밀번호로 확인하세요</p>
     </div>
     <div class="card">
       <div class="card-body">
@@ -760,6 +761,19 @@ document.getElementById('loginPhone').addEventListener('keydown', function(e) {
 document.getElementById('loginPwd').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') doLogin();
 });
+
+(function prefillPhoneFromQuery() {
+  const digits = (new URLSearchParams(location.search).get('phone') || '').replace(/[^0-9]/g, '');
+  if (!digits) return;
+  const el = document.getElementById('loginPhone');
+  if (digits.length === 11) el.value = digits.slice(0, 3) + '-' + digits.slice(3, 7) + '-' + digits.slice(7);
+  else if (digits.length === 10) el.value = digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6);
+  else el.value = digits;
+  el.readOnly = true;
+  const hint = document.getElementById('loginHint');
+  if (hint) hint.textContent = '비밀번호 4자리만 입력하면 조회할 수 있습니다';
+  document.getElementById('loginPwd').focus();
+})();
 </script>
 </body>
 </html>

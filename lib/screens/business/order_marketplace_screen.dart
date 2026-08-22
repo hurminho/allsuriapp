@@ -388,26 +388,21 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: const Color(0xFFF7FAFC),
       appBar: AppBar(
         title: const Text(
           '오더 마켓플레이스',
-          style: TextStyle(
-            color: Color(0xFF1E3A8A),
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E3A8A)),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _reload,
             tooltip: '새로고침',
           ),
@@ -510,7 +505,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: hasPendingBid ? const Color(0xFF1E3A8A) : Colors.grey[200]!,
+                            color: hasPendingBid ? const Color(0xFF0B2545) : Colors.grey[200]!,
                             width: hasPendingBid ? 2 : 1,
                           ),
                           boxShadow: [
@@ -562,14 +557,14 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF1E3A8A).withOpacity(0.1),
+                                      color: const Color(0xFF0B2545).withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
                                       category,
                                       style: const TextStyle(
                                         fontSize: 12,
-                                        color: Color(0xFF1E3A8A),
+                                        color: Color(0xFF0B2545),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -594,19 +589,19 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF10B981).withOpacity(0.1),
+                                        color: const Color(0xFF1F8A70).withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(Icons.people, size: 12, color: Color(0xFF10B981)),
+                                          const Icon(Icons.people, size: 12, color: Color(0xFF1F8A70)),
                                           const SizedBox(width: 4),
                                           Text(
                                             '$bidCount명',
                                             style: const TextStyle(
                                               fontSize: 11,
-                                              color: Color(0xFF10B981),
+                                              color: Color(0xFF1F8A70),
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
@@ -625,7 +620,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
-                                  color: Color(0xFF1E3A8A),
+                                  color: Color(0xFF0B2545),
                                   height: 1.3,
                                 ),
                                 maxLines: 2,
@@ -740,13 +735,13 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.payments_outlined, size: 16, color: Color(0xFF1976D2)),
+                                            const Icon(Icons.payments_outlined, size: 16, color: Color(0xFF2E74B5)),
                                             const SizedBox(width: 6),
                                             Flexible(
                                               child: Text(
                                                 '${estimateAmount is num ? estimateAmount.toInt().toString() : estimateAmount.toString()}원',
                                                 style: const TextStyle(
-                                                  color: Color(0xFF1976D2),
+                                                  color: Color(0xFF2E74B5),
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 13,
                                                 ),
@@ -814,7 +809,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                     width: 150,
                                     child: ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: hasPendingBid ? Colors.red : (canBid ? const Color(0xFF1E3A8A) : Colors.grey[300]),
+                                        backgroundColor: hasPendingBid ? Colors.red : (canBid ? const Color(0xFF0B2545) : Colors.grey[300]),
                                         foregroundColor: hasPendingBid ? Colors.white : (canBid ? Colors.white : Colors.grey[600]),
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -878,7 +873,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                           right: 0,
                           child: Center(
                             child: Material(
-                              color: const Color(0xFF1E3A8A),
+                              color: const Color(0xFF0B2545),
                               borderRadius: BorderRadius.circular(20),
                               elevation: 4,
                               child: InkWell(
@@ -1115,7 +1110,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
           children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 16),
-            Text('입찰하기', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A))),
+            Text('입찰하기', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0B2545))),
             const SizedBox(height: 4),
             Text(title, style: TextStyle(fontSize: 13, color: Colors.grey[600]), maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 16),
@@ -1126,7 +1121,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => Navigator.pop(ctx, 'quick'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
+                    backgroundColor: const Color(0xFF1F8A70),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1155,7 +1150,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
               decoration: InputDecoration(
                 labelText: isWebOrder ? '견적가 (원)' : '견적가 (원, 선택)',
                 hintText: '예: 500000',
-                prefixIcon: const Icon(Icons.attach_money_rounded, color: Color(0xFF1E3A8A)),
+                prefixIcon: const Icon(Icons.attach_money_rounded, color: Color(0xFF0B2545)),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true, fillColor: Colors.grey[50],
               ),
@@ -1167,7 +1162,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
               decoration: InputDecoration(
                 labelText: isWebOrder ? '예상 공사 기일 (일)' : '예상 공사 기일 (일, 선택)',
                 hintText: '예: 3',
-                prefixIcon: const Icon(Icons.calendar_today_outlined, color: Color(0xFF1E3A8A)),
+                prefixIcon: const Icon(Icons.calendar_today_outlined, color: Color(0xFF0B2545)),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true, fillColor: Colors.grey[50],
               ),
@@ -1179,7 +1174,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
               decoration: InputDecoration(
                 labelText: '메시지 (선택)',
                 hintText: '공사에 대한 간략한 설명',
-                prefixIcon: const Icon(Icons.message_outlined, color: Color(0xFF1E3A8A)),
+                prefixIcon: const Icon(Icons.message_outlined, color: Color(0xFF0B2545)),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true, fillColor: Colors.grey[50],
               ),
@@ -1228,7 +1223,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(ctx, true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E3A8A),
+                      backgroundColor: const Color(0xFF0B2545),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1479,26 +1474,16 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => Scaffold(
-          backgroundColor: const Color(0xFFF8F9FA),
+          backgroundColor: const Color(0xFFF7FAFC),
           appBar: AppBar(
-            elevation: 0,
-            backgroundColor: Colors.white,
-            title: const Text(
-              '오더 상세',
-              style: TextStyle(
-                color: Color(0xFF1E3A8A),
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-              ),
-            ),
-            centerTitle: true,
+            title: const Text('오더 상세'),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E3A8A), size: 20),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.share_outlined, color: Color(0xFF1E3A8A)),
+                icon: const Icon(Icons.share_outlined, color: Color(0xFF0B2545)),
                 onPressed: () async {
                   final imageUrl = mediaUrls.isNotEmpty ? mediaUrls[0] : null;
                   final budgetRaw = data['estimate_amount']
@@ -1608,14 +1593,14 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E3A8A).withOpacity(0.1),
+                                color: const Color(0xFF0B2545).withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 category,
                                 style: const TextStyle(
                                   fontSize: 13,
-                                  color: Color(0xFF1E3A8A),
+                                  color: Color(0xFF0B2545),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1641,7 +1626,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF1E3A8A),
+                            color: Color(0xFF0B2545),
                             height: 1.3,
                           ),
                         ),
@@ -1652,14 +1637,14 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1E3A8A).withOpacity(0.08),
+                              color: const Color(0xFF0B2545).withOpacity(0.08),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
                                 const Icon(
                                   Icons.attach_money_rounded,
-                                  color: Color(0xFF1E3A8A),
+                                  color: Color(0xFF0B2545),
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
@@ -1668,7 +1653,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFF1E3A8A),
+                                    color: Color(0xFF0B2545),
                                   ),
                                 ),
                               ],
@@ -1707,7 +1692,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E3A8A),
+                            color: Color(0xFF0B2545),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -1761,7 +1746,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                       child: isOwner
                           ? ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E3A8A),
+                                backgroundColor: const Color(0xFF0B2545),
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -1791,7 +1776,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                             )
                           : ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: hasPendingBid ? Colors.red : const Color(0xFF1E3A8A),
+                                backgroundColor: hasPendingBid ? Colors.red : const Color(0xFF0B2545),
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),

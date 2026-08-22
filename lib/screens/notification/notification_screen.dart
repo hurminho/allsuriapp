@@ -409,7 +409,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       case 'order_status':
         return Colors.orange;
       case 'app_update':
-        return const Color(0xFF1A73E8);
+        return const Color(0xFF2E74B5);
       default:
         return Colors.grey;
     }
@@ -419,16 +419,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '알림',
-          style: TextStyle(
-            color: Color(0xFF1E3A8A),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1E3A8A)),
+        title: const Text('알림'),
         actions: [
           if (_notifications.any((n) => n['isread'] != true))
             IconButton(

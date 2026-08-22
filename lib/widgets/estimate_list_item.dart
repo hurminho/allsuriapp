@@ -37,7 +37,7 @@ class EstimateListItem extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF222B45),
+                        color: Color(0xFF102A43),
                       ),
                     ),
                   ),
@@ -95,7 +95,7 @@ class EstimateListItem extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: onSelect,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4F8CFF),
+                      backgroundColor: const Color(0xFF2E74B5),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
@@ -132,7 +132,7 @@ class EstimateListItem extends StatelessWidget {
         break;
       case 'accepted':
         statusText = '수락됨';
-        statusColor = const Color(0xFF4F8CFF);
+        statusColor = const Color(0xFF2E74B5);
         statusIcon = Icons.check_circle;
         break;
       case 'rejected':

@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/version_service.dart';
 import '../utils/app_deep_links.dart';
 import '../widgets/update_dialog.dart';
+import '../theme/business_theme.dart';
 import 'home/home_screen.dart';
 
 /// 앱 시작 화면.
@@ -117,28 +118,23 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: BusinessTheme.navy,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 로고 또는 앱 이름
-            Icon(
-              Icons.construction,
-              size: 80,
-              color: Theme.of(context).primaryColor,
-            ),
+            const Icon(Icons.construction, size: 80, color: Colors.white),
             const SizedBox(height: 24),
             const Text(
               '올수리',
               style: TextStyle(
                 fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 48),
-            const CircularProgressIndicator(),
+            const CircularProgressIndicator(color: Colors.white),
           ],
         ),
       ),

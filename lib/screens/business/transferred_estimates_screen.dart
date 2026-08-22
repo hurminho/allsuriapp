@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/estimate.dart';
 import '../../providers/estimate_provider.dart';
-import '../../widgets/common_app_bar.dart';
+import '../../theme/business_theme.dart';
+import '../../widgets/business/business_app_shell.dart';
+import '../../widgets/business/business_empty_state.dart';
+import '../../widgets/business/business_filter_chip.dart';
 import '../../widgets/estimate_list_item.dart';
 import 'package:go_router/go_router.dart';
 
@@ -80,60 +83,32 @@ class _TransferredEstimatesScreenState extends State<TransferredEstimatesScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: CommonAppBar(
-        title: '이관한 견적',
-        showBackButton: true,
-        showHomeButton: true,
-      ),
+    return BusinessAppShell(
+      title: '이관한 견적',
       body: Column(
         children: [
           // 상태 필터
           Container(
+            color: BusinessTheme.surface,
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '상태별 필터',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF222B45),
-                  ),
+            child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _statusFilters.map((status) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: BusinessFilterChip(
+                        label: _getStatusLabel(status),
+                        selected: _selectedStatus == status,
+                        onTap: () {
+                          setState(() {
+                            _selectedStatus = status;
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
                 ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _statusFilters.map((status) {
-                      final isSelected = _selectedStatus == status;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
-                          label: Text(_getStatusLabel(status)),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            setState(() {
-                              _isLoading = true;
-                            });
-                            setState(() {
-                              _selectedStatus = status;
-                              _isLoading = false;
-                            });
-                          },
-                          backgroundColor: Colors.grey.shade200,
-                          selectedColor: const Color(0xFF4F8CFF),
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : Colors.black87,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
             ),
           ),
 
@@ -149,36 +124,12 @@ class _TransferredEstimatesScreenState extends State<TransferredEstimatesScreen>
                 final filteredEstimates = _getFilteredEstimates(transferredEstimates);
 
                 if (filteredEstimates.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.transfer_within_a_station,
-                          size: 64,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          transferredEstimates.isEmpty
-                              ? '이관한 견적이 없습니다.'
-                              : '선택한 상태의 견적이 없습니다.',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '다른 사업자에게 견적을 이관하면\n여기에 표시됩니다.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                    ),
+                  return BusinessEmptyState(
+                    icon: Icons.swap_horiz_rounded,
+                    title: transferredEstimates.isEmpty
+                        ? '이관한 견적이 없습니다.'
+                        : '선택한 상태의 견적이 없습니다.',
+                    subtitle: '다른 사업자에게 견적을 이관하면 여기에 표시됩니다.',
                   );
                 }
 

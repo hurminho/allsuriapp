@@ -6,6 +6,7 @@ import '../screens/business/create_job_screen.dart';
 import '../screens/chat/chat_list_page.dart';
 import '../screens/profile/profile_screen.dart';
 import '../widgets/professional_dashboard.dart';
+import '../theme/business_theme.dart';
 
 class BottomNavigation extends StatefulWidget {
   final int currentIndex;
@@ -43,15 +44,9 @@ class _BottomNavigationState extends State<BottomNavigation> {
         _ensureUnreadFuture(userId);
 
         return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 12,
-                offset: const Offset(0, -2),
-              ),
-            ],
+          decoration: const BoxDecoration(
+            color: BusinessTheme.surface,
+            border: Border(top: BorderSide(color: BusinessTheme.border)),
           ),
           child: SafeArea(
             top: false,
@@ -114,7 +109,7 @@ class _BottomNavigationState extends State<BottomNavigation> {
     int? badgeCount,
   }) {
     final isSelected = widget.currentIndex == index;
-    final primaryColor = Theme.of(context).primaryColor;
+    final primaryColor = BusinessTheme.blue;
     
     return Expanded(
       child: InkWell(

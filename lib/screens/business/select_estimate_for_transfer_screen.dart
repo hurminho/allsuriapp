@@ -102,7 +102,7 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF222B45),
+                    color: Color(0xFF102A43),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -122,9 +122,9 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
                             });
                           },
                           backgroundColor: Colors.grey[200],
-                          selectedColor: const Color(0xFF4F8CFF).withOpacity(0.2),
+                          selectedColor: const Color(0xFF2E74B5).withOpacity(0.2),
                           labelStyle: TextStyle(
-                            color: isSelected ? const Color(0xFF4F8CFF) : Colors.grey[700],
+                            color: isSelected ? const Color(0xFF2E74B5) : Colors.grey[700],
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
@@ -262,7 +262,7 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
-                                    color: Color(0xFF4F8CFF),
+                                    color: Color(0xFF2E74B5),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -286,7 +286,7 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
                                       icon: const Icon(Icons.swap_horiz, size: 16),
                                       label: const Text('이관하기'),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF4F8CFF),
+                                        backgroundColor: const Color(0xFF2E74B5),
                                         foregroundColor: Colors.white,
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                         textStyle: const TextStyle(fontSize: 12),

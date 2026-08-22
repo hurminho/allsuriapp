@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/common_app_bar.dart';
+import '../../widgets/kakao_login_button.dart';
+import '../../theme/business_theme.dart';
 import 'signup_page.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -99,22 +101,33 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: const CommonAppBar(title: '로그인'),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Form(
           key: _formKey,
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Allsuri',
-                style: Theme.of(context).textTheme.headlineLarge,
+              const SizedBox(height: 24),
+              const Text(
+                '올수리',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: BusinessTheme.navy,
+                ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 8),
+              const Text(
+                '이메일로 로그인하거나 소셜 로그인을 이용하세요',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: BusinessTheme.textMuted, fontSize: 14),
+              ),
+              const SizedBox(height: 32),
               TextFormField(
                 controller: _emailController,
                 decoration: const InputDecoration(
                   labelText: '이메일',
-                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) {
@@ -129,7 +142,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _passwordController,
                 decoration: const InputDecoration(
                   labelText: '비밀번호',
-                  border: OutlineInputBorder(),
                 ),
                 obscureText: true,
                 validator: (value) {
@@ -142,18 +154,23 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
+                height: 56,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _signIn,
                   child: _isLoading
-                      ? const CircularProgressIndicator()
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
                       : const Text('로그인'),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
+              const SizedBox(height: 20),
+              const Text(
                 'Apple 또는 카카오로도 로그인할 수 있습니다',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[800]),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BusinessTheme.textMuted),
               ),
               const SizedBox(height: 12),
               if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
@@ -161,77 +178,33 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   child: SignInWithAppleButton(
                     style: SignInWithAppleButtonStyle.black,
-                    height: 48,
+                    height: 56,
+                    borderRadius: BorderRadius.circular(12),
                     onPressed: () {
                       if (!_isLoading) _appleSignIn();
                     },
                   ),
                 ),
-              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: InkWell(
-                  onTap: _isLoading
-                      ? null
-                      : () async {
-                          // 로딩 다이얼로그 표시
+              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) const SizedBox(height: 10),
+              KakaoLoginButton(
+                onPressed: _isLoading
+                    ? null
+                    : () async {
                           showDialog(
                             context: context,
                             barrierDismissible: false,
                             builder: (BuildContext dialogContext) {
                               return WillPopScope(
                                 onWillPop: () async => false,
-                                child: Dialog(
-                                  backgroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
+                                child: const Dialog(
                                   child: Padding(
-                                    padding: const EdgeInsets.all(32.0),
+                                    padding: EdgeInsets.all(32.0),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        // 불꽃 애니메이션 효과
-                                        TweenAnimationBuilder<double>(
-                                          tween: Tween(begin: 0.0, end: 1.0),
-                                          duration: const Duration(milliseconds: 1500),
-                                          builder: (context, value, child) {
-                                            return Transform.scale(
-                                              scale: 0.8 + (value * 0.2),
-                                              child: Opacity(
-                                                opacity: 0.6 + (value * 0.4),
-                                                child: const Text(
-                                                  '🔥',
-                                                  style: TextStyle(fontSize: 64),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                        const SizedBox(height: 24),
-                                        const CircularProgressIndicator(
-                                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFEE500)),
-                                        ),
-                                        const SizedBox(height: 24),
-                                        const Text(
-                                          '사업자님의 열정을 예열 중입니다...',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
-                                            height: 1.5,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          '카카오톡으로 안전하게 연결 중',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
+                                        CircularProgressIndicator(),
+                                        SizedBox(height: 16),
+                                        Text('연결하는 중…'),
                                       ],
                                     ),
                                   ),
@@ -292,11 +265,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             }
                           }
                         },
-                  child: Image.asset(
-                    'assets/images/kakao_login_large_narrow.png',
-                    fit: BoxFit.contain,
-                  ),
-                ),
               ),
               const SizedBox(height: 16),
               TextButton(

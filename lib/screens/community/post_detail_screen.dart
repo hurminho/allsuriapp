@@ -43,9 +43,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(middle: Text('게시글')),
-      child: _loading && _post == null
+    return Scaffold(
+      appBar: AppBar(title: const Text('게시글')),
+      body: _loading && _post == null
           ? const Center(child: CupertinoActivityIndicator())
           : SafeArea(
               child: DefaultTextStyle(

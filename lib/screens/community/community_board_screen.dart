@@ -43,26 +43,21 @@ class _CommunityBoardScreenState extends State<CommunityBoardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: const Color(0xFFF7FAFC),
       appBar: AppBar(
         title: const Text(
           '커뮤니티',
-          style: TextStyle(
-            color: Color(0xFF1E3A8A),
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E3A8A)),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _refresh,
             tooltip: '새로고침',
           ),
@@ -104,7 +99,7 @@ class _CommunityBoardScreenState extends State<CommunityBoardScreen> {
                     onPressed: _refresh,
                     style: ElevatedButton.styleFrom(
                       padding: EdgeInsets.zero,
-                      backgroundColor: const Color(0xFF1E3A8A),
+                      backgroundColor: const Color(0xFF0B2545),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -139,7 +134,7 @@ class _CommunityBoardScreenState extends State<CommunityBoardScreen> {
                                       child: const Icon(
                                         Icons.forum_outlined,
                                         size: 50,
-                                        color: Color(0xFF1E3A8A),
+                                        color: Color(0xFF0B2545),
                                       ),
                                     ),
                                     const SizedBox(height: 20),
@@ -205,7 +200,7 @@ class _CommunityBoardScreenState extends State<CommunityBoardScreen> {
                   icon: const Icon(Icons.edit_rounded, size: 20),
                   label: const Text('새 글 작성', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E3A8A),
+                    backgroundColor: const Color(0xFF0B2545),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -323,14 +318,14 @@ class _CommunityBoardScreenState extends State<CommunityBoardScreen> {
                       children: post.tags.take(3).map((t) => Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E3A8A).withOpacity(0.1),
+                          color: const Color(0xFF0B2545).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           '#$t',
                           style: const TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF1E3A8A),
+                            color: Color(0xFF0B2545),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -343,7 +338,7 @@ class _CommunityBoardScreenState extends State<CommunityBoardScreen> {
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E3A8A),
+                    color: Color(0xFF0B2545),
                     height: 1.3,
                   ),
                   maxLines: 2,

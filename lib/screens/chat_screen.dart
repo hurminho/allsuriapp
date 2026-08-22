@@ -392,9 +392,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black87,
-      elevation: 0.5,
       leadingWidth: 40,
       titleSpacing: 0,
       leading: IconButton(

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/job_service.dart';
 import '../../services/auth_service.dart';
+import '../../theme/business_theme.dart';
+import '../../widgets/business/business_empty_state.dart';
 import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -46,7 +48,10 @@ class _TransferJobScreenState extends State<TransferJobScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Theme(
+      data: BusinessTheme.theme(Theme.of(context)),
+      child: Scaffold(
+      backgroundColor: BusinessTheme.background,
       appBar: AppBar(title: const Text('공사 이관')),
       body: SafeArea(
         child: Column(
@@ -70,7 +75,10 @@ class _TransferJobScreenState extends State<TransferJobScreen> {
                   }
                   final rows = snapshot.data!;
                   if (rows.isEmpty) {
-                    return const Center(child: Text('검색된 사업자가 없습니다.'));
+                    return const BusinessEmptyState(
+                      icon: Icons.person_search_outlined,
+                      title: '검색된 사업자가 없습니다.',
+                    );
                   }
                   return ListView.separated(
                     itemCount: rows.length,
@@ -189,7 +197,7 @@ class _TransferJobScreenState extends State<TransferJobScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Future<List<Map<String, dynamic>>> _searchBusinesses(String q) async {

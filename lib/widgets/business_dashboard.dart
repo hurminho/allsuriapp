@@ -4,31 +4,32 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
-import 'custom_painters.dart';
 import '../services/ad_service.dart';
 import '../models/ad.dart';
 import 'announcement_banner.dart';
+import '../theme/business_theme.dart';
+import 'business/business_metric_card.dart';
+import 'business/business_lead_card.dart';
+import 'business/business_primary_button.dart';
+import 'business/business_empty_state.dart';
 import '../screens/business/estimate_requests_screen.dart';
-import '../screens/business/estimate_management_screen.dart';
-import '../screens/business/transfer_estimate_screen.dart';
-import '../screens/notification/notification_screen.dart';
+import '../screens/business/my_estimates_screen.dart';
 import '../screens/business/job_management_screen.dart';
+import '../screens/chat/chat_list_page.dart';
+import '../screens/business/business_profile_screen.dart';
+import '../screens/notification/notification_screen.dart';
 import '../screens/business/order_marketplace_screen.dart';
 import '../screens/business/my_order_management_screen.dart';
 import '../screens/business/pending_approval_screen.dart';
-import '../screens/profile/profile_screen.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
-import '../screens/home/home_screen.dart';
 import '../widgets/bottom_navigation.dart';
-import 'interactive_card.dart';
 import 'package:lottie/lottie.dart';
 import 'package:allsuriapp/services/api_service.dart';
 import 'package:allsuriapp/services/marketplace_service.dart';
 import '../services/order_service.dart';
 import '../services/push_permission_service.dart';
 import '../screens/community/community_board_screen.dart';
-import '../screens/labs/ai_assistant_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({Key? key}) : super(key: key);
@@ -44,7 +45,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
   late Future<int> _estimateRequestsCountFuture;
   late Future<int> _completedJobsCountFuture;
   late Future<int> _myOrdersCountFuture;
+  late Future<int> _inProgressJobsCountFuture;
   late Future<int> _myBidsCountFuture;
+  Future<List<dynamic>> _priorityOrdersFuture = Future.value([]);
   // 광고/알림 Future도 캐싱해 build 마다 재요청되지 않게 한다.
   Future<List<Ad>>? _adBannerFuture;
   Future<int>? _notifCountFuture;
@@ -127,7 +130,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
       _estimateRequestsCountFuture = _getEstimateRequestsCount();
       _completedJobsCountFuture = _getMyCompletedJobsCount();
       _myOrdersCountFuture = _getMyOrdersCount();
+      _inProgressJobsCountFuture = _getInProgressJobsCount();
       _myBidsCountFuture = _getMyBidsCount();
+      _priorityOrdersFuture = _getPriorityOrders();
       _adBannerFuture = Future.wait([
         AdService().getAdsByLocation('dashboard_ad_1'),
         AdService().getAdsByLocation('dashboard_ad_2'),
@@ -135,6 +140,33 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
       _notifCountFuture =
           userId.isEmpty ? Future.value(0) : NotificationService().getUnreadCount(userId);
     });
+  }
+
+  Future<List<dynamic>> _getPriorityOrders() async {
+    try {
+      final orderService = Provider.of<OrderService>(context, listen: false);
+      final all = await orderService.getOrders();
+      final available = all.where((o) => o.status == 'pending' && !o.isAwarded).toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return available.take(3).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<int> _getInProgressJobsCount() async {
+    try {
+      final currentUserId = Provider.of<AuthService>(context, listen: false).currentUser?.id;
+      if (currentUserId == null) return 0;
+      final count = await Supabase.instance.client
+          .from('jobs')
+          .count(CountOption.exact)
+          .eq('assigned_business_id', currentUserId)
+          .inFilter('status', ['assigned', 'in_progress', 'awaiting_confirmation']);
+      return count;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<int> _getCallOpenCount() async {
@@ -301,9 +333,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
             // 뒤로가기 방지 - 대시보드가 홈이므로
             return false;
           },
-          child: Scaffold(
+          child: Theme(
+            data: BusinessTheme.theme(Theme.of(context)),
+            child: Scaffold(
+          backgroundColor: BusinessTheme.background,
           appBar: AppBar(
-            title: Text('올수리에서 번창하세요!'),
+            title: const Text('오늘의 업무'),
             centerTitle: true,
             actions: [
               FutureBuilder<int>(
@@ -366,206 +401,180 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 웨이브 배경이 있는 환영 배너
-                Stack(
-                  children: [
-                    // 웨이브 배경
-                    AnimatedBuilder(
-                      animation: _waveAnimation,
-                      builder: (context, child) {
-                        return ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: SizedBox(
-                            height: 160,
-                            child: CustomPaint(
-                              painter: WavePainter(
-                                color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                                animationValue: _waveAnimation.value,
-                              ),
-                              child: Container(),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    // 실제 컨텐츠
-                    Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                Text(
+                  '$businessName 님',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: BusinessTheme.navy,
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: FutureBuilder<int>(
-                          future: _completedJobsCountFuture,
-                          builder: (context, snapshot) {
-                            final n = snapshot.data ?? 0;
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '$n',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w800,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '완료한 공사',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                              '$businessName 님, 번창하세요!',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                            const SizedBox(height: 8),
-                            FutureBuilder<List<int>>(
-                              future: Future.wait([
-                                _callOpenCountFuture,
-                                _myOrdersCountFuture,
-                                _myBidsCountFuture,
-                              ]),
-                              builder: (context, snapshot) {
-                                if (!snapshot.hasData) {
-                                  return const SizedBox(
-                                    height: 16,
-                                    width: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  );
-                                }
-                                
-                                final newOrders = snapshot.data![0];
-                                final myOrders = snapshot.data![1];
-                                final myBids = snapshot.data![2];
-                                
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildStatRow(
-                                      context,
-                                      '새로운 오더',
-                                      newOrders,
-                                      Colors.orange,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    _buildStatRow(
-                                      context,
-                                      '내가 만든 오더',
-                                      myOrders,
-                                      Colors.blue,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    _buildStatRow(
-                                      context,
-                                      '내가 입찰한 오더',
-                                      myBids,
-                                      Colors.green,
-                                ),
-                              ],
-                            );
-                          },
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '오늘 처리할 일감을 한눈에 확인하세요',
+                  style: TextStyle(color: BusinessTheme.textMuted),
+                ),
+                const SizedBox(height: 16),
+                FutureBuilder<List<int>>(
+                  future: Future.wait([
+                    _estimateRequestsCountFuture,
+                    _myBidsCountFuture,
+                    _inProgressJobsCountFuture,
+                  ]),
+                  builder: (context, snapshot) {
+                    final newRequests = snapshot.data?[0] ?? 0;
+                    final pendingBids = snapshot.data?[1] ?? 0;
+                    final openOrders = snapshot.data?[2] ?? 0;
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: BusinessMetricCard(
+                                label: '신규 견적 요청',
+                                value: '$newRequests',
+                                icon: Icons.inbox_outlined,
+                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstimateRequestsScreen())),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: BusinessMetricCard(
+                                label: '입찰 대기',
+                                value: '$pendingBids',
+                                icon: Icons.hourglass_empty,
+                                accent: BusinessTheme.warning,
+                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessMyEstimatesScreen(initialStatus: 'pending'))),
+                              ),
                             ),
                           ],
                         ),
-                      )
-                      ],
-                    ),
-                  ),
-                    ],
-                  ),
-                const SizedBox(height: 16),
-
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = constraints.maxWidth;
-                    final isLandscape = width > 600;
-                    final crossAxisCount = isLandscape ? 3 : 2;
-                    
-                    return GridView.count(
-                      crossAxisCount: crossAxisCount,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 0.95,
-                      children: [
-                   _buildCleanMenuCard(
-                      context,
-                      '오더',
-                      Icons.handyman_outlined,
-                      const Color(0xFFFFF3E0),
-                      const Color(0xFFF57C00),
-                      () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const OrderMarketplaceScreen(showSuccessMessage: false)),
-                        );
-                        if (!mounted) return;
-                        _refreshCounts();
-                      },
-                      badgeFuture: _callOpenCountFuture,
-                    ),
-                    _buildCleanMenuCard(
-                      context,
-                      '내 공사',
-                      Icons.construction_outlined,
-                      const Color(0xFFFFF9C4),
-                      const Color(0xFFF9A825),
-                      () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const JobManagementScreen()));
-                      },
-                    ),
-                    _buildCleanMenuCard(
-                      context,
-                      '커뮤니티',
-                      Icons.people_outline_rounded,
-                      const Color(0xFFF3E5F5),
-                      const Color(0xFF7B1FA2),
-                      () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommunityBoardScreen()));
-                      },
-                    ),
-                    _buildCleanMenuCard(
-                      context,
-                      '내 오더 관리',
-                      Icons.folder_open_outlined,
-                      const Color(0xFFFCE4EC),
-                      const Color(0xFFC2185B),
-                      () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const MyOrderManagementScreen()));
-                      },
-                    ),
+                        const SizedBox(height: 12),
+                        BusinessMetricCard(
+                          label: '수주 진행 작업',
+                          value: '$openOrders',
+                          icon: Icons.handyman_outlined,
+                          accent: BusinessTheme.success,
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JobManagementScreen())),
+                        ),
                       ],
                     );
                   },
                 ),
-
+                const SizedBox(height: 16),
+                FutureBuilder<int>(
+                  future: _notifCountFuture,
+                  builder: (context, snapshot) {
+                    final unread = snapshot.data ?? 0;
+                    if (unread <= 0) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BusinessTheme.cardDecoration(),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.notifications_active_outlined, color: BusinessTheme.warning),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '읽지 않은 알림 $unread건',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())),
+                            child: const Text('확인'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const Text('우선 대응 일감', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 8),
+                FutureBuilder<List<dynamic>>(
+                  future: _priorityOrdersFuture,
+                  builder: (context, snapshot) {
+                    final leads = snapshot.data ?? [];
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      );
+                    }
+                    if (leads.isEmpty) {
+                      return const BusinessEmptyState(
+                        icon: Icons.task_alt,
+                        title: '지금 바로 볼 신규 일감이 없습니다',
+                      );
+                    }
+                    return Column(
+                      children: leads.map((lead) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: BusinessLeadCard(
+                            title: lead.title,
+                            category: lead.equipmentType,
+                            region: BusinessTheme.regionFromAddress(lead.address),
+                            timeLabel: BusinessTheme.relativeTime(lead.createdAt),
+                            symptom: lead.description,
+                            isNew: BusinessTheme.isNewLead(lead.createdAt),
+                            isUrgent: BusinessTheme.isVisitSoon(lead.visitDate),
+                            canBid: true,
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstimateRequestsScreen())),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                BusinessPrimaryButton(
+                  label: '새 일감 보기',
+                  icon: Icons.arrow_forward,
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const EstimateRequestsScreen()));
+                  },
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.description_outlined, size: 16),
+                      label: const Text('내 견적'),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessMyEstimatesScreen())),
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.work_outline, size: 16),
+                      label: const Text('수주 관리'),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JobManagementScreen())),
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.folder_open_outlined, size: 16),
+                      label: const Text('내 오더'),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrderManagementScreen())),
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.chat_bubble_outline, size: 16),
+                      label: const Text('채팅'),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatListPage())),
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.person_outline, size: 16),
+                      label: const Text('프로필'),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessProfileScreen())),
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.groups_outlined, size: 16),
+                      label: const Text('커뮤니티'),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityBoardScreen())),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 24),
                 _buildAdBanner(context),
-                
                 const SizedBox(height: 20),
               ],
             ),
@@ -581,7 +590,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> with TickerProvid
               });
             },
           ),
-        ));
+        )));
       },
     );
   }

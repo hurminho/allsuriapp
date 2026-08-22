@@ -242,10 +242,10 @@ class _EstimateDashboardScreenState extends State<EstimateDashboardScreen> {
           _selectedStatus = value;
         });
       },
-      selectedColor: const Color(0xFF4F8CFF).withOpacity(0.2),
-      checkmarkColor: const Color(0xFF4F8CFF),
+      selectedColor: const Color(0xFF2E74B5).withOpacity(0.2),
+      checkmarkColor: const Color(0xFF2E74B5),
       labelStyle: TextStyle(
-        color: isSelected ? const Color(0xFF4F8CFF) : Colors.grey[600],
+        color: isSelected ? const Color(0xFF2E74B5) : Colors.grey[600],
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
     );
@@ -305,7 +305,7 @@ class _EstimateDashboardScreenState extends State<EstimateDashboardScreen> {
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: Color(0xFF4F8CFF),
+                          color: Color(0xFF2E74B5),
                         ),
                       ),
                     ],
@@ -351,7 +351,7 @@ class _EstimateDashboardScreenState extends State<EstimateDashboardScreen> {
                   child: OutlinedButton(
                     onPressed: () => _viewEstimateDetails(estimate),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF4F8CFF),
+                      foregroundColor: const Color(0xFF2E74B5),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                     child: const Text('상세 보기'),
@@ -362,7 +362,7 @@ class _EstimateDashboardScreenState extends State<EstimateDashboardScreen> {
                   child: ElevatedButton(
                     onPressed: () => _updateEstimateStatus(estimate),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4F8CFF),
+                      backgroundColor: const Color(0xFF2E74B5),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),

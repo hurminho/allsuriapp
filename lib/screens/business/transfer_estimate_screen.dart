@@ -5,6 +5,7 @@ import '../../models/estimate.dart';
 import '../../services/auth_service.dart';
 import '../../services/estimate_service.dart';
 import '../../services/chat_service.dart';
+import '../../widgets/business/business_app_shell.dart';
 
 class TransferEstimateScreen extends StatefulWidget {
   final Estimate estimate;
@@ -189,11 +190,9 @@ class _TransferEstimateScreenState extends State<TransferEstimateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('견적 이관'),
-      ),
-      child: SafeArea(
+    return BusinessAppShell(
+      title: '견적 이관',
+      body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Form(

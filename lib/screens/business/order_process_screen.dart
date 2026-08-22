@@ -117,28 +117,20 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: const Color(0xFFF7FAFC),
       appBar: AppBar(
         title: Text(
           widget.orderTitle,
-          style: const TextStyle(
-            color: Color(0xFF1E3A8A),
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
-          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E3A8A)),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadAll,
           ),
         ],
@@ -213,7 +205,7 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
           const SizedBox(height: 12),
           Text(
             order['title'] ?? widget.orderTitle,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E3A8A)),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF0B2545)),
           ),
           if (order['description'] != null) ...[
             const SizedBox(height: 8),
@@ -263,7 +255,7 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
         subtitle: _listing!['createdat'] != null
             ? _dateFmt.format(DateTime.parse(_listing!['createdat']))
             : '-',
-        color: const Color(0xFF1E3A8A),
+        color: const Color(0xFF0B2545),
         isCompleted: true,
         detail: '${_ownerInfo?['businessname'] ?? _ownerInfo?['name'] ?? '사업자'} 님이 오더를 등록했습니다.',
       ),
@@ -339,7 +331,7 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('오더 진행 현황', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E3A8A))),
+          const Text('오더 진행 현황', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF0B2545))),
           const SizedBox(height: 20),
           ...steps.asMap().entries.map((entry) {
             final i = entry.key;
@@ -462,11 +454,11 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('참여자 정보', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E3A8A))),
+          const Text('참여자 정보', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF0B2545))),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _buildPersonCard('오더 등록자', _ownerInfo, Icons.person_outline, const Color(0xFF1E3A8A))),
+              Expanded(child: _buildPersonCard('오더 등록자', _ownerInfo, Icons.person_outline, const Color(0xFF0B2545))),
               const SizedBox(width: 12),
               Expanded(child: _buildPersonCard('낙찰 사업자', _winnerInfo, Icons.business_center_outlined, Colors.orange)),
             ],
@@ -478,8 +470,8 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
               icon: const Icon(Icons.chat_outlined, size: 18),
               label: const Text('채팅 보기'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF1E3A8A),
-                side: const BorderSide(color: Color(0xFF1E3A8A)),
+                foregroundColor: const Color(0xFF0B2545),
+                side: const BorderSide(color: Color(0xFF0B2545)),
                 minimumSize: const Size(double.infinity, 44),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),

@@ -69,7 +69,7 @@ class _AnnouncementItem extends StatelessWidget {
       final full = h.length == 6 ? 'FF$h' : h;
       return Color(int.parse(full, radix: 16));
     } catch (_) {
-      return const Color(0xFF1E3A8A);
+      return const Color(0xFF0B2545);
     }
   }
 

@@ -661,7 +661,7 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isSelected ? const Color(0xFF10B981) : isRejected ? Colors.grey[300]! : Colors.transparent,
+          color: isSelected ? const Color(0xFF1F8A70) : isRejected ? Colors.grey[300]! : Colors.transparent,
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -678,7 +678,7 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)]),
+                  gradient: const LinearGradient(colors: [Color(0xFF0B2545), Color(0xFF2563EB)]),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -721,7 +721,7 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
                           child: Container(
                             width: 18, height: 18,
                             decoration: const BoxDecoration(
-                              color: Color(0xFF10B981), shape: BoxShape.circle,
+                              color: Color(0xFF1F8A70), shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.verified, color: Colors.white, size: 12),
                           ),
@@ -937,7 +937,7 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => _selectBidder(bidderId, bidderName),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E3A8A),
+                    backgroundColor: const Color(0xFF0B2545),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

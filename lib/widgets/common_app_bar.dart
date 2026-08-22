@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../utils/navigation_utils.dart';
 import '../screens/notification/notification_screen.dart';
+import '../theme/business_theme.dart';
 
 class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -24,63 +25,18 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF222B45),
-        ),
-      ),
-      backgroundColor: Colors.white,
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFEAF2FF), Colors.white],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-      ),
+      title: Text(title),
       leading: showBackButton
           ? IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4F8CFF).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.arrow_back_ios,
-                  size: 20,
-                  color: Color(0xFF4F8CFF),
-                ),
-              ),
-              onPressed: () {
-                // 뒤로가기 대신 역할별 홈으로 이동
-                NavigationUtils.navigateToRoleHome(context);
-              },
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              onPressed: () => NavigationUtils.navigateToRoleHome(context),
             )
           : null,
       actions: [
-        if (showNotificationButton)
-          _NotificationButton(),
+        if (showNotificationButton) const _NotificationButton(),
         if (showHomeButton)
           IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF4F8CFF).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.home,
-                size: 20,
-                color: Color(0xFF4F8CFF),
-              ),
-            ),
+            icon: const Icon(Icons.home_outlined),
             onPressed: () => NavigationUtils.navigateToRoleHome(context),
           ),
         if (actions != null) ...actions!,
@@ -92,7 +48,6 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
-/// 알림 버튼 위젯 (배지 포함)
 class _NotificationButton extends StatefulWidget {
   const _NotificationButton();
 
@@ -113,19 +68,11 @@ class _NotificationButtonState extends State<_NotificationButton> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final userId = authService.currentUser?.id;
-      
       if (userId == null) return;
-      
-      final notificationService = NotificationService();
-      final count = await notificationService.getUnreadCount(userId);
-      
-      if (mounted) {
-        setState(() {
-          _unreadCount = count;
-        });
-      }
+      final count = await NotificationService().getUnreadCount(userId);
+      if (mounted) setState(() => _unreadCount = count);
     } catch (e) {
-      print('❌ [NotificationButton] 읽지 않은 알림 개수 로드 실패: $e');
+      debugPrint('❌ [NotificationButton] 읽지 않은 알림 개수 로드 실패: $e');
     }
   }
 
@@ -135,38 +82,24 @@ class _NotificationButtonState extends State<_NotificationButton> {
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF4F8CFF).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.notifications_rounded,
-              size: 20,
-              color: Color(0xFF4F8CFF),
-            ),
-          ),
+          const Icon(Icons.notifications_outlined),
           if (_unreadCount > 0)
             Positioned(
-              right: -4,
-              top: -4,
+              right: -2,
+              top: -2,
               child: Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(3),
                 decoration: const BoxDecoration(
-                  color: Colors.red,
+                  color: BusinessTheme.danger,
                   shape: BoxShape.circle,
                 ),
-                constraints: const BoxConstraints(
-                  minWidth: 18,
-                  minHeight: 18,
-                ),
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 child: Center(
                   child: Text(
                     _unreadCount > 99 ? '99+' : '$_unreadCount',
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -178,14 +111,10 @@ class _NotificationButtonState extends State<_NotificationButton> {
       onPressed: () async {
         await Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const NotificationScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const NotificationScreen()),
         );
-        // 알림 화면에서 돌아오면 읽지 않은 개수 다시 로드
         _loadUnreadCount();
       },
     );
   }
 }
- 

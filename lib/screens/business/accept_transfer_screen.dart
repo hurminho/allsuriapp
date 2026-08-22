@@ -4,6 +4,8 @@ import '../../services/auth_service.dart';
 import '../../services/job_service.dart';
 import '../../services/payment_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../theme/business_theme.dart';
+import '../../widgets/business/business_status_badge.dart';
 
 class AcceptTransferScreen extends StatefulWidget {
   final String jobId;
@@ -19,7 +21,10 @@ class _AcceptTransferScreenState extends State<AcceptTransferScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Theme(
+      data: BusinessTheme.theme(Theme.of(context)),
+      child: Scaffold(
+      backgroundColor: BusinessTheme.background,
       appBar: AppBar(title: const Text('이관 수락 및 결제')),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: Supabase.instance.client
@@ -40,6 +45,8 @@ class _AcceptTransferScreenState extends State<AcceptTransferScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const BusinessStatusBadge(label: '이관 대기', color: BusinessTheme.warning),
+                const SizedBox(height: 12),
                 Text(title, style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 8),
                 Text(desc, style: Theme.of(context).textTheme.bodyMedium),
@@ -97,7 +104,7 @@ class _AcceptTransferScreenState extends State<AcceptTransferScreen> {
           );
         },
       ),
-    );
+    ));
   }
 }
 

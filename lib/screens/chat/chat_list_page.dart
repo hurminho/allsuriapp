@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:allsuriapp/widgets/loading_indicator.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
+import '../../theme/business_theme.dart';
 import '../chat_screen.dart';
 
 class ChatListPage extends StatefulWidget {
@@ -50,14 +51,21 @@ class _ChatListPageState extends State<ChatListPage> {
       builder: (context, authService, child) {
         final user = authService.currentUser;
         if (user == null) {
-          return CupertinoPageScaffold(
-            navigationBar: const CupertinoNavigationBar(middle: Text('채팅')),
-            child: SafeArea(child: _buildLoginGuide(context)),
-          );
+        return Scaffold(
+          backgroundColor: BusinessTheme.background,
+          appBar: AppBar(title: const Text('채팅')),
+          body: SafeArea(child: _buildLoginGuide(context)),
+        );
         }
-        return CupertinoPageScaffold(
-          navigationBar: const CupertinoNavigationBar(middle: Text('채팅')),
-          child: SafeArea(child: _buildChatList(context)),
+        return Scaffold(
+          backgroundColor: BusinessTheme.background,
+          appBar: AppBar(
+            title: const Text('채팅'),
+            actions: [
+              IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadChatRooms),
+            ],
+          ),
+          body: SafeArea(child: _buildChatList(context)),
         );
       },
     );

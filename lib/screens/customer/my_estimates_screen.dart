@@ -130,7 +130,6 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('내 견적 관리'),
-        backgroundColor: Theme.of(context).colorScheme.surface,
       ),
       body: _buildBody(),
       bottomNavigationBar: _buildBottomNavigationBar(),
@@ -583,18 +582,20 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
   }
 
   void _showEstimateList(Order order, List<Estimate> estimates) {
-    showCupertinoModalPopup(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(
-          middle: Text('${order.title} 견적'),
-          leading: CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => Navigator.pop(context),
-            child: const Text('닫기'),
+      isScrollControlled: true,
+      builder: (context) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text('${order.title} 견적'),
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-        ),
-        child: SafeArea(
+        body: SafeArea(
           child: ListView.builder(
             itemCount: estimates.length,
             itemBuilder: (context, index) {
@@ -756,6 +757,7 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
             },
           ),
         ),
+      ),
       ),
     );
   }

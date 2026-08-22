@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+import '../../theme/business_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/order_service.dart';
 import '../../services/estimate_service.dart';
@@ -85,31 +87,24 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('고객 대시보드'),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: () {
-            // 홈 화면으로 이동
-            Navigator.pushAndRemoveUntil(
-              context,
-              CupertinoPageRoute(
-                builder: (context) => const HomeScreen(),
-              ),
-              (route) => false, // 모든 이전 화면 제거
-            );
-          },
-          child: const Text(
-            '홈',
-            style: TextStyle(
-              color: CupertinoColors.systemBlue,
-              fontSize: 16,
-            ),
+    return Scaffold(
+      backgroundColor: BusinessTheme.background,
+      appBar: AppBar(
+        title: const Text('고객 대시보드'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
+            },
+            child: const Text('홈', style: TextStyle(color: Colors.white)),
           ),
-        ),
+        ],
       ),
-      child: SafeArea(
+      body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(

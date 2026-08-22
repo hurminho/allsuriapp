@@ -139,7 +139,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         children: [
           Icon(
             isForced ? Icons.warning_amber_rounded : Icons.system_update_rounded,
-            color: isForced ? const Color(0xFFDC2626) : const Color(0xFF1A73E8),
+            color: isForced ? const Color(0xFFDC2626) : const Color(0xFF2E74B5),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -172,7 +172,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         ElevatedButton(
           onPressed: _isProcessing ? null : _handleUpdateTap,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1A73E8),
+            backgroundColor: const Color(0xFF2E74B5),
             foregroundColor: Colors.white,
           ),
           child: _isProcessing

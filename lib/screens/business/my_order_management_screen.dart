@@ -6,6 +6,9 @@ import '../../services/chat_service.dart'; // 추가
 import '../../services/marketplace_service.dart'; // 추가
 import '../../services/kakao_share_service.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../theme/business_theme.dart';
+import '../../widgets/business/business_filter_chip.dart';
+import '../../widgets/business/business_empty_state.dart';
 import '../business/order_bidders_screen.dart';
 import '../business/order_review_screen.dart';
 import '../business/order_process_screen.dart';
@@ -367,27 +370,21 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
   Widget build(BuildContext context) {
     final me = context.read<AuthService>().currentUser?.id ?? '';
     
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+    return Theme(
+      data: BusinessTheme.theme(Theme.of(context)),
+      child: Scaffold(
+      backgroundColor: BusinessTheme.background,
       appBar: AppBar(
-        title: const Text(
-          '내 오더 관리',
-          style: TextStyle(
-            color: Color(0xFF1E3A8A),
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
+        title: const Text('내 오더 관리'),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF1E3A8A)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E3A8A)),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadMyOrders,
             tooltip: '새로고침',
           ),
@@ -418,7 +415,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 ),
               ],
             ),
-    );
+    ));
   }
 
   Widget _buildFilterChips() {
@@ -435,42 +432,28 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     }).length;
 
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '필터',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildChip('전체', 'all', Icons.dashboard_outlined, _myOrders.length),
-                const SizedBox(width: 10),
-                _buildChip('입찰 대기', 'pending', Icons.schedule, pendingCount),
-                const SizedBox(width: 10),
-                _buildChip('진행 중', 'in_progress', Icons.construction_outlined, inProgressCount),
-                const SizedBox(width: 10),
-                _buildChip('완료', 'completed', Icons.check_circle_outline, completedCount),
-              ],
-            ),
-          ),
-        ],
+      color: BusinessTheme.surface,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            BusinessFilterChip(label: '전체', selected: _filter == 'all', count: _myOrders.length, onTap: () => setState(() => _filter = 'all')),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '입찰 대기', selected: _filter == 'pending', count: pendingCount, onTap: () => setState(() => _filter = 'pending')),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '작업 진행', selected: _filter == 'in_progress', count: inProgressCount, onTap: () => setState(() => _filter = 'in_progress')),
+            const SizedBox(width: 8),
+            BusinessFilterChip(label: '완료', selected: _filter == 'completed', count: completedCount, onTap: () => setState(() => _filter = 'completed')),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildChip(String label, String value, IconData icon, int count) {
     final isSelected = _filter == value;
-    final color = const Color(0xFFF57C00); // Orange for orders
+    final color = const Color(0xFFE6A700); // Orange for orders
     
     return GestureDetector(
       onTap: () => setState(() => _filter = value),
@@ -608,11 +591,11 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: isHighlighted 
-            ? Border.all(color: const Color(0xFF1E3A8A), width: 3)
+            ? Border.all(color: const Color(0xFF0B2545), width: 3)
             : Border.all(color: Colors.grey[200]!, width: 1),
         boxShadow: isHighlighted ? [
           BoxShadow(
-            color: const Color(0xFF1E3A8A).withOpacity(0.3),
+            color: const Color(0xFF0B2545).withOpacity(0.3),
             blurRadius: 12,
             spreadRadius: 2,
           ),
@@ -660,7 +643,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 if (listingId.isNotEmpty && selectedBidderId == null)
                   IconButton(
                     onPressed: () => _shareOrder(order),
-                    icon: const Icon(Icons.share_outlined, color: Color(0xFF1E3A8A), size: 22),
+                    icon: const Icon(Icons.share_outlined, color: Color(0xFF0B2545), size: 22),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
@@ -680,7 +663,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                         ),
                       ),
                     ),
-                    icon: const Icon(Icons.timeline_rounded, color: Color(0xFF1E3A8A), size: 22),
+                    icon: const Icon(Icons.timeline_rounded, color: Color(0xFF0B2545), size: 22),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
@@ -705,7 +688,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E3A8A),
+                      color: Color(0xFF0B2545),
                     ),
                   ),
               ],
@@ -717,7 +700,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
-                color: Color(0xFF1E3A8A),
+                color: Color(0xFF0B2545),
                 height: 1.3,
               ),
             ),
@@ -806,7 +789,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                   alignment: Alignment.centerRight,
                   child: IconButton(
                     onPressed: () => _openChatWithBidder(listingId, title, completedBy ?? selectedBidderId ?? claimedBy),
-                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF1E3A8A)),
+                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF0B2545)),
                     tooltip: '채팅',
                   ),
                 ),
@@ -927,7 +910,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
+                    backgroundColor: const Color(0xFF1F8A70),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     elevation: 0,
@@ -955,7 +938,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                   alignment: Alignment.centerRight,
                   child: IconButton(
                     onPressed: () => _openChatWithBidder(listingId, title, selectedBidderId ?? claimedBy),
-                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF1E3A8A)),
+                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF0B2545)),
                     tooltip: '채팅',
                   ),
                 ),
@@ -975,7 +958,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w600)
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1E3A8A),
+                        backgroundColor: const Color(0xFF0B2545),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -1301,7 +1284,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: const Color(0xFF1F8A70),
               foregroundColor: Colors.white,
             ),
             child: const Text('완료하기'),

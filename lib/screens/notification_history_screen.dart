@@ -137,7 +137,6 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         title: const Text('알림', style: TextStyle(fontWeight: FontWeight.w600)),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
