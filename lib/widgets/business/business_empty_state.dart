@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../theme/business_theme.dart';
 import 'business_primary_button.dart';
+import 'business_tokens.dart';
 
 class BusinessEmptyState extends StatelessWidget {
   final IconData icon;
@@ -30,10 +30,10 @@ class BusinessEmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: const BoxDecoration(
-                color: BusinessTheme.lightBlue,
+                color: BusinessTokens.blueLight,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 36, color: BusinessTheme.blue),
+              child: Icon(icon, size: 36, color: BusinessTokens.blue),
             ),
             const SizedBox(height: 16),
             Text(
@@ -42,7 +42,7 @@ class BusinessEmptyState extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: BusinessTheme.textPrimary,
+                color: BusinessTokens.text,
               ),
             ),
             if (subtitle != null) ...[
@@ -52,7 +52,7 @@ class BusinessEmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
-                  color: BusinessTheme.textMuted,
+                  color: BusinessTokens.mutedText,
                   height: 1.4,
                 ),
               ),
@@ -84,16 +84,19 @@ class BusinessListSkeleton extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (_, __) => Container(
         height: 128,
-        decoration: BusinessTheme.cardDecoration(),
+        decoration: BusinessTokens.card(),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(width: 72, height: 16, color: BusinessTheme.lightBlue),
+            Container(width: 72, height: 16, color: BusinessTokens.blueLight),
             const SizedBox(height: 12),
-            Container(width: double.infinity, height: 18, color: BusinessTheme.lightBlue),
+            Container(
+                width: double.infinity,
+                height: 18,
+                color: BusinessTokens.blueLight),
             const SizedBox(height: 8),
-            Container(width: 180, height: 14, color: BusinessTheme.lightBlue),
+            Container(width: 180, height: 14, color: BusinessTokens.blueLight),
           ],
         ),
       ),

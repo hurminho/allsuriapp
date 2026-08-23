@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:lottie/lottie.dart';
-import '../../widgets/shimmer_widgets.dart';
 import '../../models/estimate.dart';
-import '../../providers/estimate_provider.dart';
 import '../../services/estimate_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
@@ -12,9 +10,13 @@ import '../../services/payment_service.dart';
 import '../chat_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // Call(마켓) 분리는 홈의 별도 버튼로 이동
-import '../../theme/business_theme.dart';
+import '../../widgets/business/business_app_shell.dart';
 import '../../widgets/business/business_empty_state.dart';
 import '../../widgets/business/business_filter_chip.dart';
+import '../../widgets/business/business_primary_button.dart';
+import '../../widgets/business/business_section_header.dart';
+import '../../widgets/business/business_status_chip.dart';
+import '../../widgets/business/business_tokens.dart';
 
 // 통합 아이템 제거 (고객 견적만 관리)
 
@@ -35,26 +37,27 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
   List<Estimate> _estimates = [];
   bool _isLoading = true;
   String _selectedStatus = 'all';
+  String? _loadError;
   // type 필터 제거 (고객 견적만)
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _estimateService = Provider.of<EstimateService>(context, listen: false);
-    
+
     // 🔒 사업자 승인 상태 확인
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkBusinessApproval();
     });
-    
+
     _loadEstimates();
   }
-  
+
   /// 🔒 사업자 승인 상태 확인
   void _checkBusinessApproval() {
     final authService = Provider.of<AuthService>(context, listen: false);
     final user = authService.currentUser;
-    
+
     if (user == null) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -65,7 +68,7 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
       );
       return;
     }
-    
+
     if (user.role != 'business') {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -76,7 +79,7 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
       );
       return;
     }
-    
+
     if (user.businessStatus != 'approved') {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,14 +95,20 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
 
   Future<void> _loadEstimates() async {
     try {
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+          _loadError = null;
+        });
+      }
       final authService = Provider.of<AuthService>(context, listen: false);
       final technicianId = authService.currentUser?.id;
       if (technicianId == null) {
         throw Exception('User not logged in');
       }
-      setState(() => _isLoading = true);
       await _estimateService.loadEstimates(businessId: technicianId);
       final estimates = _estimateService.estimates;
+      if (!mounted) return;
       setState(() {
         _estimates = estimates;
         _isLoading = false;
@@ -109,8 +118,11 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
       });
     } catch (e) {
       print('Error loading estimates: $e');
-      setState(() => _isLoading = false);
       if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadError = '수주 목록을 불러오지 못했습니다.';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('견적 목록을 불러오는 중 오류가 발생했습니다: $e')),
         );
@@ -123,7 +135,8 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
       return _estimates;
     }
     return _estimates
-        .where((estimate) => (estimate.status).toLowerCase() == _selectedStatus.toLowerCase())
+        .where((estimate) =>
+            (estimate.status).toLowerCase() == _selectedStatus.toLowerCase())
         .toList();
   }
 
@@ -206,7 +219,7 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
               );
         }
       } catch (_) {}
-      
+
       // 채팅방 활성화
       final chatService = ChatService();
       await chatService.activateChatRoom(estimate.id, estimate.businessId);
@@ -239,49 +252,56 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: BusinessTheme.theme(Theme.of(context)),
-      child: Scaffold(
-      backgroundColor: BusinessTheme.background,
-      appBar: AppBar(
-        title: const Text('견적 관리'),
-        centerTitle: true,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
+    return BusinessAppShell(
+      title: '수주 관리',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded),
+          onPressed: _loadEstimates,
+          tooltip: '새로고침',
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadEstimates,
-            tooltip: '새로고침',
-          ),
-        ],
-      ),
+      ],
       body: Column(
         children: [
           _buildModernFilterChips(),
           Expanded(
-            child: _isLoading
-                ? const ShimmerList(itemCount: 6, itemHeight: 110)
-                : _filteredEstimates.isEmpty
-                    ? const BusinessEmptyState(
-                        icon: Icons.folder_open_outlined,
-                        title: '견적이 없습니다',
-                        subtitle: '고객 견적 요청에 응답해보세요',
-                      )
-                    : ListView.builder(
-                        itemCount: _filteredEstimates.length,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        itemBuilder: (context, index) {
-                          return _buildModernEstimateCard(_filteredEstimates[index]);
-                        },
-                      ),
+            child: _loadError != null
+                ? BusinessEmptyState(
+                    icon: Icons.cloud_off_outlined,
+                    title: '수주 내역을 불러오지 못했습니다',
+                    subtitle: _loadError,
+                    actionLabel: '다시 시도',
+                    onAction: _loadEstimates,
+                  )
+                : _isLoading
+                    ? const BusinessListSkeleton()
+                    : _filteredEstimates.isEmpty
+                        ? const BusinessEmptyState(
+                            icon: Icons.folder_open_outlined,
+                            title: '해당 상태의 수주가 없습니다',
+                            subtitle: '입찰 상태가 변경되면 여기에 표시됩니다.',
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadEstimates,
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemCount: _filteredEstimates.length,
+                              padding: const EdgeInsets.all(
+                                BusinessTokens.pagePadding,
+                              ),
+                              separatorBuilder: (_, __) => const SizedBox(
+                                height: BusinessTokens.space12,
+                              ),
+                              itemBuilder: (context, index) =>
+                                  _buildModernEstimateCard(
+                                _filteredEstimates[index],
+                              ),
+                            ),
+                          ),
           ),
         ],
       ),
-    ));
+    );
   }
 
   void _showCheck() {
@@ -292,7 +312,10 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
       transitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (_, __, ___) {
         return Center(
-          child: SizedBox(width: 140, height: 140, child: Lottie.asset('assets/lottie/check.json', repeat: false)),
+          child: SizedBox(
+              width: 140,
+              height: 140,
+              child: Lottie.asset('assets/lottie/check.json', repeat: false)),
         );
       },
     );
@@ -305,35 +328,89 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
 
   Widget _buildModernFilterChips() {
     return Container(
-      color: BusinessTheme.surface,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            BusinessFilterChip(label: '전체', selected: _selectedStatus == 'all', count: _estimates.length, onTap: () => setState(() => _selectedStatus = 'all')),
-            const SizedBox(width: 8),
-            BusinessFilterChip(label: '입찰 대기', selected: _selectedStatus == Estimate.STATUS_PENDING, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_PENDING)),
-            const SizedBox(width: 8),
-            BusinessFilterChip(label: '채택됨', selected: _selectedStatus == Estimate.STATUS_AWARDED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_AWARDED)),
-            const SizedBox(width: 8),
-            BusinessFilterChip(label: '작업 진행', selected: _selectedStatus == Estimate.STATUS_ACCEPTED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_ACCEPTED)),
-            const SizedBox(width: 8),
-            BusinessFilterChip(label: '완료', selected: _selectedStatus == Estimate.STATUS_COMPLETED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_COMPLETED)),
-            const SizedBox(width: 8),
-            BusinessFilterChip(label: '미선정', selected: _selectedStatus == Estimate.STATUS_REJECTED, onTap: () => setState(() => _selectedStatus = Estimate.STATUS_REJECTED)),
-          ],
-        ),
+      width: double.infinity,
+      color: BusinessTokens.surface,
+      padding: const EdgeInsets.fromLTRB(
+        BusinessTokens.pagePadding,
+        BusinessTokens.space12,
+        BusinessTokens.pagePadding,
+        BusinessTokens.space12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const BusinessSectionHeader(
+            title: '수주 상태',
+            subtitle: '상태별 입찰 및 작업 진행 내역입니다.',
+          ),
+          const SizedBox(height: BusinessTokens.space12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                BusinessFilterChip(
+                  label: '전체',
+                  selected: _selectedStatus == 'all',
+                  count: _estimates.length,
+                  onTap: () => setState(() => _selectedStatus = 'all'),
+                ),
+                const SizedBox(width: BusinessTokens.space8),
+                BusinessFilterChip(
+                  label: '대기',
+                  selected: _selectedStatus == Estimate.STATUS_PENDING,
+                  onTap: () => setState(
+                    () => _selectedStatus = Estimate.STATUS_PENDING,
+                  ),
+                ),
+                const SizedBox(width: BusinessTokens.space8),
+                BusinessFilterChip(
+                  label: '채택',
+                  selected: _selectedStatus == Estimate.STATUS_AWARDED,
+                  onTap: () => setState(
+                    () => _selectedStatus = Estimate.STATUS_AWARDED,
+                  ),
+                ),
+                const SizedBox(width: BusinessTokens.space8),
+                BusinessFilterChip(
+                  label: '진행',
+                  selected: _selectedStatus == Estimate.STATUS_ACCEPTED,
+                  onTap: () => setState(
+                    () => _selectedStatus = Estimate.STATUS_ACCEPTED,
+                  ),
+                ),
+                const SizedBox(width: BusinessTokens.space8),
+                BusinessFilterChip(
+                  label: '완료',
+                  selected: _selectedStatus == Estimate.STATUS_COMPLETED,
+                  onTap: () => setState(
+                    () => _selectedStatus = Estimate.STATUS_COMPLETED,
+                  ),
+                ),
+                const SizedBox(width: BusinessTokens.space8),
+                BusinessFilterChip(
+                  label: '미선정',
+                  selected: _selectedStatus == Estimate.STATUS_REJECTED,
+                  onTap: () => setState(
+                    () => _selectedStatus = Estimate.STATUS_REJECTED,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildModernFilterChip(String label, String status, IconData icon, Color color) {
+  Widget _buildModernFilterChip(
+      String label, String status, IconData icon, Color color) {
     final isSelected = _selectedStatus == status;
-    final count = status == 'all' 
-        ? _estimates.length 
-        : _estimates.where((e) => e.status.toLowerCase() == status.toLowerCase()).length;
-    
+    final count = status == 'all'
+        ? _estimates.length
+        : _estimates
+            .where((e) => e.status.toLowerCase() == status.toLowerCase())
+            .length;
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -381,7 +458,9 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isSelected ? Colors.white.withOpacity(0.3) : color.withOpacity(0.15),
+                  color: isSelected
+                      ? Colors.white.withOpacity(0.3)
+                      : color.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -401,148 +480,350 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
   }
 
   Widget _buildModernEstimateCard(Estimate estimate) {
-    // 상태별 색상
-    Color statusColor;
-    Color statusBg;
-    IconData statusIcon;
-    String statusLabel;
-    
-    switch (estimate.status.toLowerCase()) {
-      case 'pending':
-        statusColor = const Color(0xFFE6A700);
-        statusBg = const Color(0xFFFFF3E0);
-        statusIcon = Icons.pending_outlined;
-        statusLabel = '대기중';
-        break;
-      case 'awarded':
-        statusColor = const Color(0xFF1F8A70);
-        statusBg = const Color(0xFFE8F5E9);
-        statusIcon = Icons.check_circle_outline;
-        statusLabel = '선택됨';
-        break;
-      case 'rejected':
-        statusColor = const Color(0xFFD32F2F);
-        statusBg = const Color(0xFFFFEBEE);
-        statusIcon = Icons.cancel_outlined;
-        statusLabel = '거절됨';
-        break;
-      case 'completed':
-        statusColor = const Color(0xFF2E74B5);
-        statusBg = const Color(0xFFE3F2FD);
-        statusIcon = Icons.task_alt_rounded;
-        statusLabel = '완료';
-        break;
-      default:
-        statusColor = Colors.grey[700]!;
-        statusBg = Colors.grey[100]!;
-        statusIcon = Icons.help_outline;
-        statusLabel = '기타';
-    }
-    
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: BusinessTokens.card(),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => _showEstimateDetails(estimate),
+          borderRadius: BorderRadius.circular(BusinessTokens.cardRadius),
+          onTap: () => _showBusinessEstimateDetails(estimate),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(BusinessTokens.space16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    // Status badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: statusBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(statusIcon, size: 14, color: statusColor),
-                          const SizedBox(width: 4),
-                          Text(
-                            statusLabel,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: statusColor,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    BusinessStatusChip.forEstimate(estimate.status),
                     const Spacer(),
-                    // Amount
                     Text(
-                      NumberFormat.currency(locale: 'ko_KR', symbol: '₩').format(estimate.amount),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2E74B5),
+                      _formatWon(estimate.amount),
+                      style: BusinessTokens.title.copyWith(
+                        color: BusinessTokens.navy,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  estimate.description.isNotEmpty ? estimate.description : '견적 설명 없음',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
+                if (estimate.customerName.isNotEmpty) ...[
+                  const SizedBox(height: BusinessTokens.space12),
+                  Text(
+                    estimate.customerName,
+                    style: BusinessTokens.sectionTitle,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.person_outline, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      estimate.customerName,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ],
+                if (estimate.equipmentType.isNotEmpty) ...[
+                  const SizedBox(height: BusinessTokens.space4),
+                  Text(estimate.equipmentType, style: BusinessTokens.caption),
+                ],
+                if (estimate.description.isNotEmpty) ...[
+                  const SizedBox(height: BusinessTokens.space8),
+                  Text(
+                    estimate.description,
+                    style: BusinessTokens.body.copyWith(
+                      color: BusinessTokens.mutedText,
                     ),
-                    const SizedBox(width: 16),
-                    Icon(Icons.category_outlined, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      estimate.equipmentType,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: BusinessTokens.space12),
+                Wrap(
+                  spacing: BusinessTokens.space16,
+                  runSpacing: BusinessTokens.space8,
+                  children: [
+                    _cardMeta(
+                      Icons.calendar_today_outlined,
+                      _formatDate(estimate.visitDate),
+                    ),
+                    _cardMeta(
+                      Icons.schedule_outlined,
+                      '예상 ${estimate.estimatedDays}일',
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.access_time_outlined, size: 14, color: Colors.grey[500]),
-                    const SizedBox(width: 4),
-                    Text(
-                      DateFormat('yyyy-MM-dd HH:mm').format(estimate.createdAt),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
+                const SizedBox(height: BusinessTokens.space16),
+                BusinessPrimaryButton(
+                  label: '상세 보기',
+                  icon: Icons.arrow_forward_rounded,
+                  onPressed: () => _showBusinessEstimateDetails(estimate),
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _cardMeta(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: BusinessTokens.mutedText),
+        const SizedBox(width: BusinessTokens.space4),
+        Text(text, style: BusinessTokens.caption),
+      ],
+    );
+  }
+
+  String _formatWon(double amount) {
+    final formatted = amount.toStringAsFixed(0).replaceAllMapped(
+          RegExp(r'\B(?=(\d{3})+(?!\d))'),
+          (match) => ',',
+        );
+    return '$formatted원';
+  }
+
+  String _formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}.$month.$day';
+  }
+
+  void _showBusinessEstimateDetails(Estimate estimate) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: BusinessTokens.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(BusinessTokens.cardRadius),
+        ),
+      ),
+      builder: (sheetContext) {
+        return FractionallySizedBox(
+          heightFactor: 0.9,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    BusinessTokens.space16,
+                    BusinessTokens.space12,
+                    BusinessTokens.space8,
+                    BusinessTokens.space12,
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text('수주 상세', style: BusinessTokens.title),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        tooltip: '닫기',
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: BusinessTokens.border),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(
+                      BusinessTokens.pagePadding,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            BusinessStatusChip.forEstimate(estimate.status),
+                            const Spacer(),
+                            Text(
+                              _formatDate(estimate.createdAt),
+                              style: BusinessTokens.caption,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: BusinessTokens.space16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(
+                            BusinessTokens.space16,
+                          ),
+                          decoration: BusinessTokens.card(
+                            color: BusinessTokens.blueLight,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '입찰 금액',
+                                style: BusinessTokens.caption,
+                              ),
+                              const SizedBox(
+                                height: BusinessTokens.space4,
+                              ),
+                              Text(
+                                _formatWon(estimate.amount),
+                                style: BusinessTokens.title.copyWith(
+                                  color: BusinessTokens.navy,
+                                  fontSize: 24,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: BusinessTokens.space16),
+                        _businessDetailSection(
+                          title: '고객 및 작업',
+                          children: [
+                            if (estimate.customerName.isNotEmpty)
+                              _businessDetailRow(
+                                '고객',
+                                estimate.customerName,
+                              ),
+                            if (estimate.equipmentType.isNotEmpty)
+                              _businessDetailRow(
+                                '설비',
+                                estimate.equipmentType,
+                              ),
+                            _businessDetailRow(
+                              '예상 소요',
+                              '${estimate.estimatedDays}일',
+                            ),
+                          ],
+                        ),
+                        if (estimate.description.isNotEmpty) ...[
+                          const SizedBox(height: BusinessTokens.space16),
+                          _businessDetailSection(
+                            title: '작업 안내 메시지',
+                            children: [
+                              Text(
+                                estimate.description,
+                                style: BusinessTokens.body,
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: BusinessTokens.space16),
+                        _businessDetailSection(
+                          title: '일정',
+                          children: [
+                            _businessDetailRow(
+                              '제출일',
+                              DateFormat('yyyy.MM.dd HH:mm')
+                                  .format(estimate.createdAt),
+                            ),
+                            _businessDetailRow(
+                              '방문 예정일',
+                              DateFormat('yyyy.MM.dd')
+                                  .format(estimate.visitDate),
+                            ),
+                            if (estimate.awardedAt != null)
+                              _businessDetailRow(
+                                '낙찰일',
+                                DateFormat('yyyy.MM.dd')
+                                    .format(estimate.awardedAt!),
+                              ),
+                          ],
+                        ),
+                        if (estimate.mediaUrls?.isNotEmpty ?? false) ...[
+                          const SizedBox(height: BusinessTokens.space16),
+                          _businessDetailSection(
+                            title: '첨부 사진',
+                            children: [
+                              SizedBox(
+                                height: 96,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: estimate.mediaUrls!.length,
+                                  separatorBuilder: (_, __) => const SizedBox(
+                                    width: BusinessTokens.space8,
+                                  ),
+                                  itemBuilder: (_, index) => ClipRRect(
+                                    borderRadius: BorderRadius.circular(
+                                      BusinessTokens.controlRadius,
+                                    ),
+                                    child: Image.network(
+                                      estimate.mediaUrls![index],
+                                      width: 96,
+                                      height: 96,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 96,
+                                        height: 96,
+                                        color: BusinessTokens.blueLight,
+                                        alignment: Alignment.center,
+                                        child: const Icon(
+                                          Icons.broken_image_outlined,
+                                          color: BusinessTokens.mutedText,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(BusinessTokens.space16),
+                  decoration: const BoxDecoration(
+                    color: BusinessTokens.surface,
+                    border: Border(
+                      top: BorderSide(color: BusinessTokens.border),
+                    ),
+                  ),
+                  child: BusinessPrimaryButton(
+                    label: '닫기',
+                    secondary: true,
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _businessDetailSection({
+    required String title,
+    required List<Widget> children,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(BusinessTokens.space16),
+      decoration: BusinessTokens.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: BusinessTokens.sectionTitle),
+          const SizedBox(height: BusinessTokens.space12),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _businessDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: BusinessTokens.space12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 84,
+            child: Text(label, style: BusinessTokens.caption),
+          ),
+          const SizedBox(width: BusinessTokens.space12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: BusinessTokens.body.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -567,13 +848,18 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                       Text(
                         // 제목: 주문의 title을 표시하려면 orderId로 조회 필요. 간단히 설명 첫 줄 사용
                         estimate.description.split('\n').first,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        estimate.amount != null ? currencyFormat.format(estimate.amount) : '금액 없음',
+                        estimate.amount != null
+                            ? currencyFormat.format(estimate.amount)
+                            : '금액 없음',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Colors.blue.shade700,
@@ -618,35 +904,44 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () async {
                         // Call 공사: 원 사업자(posted_by)와 채팅방 연결
-                        final listing = await _fetchListingPoster(estimate.orderId);
+                        final listing =
+                            await _fetchListingPoster(estimate.orderId);
                         final postedBy = listing['postedBy'] ?? '';
                         final listingId = listing['listingId'] ?? '';
                         if (postedBy.isEmpty) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('채팅 상대 정보를 찾을 수 없습니다.')),
+                              const SnackBar(
+                                  content: Text('채팅 상대 정보를 찾을 수 없습니다.')),
                             );
                           }
                           return;
                         }
                         final me = context.read<AuthService>().currentUser?.id;
                         if (me == null || me.isEmpty) return;
-                        final roomKey = listingId.isNotEmpty ? 'call_$listingId' : 'call_${estimate.orderId}';
+                        final roomKey = listingId.isNotEmpty
+                            ? 'call_$listingId'
+                            : 'call_${estimate.orderId}';
                         String chatRoomId = '';
                         try {
-                          chatRoomId = await ChatService().createChatRoom(roomKey, postedBy, me, estimateId: estimate.id);
+                          chatRoomId = await ChatService().createChatRoom(
+                              roomKey, postedBy, me,
+                              estimateId: estimate.id);
                         } catch (_) {}
                         if (!mounted) return;
                         if (chatRoomId.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('채팅방 생성에 실패했습니다. 다시 시도해 주세요.')),
+                            const SnackBar(
+                                content: Text('채팅방 생성에 실패했습니다. 다시 시도해 주세요.')),
                           );
                           return;
                         }
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => ChatScreen(chatRoomId: chatRoomId, chatRoomTitle: '원 사업자와 채팅'),
+                            builder: (_) => ChatScreen(
+                                chatRoomId: chatRoomId,
+                                chatRoomTitle: '원 사업자와 채팅'),
                           ),
                         );
                       },
@@ -699,7 +994,6 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
       return {'postedBy': '', 'listingId': ''};
     }
   }
-
 
   // Call UI 제거 시작
   // Call 관련 카드 제거됨
@@ -754,11 +1048,6 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
 
   void _showEstimateDetails(Estimate estimate) {
     final currencyFormat = NumberFormat.currency(locale: 'ko_KR', symbol: '₩');
-    
-    // 수수료 계산 (기본 5% 가정)
-    final commissionRate = 0.2; // 20%
-    final commissionAmount = estimate.amount * commissionRate;
-    final netAmount = estimate.amount - commissionAmount;
 
     showDialog(
       context: context,
@@ -802,16 +1091,20 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                         children: [
                           Text(
                             '견적 상세 정보',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade800,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade800,
+                                ),
                           ),
                           Text(
                             '견적 ID: ${estimate.id.substring(0, 8)}...',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey.shade600,
-                            ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey.shade600,
+                                    ),
                           ),
                         ],
                       ),
@@ -819,7 +1112,7 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                   ],
                 ),
               ),
-              
+
               // 스크롤 가능한 내용
               Expanded(
                 child: SingleChildScrollView(
@@ -837,70 +1130,39 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                             end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.blue.shade200, width: 1),
+                          border:
+                              Border.all(color: Colors.blue.shade200, width: 1),
                         ),
                         child: Column(
                           children: [
                             Text(
                               '견적 금액',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Colors.blue.shade700,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              estimate.amount != null ? currencyFormat.format(estimate.amount) : '금액 없음',
-                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // 수수료 정보 (새로 추가)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.account_balance_wallet,
-                                  size: 20,
-                                  color: Colors.orange.shade700,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '수수료 정보',
-                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.orange.shade700,
+                              estimate.amount != null
+                                  ? currencyFormat.format(estimate.amount)
+                                  : '금액 없음',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade800,
                                   ),
-                                ),
-                              ],
                             ),
-                            const SizedBox(height: 12),
-                            _buildInfoRow('수수료율', '${(commissionRate * 100).toInt()}%'),
-                            _buildInfoRow('수수료', currencyFormat.format(commissionAmount)),
-                            _buildInfoRow('실수령액', currencyFormat.format(netAmount)),
                           ],
                         ),
                       ),
-                      
                       const SizedBox(height: 16),
-                      
+
                       // 사업자 정보 섹션
                       _buildInfoSection(
                         title: '사업자 정보',
@@ -912,23 +1174,24 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                           _buildInfoRow('연락처', estimate.businessPhone),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // 견적 상세 정보 섹션
                       _buildInfoSection(
                         title: '견적 상세',
                         icon: Icons.assignment,
                         iconColor: Colors.orange.shade600,
                         children: [
-                          _buildInfoRow('예상 작업 기간', '${estimate.estimatedDays}일'),
+                          _buildInfoRow(
+                              '예상 작업 기간', '${estimate.estimatedDays}일'),
                           _buildInfoRow('설비 유형', estimate.equipmentType),
                           _buildInfoRow('상태', _getStatusText(estimate.status)),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // 견적 설명
                       Container(
                         width: double.infinity,
@@ -951,44 +1214,59 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
                                 const SizedBox(width: 8),
                                 Text(
                                   '견적 설명',
-                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade700,
+                                      ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
                             Text(
                               estimate.description,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey.shade800,
-                                height: 1.4,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Colors.grey.shade800,
+                                    height: 1.4,
+                                  ),
                             ),
                           ],
                         ),
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // 날짜 정보
                       _buildInfoSection(
                         title: '날짜 정보',
                         icon: Icons.calendar_today,
                         iconColor: Colors.purple.shade600,
                         children: [
-                          _buildInfoRow('제출일', DateFormat('yyyy년 MM월 dd일 HH:mm').format(estimate.createdAt)),
-                          _buildInfoRow('방문 예정일', DateFormat('yyyy년 MM월 dd일').format(estimate.visitDate)),
+                          _buildInfoRow(
+                              '제출일',
+                              DateFormat('yyyy년 MM월 dd일 HH:mm')
+                                  .format(estimate.createdAt)),
+                          _buildInfoRow(
+                              '방문 예정일',
+                              DateFormat('yyyy년 MM월 dd일')
+                                  .format(estimate.visitDate)),
                           if (estimate.awardedAt != null)
-                            _buildInfoRow('낙찰일', DateFormat('yyyy년 MM월 dd일').format(estimate.awardedAt!)),
+                            _buildInfoRow(
+                                '낙찰일',
+                                DateFormat('yyyy년 MM월 dd일')
+                                    .format(estimate.awardedAt!)),
                         ],
                       ),
                     ],
                   ),
                 ),
               ),
-              
+
               // 액션 버튼 (고정)
               Container(
                 padding: const EdgeInsets.all(24),
@@ -1073,9 +1351,9 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
               Text(
                 title,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade800,
-                ),
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
               ),
             ],
           ),
@@ -1098,9 +1376,9 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
             ),
           ),
           const SizedBox(width: 16),
@@ -1108,9 +1386,9 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
             child: Text(
               value,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade800,
-                fontWeight: FontWeight.w600,
-              ),
+                    color: Colors.grey.shade800,
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
           ),
         ],

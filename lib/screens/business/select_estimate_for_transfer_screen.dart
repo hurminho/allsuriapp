@@ -2,19 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/estimate.dart';
 import '../../providers/estimate_provider.dart';
-import '../../widgets/common_app_bar.dart';
-import '../../widgets/estimate_list_item.dart';
-import 'transfer_estimate_screen.dart';
+import '../../widgets/business/business_app_shell.dart';
+import '../../widgets/business/business_empty_state.dart';
+import '../../widgets/business/business_filter_chip.dart';
+import '../../widgets/business/business_section_header.dart';
+import '../../widgets/business/business_status_chip.dart';
+import '../../widgets/business/business_tokens.dart';
 import 'package:go_router/go_router.dart';
 
 class SelectEstimateForTransferScreen extends StatefulWidget {
   const SelectEstimateForTransferScreen({Key? key}) : super(key: key);
 
   @override
-  State<SelectEstimateForTransferScreen> createState() => _SelectEstimateForTransferScreenState();
+  State<SelectEstimateForTransferScreen> createState() =>
+      _SelectEstimateForTransferScreenState();
 }
 
-class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTransferScreen> {
+class _SelectEstimateForTransferScreenState
+    extends State<SelectEstimateForTransferScreen> {
   String _selectedStatus = 'All';
   bool _isLoading = false;
 
@@ -40,7 +45,8 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
     });
 
     try {
-      final estimateProvider = Provider.of<EstimateProvider>(context, listen: false);
+      final estimateProvider =
+          Provider.of<EstimateProvider>(context, listen: false);
       await estimateProvider.loadMyEstimates();
     } catch (e) {
       if (mounted) {
@@ -62,12 +68,14 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
 
   List<Estimate> _getFilteredEstimates(List<Estimate> estimates) {
     if (_selectedStatus == 'All') {
-      return estimates.where((estimate) => !estimate.isTransferEstimate).toList();
+      return estimates
+          .where((estimate) => !estimate.isTransferEstimate)
+          .toList();
     }
-    
+
     return estimates.where((estimate) {
       if (estimate.isTransferEstimate) return false;
-      
+
       switch (_selectedStatus) {
         case 'Pending':
           return estimate.status == Estimate.STATUS_PENDING;
@@ -83,29 +91,22 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: CommonAppBar(
-        title: '견적 이관하기',
-        showBackButton: true,
-        showHomeButton: true,
-      ),
+    return BusinessAppShell(
+      title: '협업 이관 견적 선택',
       body: Column(
         children: [
-          // 상태 필터
           Container(
-            padding: const EdgeInsets.all(16),
+            width: double.infinity,
+            color: BusinessTokens.surface,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '이관할 견적 선택',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF102A43),
-                  ),
+                const BusinessSectionHeader(
+                  title: '이관할 견적을 선택하세요',
+                  subtitle: '기존 견적을 동료 사업자에게 협업 이관합니다',
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -113,20 +114,14 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
                       final isSelected = _selectedStatus == status;
                       return Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
-                          label: Text(_getStatusLabel(status)),
+                        child: BusinessFilterChip(
+                          label: _getStatusLabel(status),
                           selected: isSelected,
-                          onSelected: (selected) {
+                          onTap: () {
                             setState(() {
                               _selectedStatus = status;
                             });
                           },
-                          backgroundColor: Colors.grey[200],
-                          selectedColor: const Color(0xFF2E74B5).withOpacity(0.2),
-                          labelStyle: TextStyle(
-                            color: isSelected ? const Color(0xFF2E74B5) : Colors.grey[700],
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
                         ),
                       );
                     }).toList(),
@@ -135,18 +130,16 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
               ],
             ),
           ),
-
-          // 견적 목록
           Expanded(
             child: Consumer<EstimateProvider>(
               builder: (context, estimateProvider, child) {
                 if (_isLoading) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const BusinessListSkeleton();
                 }
 
                 List<Estimate> myEstimates = [];
                 try {
-                  myEstimates = estimateProvider.myEstimates ?? [];
+                  myEstimates = estimateProvider.myEstimates;
                 } catch (e) {
                   // 예외 발생 시 빈 리스트로 처리
                   myEstimates = [];
@@ -159,142 +152,126 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
                 }
 
                 if (filteredEstimates.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.assignment_outlined,
-                          size: 64,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          (myEstimates.isEmpty)
-                              ? '제출한 견적이 없습니다.'
-                              : '선택한 상태의 견적이 없습니다.',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '먼저 견적을 제출한 후\n이관할 수 있습니다.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                    ),
+                  return BusinessEmptyState(
+                    icon: Icons.assignment_outlined,
+                    title: myEstimates.isEmpty
+                        ? '이관할 견적이 없습니다'
+                        : '선택한 상태의 견적이 없습니다',
+                    subtitle: '제출한 견적이 있으면 협업 이관을 진행할 수 있습니다.',
                   );
                 }
 
                 return RefreshIndicator(
                   onRefresh: _loadMyEstimates,
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(16),
                     itemCount: filteredEstimates.length,
                     itemBuilder: (context, index) {
                       if (index < 0 || index >= filteredEstimates.length) {
                         return const SizedBox.shrink();
                       }
                       final estimate = filteredEstimates[index];
-                      return Card(
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 12),
-                        child: InkWell(
-                          onTap: () {
-                            // 견적 이관 화면으로 이동
-                            context.push('/business/transfer-estimate', extra: estimate);
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '견적 ID: ${estimate.id.length > 8 ? '${estimate.id.substring(0, 8)}...' : estimate.id}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
+                        decoration: BusinessTokens.card(),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(
+                            BusinessTokens.cardRadius,
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () {
+                              context.push('/business/transfer-estimate',
+                                  extra: estimate);
+                            },
+                            borderRadius: BorderRadius.circular(
+                              BusinessTokens.cardRadius,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              estimate.equipmentType.isNotEmpty
+                                                  ? estimate.equipmentType
+                                                  : '견적',
+                                              style:
+                                                  BusinessTokens.sectionTitle,
                                             ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '고객: ${estimate.customerName ?? '고객 정보 없음'}',
-                                            style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 14,
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              estimate.customerName.isNotEmpty
+                                                  ? estimate.customerName
+                                                  : '고객 정보 없음',
+                                              style: BusinessTokens.caption,
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(estimate.status).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        _getStatusText(estimate.status),
-                                        style: TextStyle(
-                                          color: _getStatusColor(estimate.status),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
+                                          ],
                                         ),
                                       ),
+                                      _transferStatusChip(estimate.status),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    '${_formatAmount(estimate.price)}원',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 18,
+                                      color: BusinessTokens.blue,
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  '견적 금액: ${estimate.price.toStringAsFixed(0)}원',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Color(0xFF2E74B5),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '설명: ${estimate.description}',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        context.push('/business/transfer-estimate', extra: estimate);
-                                      },
-                                      icon: const Icon(Icons.swap_horiz, size: 16),
-                                      label: const Text('이관하기'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF2E74B5),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        textStyle: const TextStyle(fontSize: 12),
+                                  const SizedBox(height: 8),
+                                  if (estimate.description.isNotEmpty)
+                                    Text(
+                                      estimate.description,
+                                      style: BusinessTokens.body,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.calendar_today_outlined,
+                                        size: 15,
+                                        color: BusinessTokens.mutedText,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '방문 ${_formatDate(estimate.visitDate)}',
+                                          style: BusinessTokens.caption,
+                                        ),
+                                      ),
+                                      const Text(
+                                        '협업 이관',
+                                        style: TextStyle(
+                                          color: BusinessTokens.blue,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      const Icon(
+                                        Icons.chevron_right_rounded,
+                                        size: 18,
+                                        color: BusinessTokens.blue,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -308,6 +285,45 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
         ],
       ),
     );
+  }
+
+  String _formatAmount(double amount) {
+    return amount.toStringAsFixed(0).replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (match) => '${match[1]},',
+        );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}.${date.month.toString().padLeft(2, '0')}.'
+        '${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _transferStatusChip(String status) {
+    switch (status) {
+      case Estimate.STATUS_PENDING:
+        return const BusinessStatusChip(
+          label: '대기',
+          tone: BusinessStatusTone.warning,
+        );
+      case Estimate.STATUS_ACCEPTED:
+        return const BusinessStatusChip(
+          label: '수락',
+          tone: BusinessStatusTone.success,
+        );
+      case Estimate.STATUS_REJECTED:
+        return const BusinessStatusChip(
+          label: '거절',
+          tone: BusinessStatusTone.danger,
+        );
+      case Estimate.STATUS_AWARDED:
+        return const BusinessStatusChip(
+          label: '선정',
+          tone: BusinessStatusTone.info,
+        );
+      default:
+        return BusinessStatusChip(label: status);
+    }
   }
 
   String _getStatusLabel(String status) {
@@ -324,34 +340,4 @@ class _SelectEstimateForTransferScreenState extends State<SelectEstimateForTrans
         return status;
     }
   }
-
-  String _getStatusText(String status) {
-    switch (status) {
-      case Estimate.STATUS_PENDING:
-        return '대기중';
-      case Estimate.STATUS_ACCEPTED:
-        return '수락됨';
-      case Estimate.STATUS_REJECTED:
-        return '거절됨';
-      case Estimate.STATUS_AWARDED:
-        return '선택됨';
-      default:
-        return status;
-    }
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case Estimate.STATUS_PENDING:
-        return Colors.orange;
-      case Estimate.STATUS_ACCEPTED:
-        return Colors.green;
-      case Estimate.STATUS_REJECTED:
-        return Colors.red;
-      case Estimate.STATUS_AWARDED:
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
-  }
-} 
+}

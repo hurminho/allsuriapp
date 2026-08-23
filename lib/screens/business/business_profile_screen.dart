@@ -5,11 +5,13 @@ import '../../models/user.dart';
 import '../../providers/user_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/business_verify_service.dart';
-import '../../theme/business_theme.dart';
-import '../../widgets/business/business_status_badge.dart';
+import '../../widgets/business/business_app_shell.dart';
+import '../../widgets/business/business_primary_button.dart';
+import '../../widgets/business/business_section_header.dart';
+import '../../widgets/business/business_status_chip.dart';
+import '../../widgets/business/business_tokens.dart';
 import 'package:go_router/go_router.dart';
 import '../../utils/navigation_utils.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/star_rating.dart';
 import '../../services/review_service.dart';
 import '../../services/media_service.dart';
@@ -33,7 +35,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   final _businessNameController = TextEditingController();
   final _businessNumberController = TextEditingController();
   final _addressController = TextEditingController();
-  
+
   List<String> _selectedServiceAreas = [];
   List<String> _selectedSpecialties = [];
   bool _isLoading = false;
@@ -48,7 +50,13 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   void initState() {
     super.initState();
     _loadCurrentUserData();
-    for (final c in [_nameController, _businessNameController, _businessNumberController]) {
+    for (final c in [
+      _nameController,
+      _phoneController,
+      _businessNameController,
+      _businessNumberController,
+      _addressController,
+    ]) {
       c.addListener(_refreshVerifyStatusCard);
     }
   }
@@ -71,7 +79,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   void _loadCurrentUserData() {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.currentUser;
-    
+
     if (currentUser != null) {
       _nameController.text = currentUser.name;
       _phoneController.text = currentUser.phoneNumber ?? '';
@@ -93,16 +101,23 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
       final userId = auth.currentUser?.id ?? '';
       if (userId.isEmpty) return;
       final stats = await ReviewService().getBusinessStats(userId);
-      if (mounted) setState(() {
-        _avgRating = stats?.averageRating ?? 0;
-        _reviewCount = stats?.totalReviews ?? 0;
-      });
+      if (mounted)
+        setState(() {
+          _avgRating = stats?.averageRating ?? 0;
+          _reviewCount = stats?.totalReviews ?? 0;
+        });
     } catch (_) {}
   }
 
   @override
   void dispose() {
-    for (final c in [_nameController, _businessNameController, _businessNumberController]) {
+    for (final c in [
+      _nameController,
+      _phoneController,
+      _businessNameController,
+      _businessNumberController,
+      _addressController,
+    ]) {
       c.removeListener(_refreshVerifyStatusCard);
     }
     _nameController.dispose();
@@ -152,15 +167,16 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         specialties: _selectedSpecialties,
       );
       if (!mounted) return;
-      
-      // 🎉 환영 메시지 표시 (다이얼로그)
+
+      // 환영 메시지 표시 (다이얼로그)
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.celebration, color: Theme.of(context).primaryColor, size: 28),
+              Icon(Icons.celebration,
+                  color: Theme.of(context).primaryColor, size: 28),
               const SizedBox(width: 12),
               const Text('환영합니다!'),
             ],
@@ -192,7 +208,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '💡 시작하기',
+                      '시작하기',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -226,11 +242,13 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         final msg = e.toString();
         String friendly = '프로필 저장 중 오류가 발생했습니다.';
         if (msg.contains('invalid input syntax for type uuid')) {
-          friendly = '계정 식별 형식 문제로 서버에 저장하지 못했습니다. 프로필은 기기에 저장되었습니다. 고객센터로 문의해 주세요.';
+          friendly =
+              '계정 식별 형식 문제로 서버에 저장하지 못했습니다. 프로필은 기기에 저장되었습니다. 고객센터로 문의해 주세요.';
         } else if (msg.contains('required') || msg.contains('null value')) {
           friendly = '필수 입력 항목을 확인해 주세요.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendly), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(friendly), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) {
@@ -251,7 +269,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         builder: (context, setDialogState) {
           // Filter cities based on search text
           filteredCities = KoreanCities.cities
-              .where((city) => city.toLowerCase().contains(searchText.toLowerCase()))
+              .where((city) =>
+                  city.toLowerCase().contains(searchText.toLowerCase()))
               .toList();
 
           return AlertDialog(
@@ -261,9 +280,11 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
               height: 400,
               child: Column(
                 children: [
-                  Text('최대 5개까지 선택 가능합니다. (현재 ${_selectedServiceAreas.length}개)'),
+                  Text(
+                      '최대 5개까지 선택 가능합니다. (현재 ${_selectedServiceAreas.length}개)'),
                   const SizedBox(height: 16),
-                  TextField( // Search input field
+                  TextField(
+                    // Search input field
                     decoration: InputDecoration(
                       hintText: '지역 검색',
                       prefixIcon: const Icon(Icons.search),
@@ -273,7 +294,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                       ),
                       filled: true,
                       fillColor: Colors.grey[100],
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                     ),
                     onChanged: (value) {
                       setDialogState(() {
@@ -293,7 +315,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                           title: Text(city),
                           value: isSelected,
                           onChanged: (bool? value) {
-                            setDialogState(() { // Use setDialogState to update the dialog's state
+                            setDialogState(() {
+                              // Use setDialogState to update the dialog's state
                               if (value == true) {
                                 if (_selectedServiceAreas.length < 5) {
                                   _selectedServiceAreas.add(city);
@@ -319,7 +342,10 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  if (mounted) setState(() {});
+                },
                 child: const Text('확인'),
               ),
             ],
@@ -343,7 +369,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
               itemBuilder: (context, index) {
                 final category = EquipmentCategories.categories[index];
                 final isSelected = _selectedSpecialties.contains(category);
-                
+
                 return CheckboxListTile(
                   title: Text(category),
                   value: isSelected,
@@ -379,412 +405,250 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         NavigationUtils.navigateToRoleHome(context);
         return false;
       },
-      child: Theme(
-        data: BusinessTheme.theme(Theme.of(context)),
-        child: Scaffold(
-      backgroundColor: BusinessTheme.background,
-      appBar: AppBar(
-        title: const Text('사업자 프로필'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => NavigationUtils.navigateToRoleHome(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 상단 헤더: 상호명 표시 (프레임 내 Ellipsis)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: _onChangeAvatar,
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundImage: (_avatarUrl != null && _avatarUrl!.isNotEmpty) ? NetworkImage(_avatarUrl!) : null,
-                        child: (_avatarUrl == null || _avatarUrl!.isEmpty)
-                            ? const Icon(Icons.storefront, size: 20)
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _businessNameController.text.isNotEmpty
-                            ? _businessNameController.text
-                            : '상호명을 입력하세요',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (_avgRating > 0 || _reviewCount > 0)
-                Row(
-                  children: [
-                    StarRating(rating: _avgRating, size: 18),
-                    const SizedBox(width: 6),
-                    Text('$_avgRating ($_reviewCount)', style: Theme.of(context).textTheme.bodyMedium),
-                  ],
-                ),
-              const SizedBox(height: 12),
-              _buildCompletenessCard(),
-              const SizedBox(height: 16),
-              // 기본 정보 섹션
-              _buildSection(
-                '기본 정보',
-                [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: '사장님 성함 *',
-                      hintText: '사장님 성함을 입력하세요',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '사장님 성함을 입력해주세요';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _phoneController,
-                    decoration: const InputDecoration(
-                      labelText: '전화번호 *',
-                      hintText: '010-1234-5678',
-                    ),
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      _PhoneNumberFormatter(),
-                    ],
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '전화번호를 입력해주세요';
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 24),
-
-              // 알림 설정 섹션
-              _buildSection(
-                '알림 설정',
-                [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.notifications_active),
-                    title: const Text('기기 알림 설정 열기'),
-                    subtitle: const Text('OS의 앱 알림 설정으로 이동합니다.'),
-                    onTap: () {
-                      AppSettings.openAppSettings();
-                    },
-                  ),
-                ],
-              ),
-              
-              // 사업자 정보 섹션
-              _buildSection(
-                '사업자 정보',
-                [
-                  _buildVerifyStatusCard(),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _businessNameController,
-                    decoration: const InputDecoration(
-                      labelText: '상호명 *',
-                      hintText: '사업자 상호명을 입력하세요',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '상호명을 입력해주세요';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _businessNumberController,
-                    decoration: const InputDecoration(
-                      labelText: '사업자 번호 *',
-                      hintText: '123-45-67890',
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: _pickOpenDate,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InputDecorator(
+      child: BusinessAppShell(
+        title: '사업자 프로필',
+        onBack: () => NavigationUtils.navigateToRoleHome(context),
+        body: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(
+            BusinessTokens.pagePadding,
+            BusinessTokens.space16,
+            BusinessTokens.pagePadding,
+            BusinessTokens.space32,
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildProfileSummary(),
+                const SizedBox(height: BusinessTokens.space12),
+                _buildCompletenessCard(),
+                const SizedBox(height: BusinessTokens.space16),
+                _buildCustomerPreview(),
+                const SizedBox(height: BusinessTokens.space16),
+                _buildSection(
+                  '기본 정보',
+                  [
+                    TextFormField(
+                      controller: _nameController,
                       decoration: const InputDecoration(
-                        labelText: '개업일 *',
-                        hintText: '예) 2020-01-15',
-                        suffixIcon: Icon(Icons.calendar_today_outlined),
+                        labelText: '사장님 성함 *',
+                        hintText: '사장님 성함을 입력하세요',
                       ),
-                      child: Text(
-                        _businessOpenDate == null
-                            ? '개업일을 선택하세요'
-                            : DateFormat('yyyy-MM-dd').format(_businessOpenDate!),
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: _businessOpenDate == null
-                              ? Theme.of(context).colorScheme.onSurfaceVariant
-                              : Theme.of(context).colorScheme.onSurface,
-                        ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '사장님 성함을 입력해주세요';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: BusinessTokens.space16),
+                    TextFormField(
+                      controller: _phoneController,
+                      decoration: const InputDecoration(
+                        labelText: '전화번호 *',
+                        hintText: '010-1234-5678',
                       ),
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        _PhoneNumberFormatter(),
+                      ],
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '전화번호를 입력해주세요';
+                        }
+                        return null;
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                    ),
-                    onPressed: _isVerifying ? null : _verifyBusinessNumber,
-                    icon: _isVerifying
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.verified_user_outlined),
-                    label: Text(
-                      _isVerifying ? '국세청 확인 중...' : '사업자등록 진위확인',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _addressController,
-                    decoration: InputDecoration(
-                      labelText: '주소',
-                      hintText: '주소를 검색하세요',
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.search),
-                        onPressed: _openAddressSearch,
-                      ),
-                    ),
-                    readOnly: true,
-                    onTap: _openAddressSearch,
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // 활동 지역 섹션
-              _buildSection(
-                '활동 지역',
-                [
-                  Material(
-                    elevation: 0,
-                    borderRadius: BorderRadius.circular(12),
-                    color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-                    child: InkWell(
-                      onTap: _showServiceAreaDialog,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.location_on_rounded,
-                                      color: Theme.of(context).colorScheme.primary,
-                                      size: 22,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '활동 지역 선택',
-                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                                Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _selectedServiceAreas.isEmpty
-                                  ? '활동 지역을 선택해주세요 (최대 5개)'
-                                  : '선택된 지역: ${_selectedServiceAreas.join(', ')}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: _selectedServiceAreas.isEmpty
-                                        ? Theme.of(context).colorScheme.onSurfaceVariant
-                                        : Theme.of(context).colorScheme.onSurface,
-                                    fontWeight: _selectedServiceAreas.isEmpty 
-                                        ? FontWeight.w400 
-                                        : FontWeight.w500,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // 전문 분야 섹션
-              _buildSection(
-                '전문 분야',
-                [
-                  Material(
-                    elevation: 0,
-                    borderRadius: BorderRadius.circular(12),
-                    color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-                    child: InkWell(
-                      onTap: _showSpecialtyDialog,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.work_rounded,
-                                      color: Theme.of(context).colorScheme.primary,
-                                      size: 22,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '전문 분야 선택',
-                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                                Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _selectedSpecialties.isEmpty
-                                  ? '전문 분야를 선택해주세요'
-                                  : '선택된 분야: ${_selectedSpecialties.join(', ')}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: _selectedSpecialties.isEmpty
-                                        ? Theme.of(context).colorScheme.onSurfaceVariant
-                                        : Theme.of(context).colorScheme.onSurface,
-                                    fontWeight: _selectedSpecialties.isEmpty 
-                                        ? FontWeight.w400 
-                                        : FontWeight.w500,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 32),
-              
-              // 저장 버튼
-              FilledButton.icon(
-                onPressed: _isLoading ? null : _saveProfile,
-                icon: _isLoading 
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Icon(Icons.save_rounded, size: 22),
-                label: Text(
-                  _isLoading ? '저장 중...' : '프로필 저장',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
+                  ],
+                  subtitle: '고객 연락과 계정 확인에 사용하는 정보입니다.',
                 ),
-              ),
-
-              const SizedBox(height: 12),
-              // 로그아웃 버튼
-              OutlinedButton.icon(
-                onPressed: () async {
-                  try {
-                    await Provider.of<AuthService>(context, listen: false).signOut();
-                    if (mounted) NavigationUtils.navigateToRoleHome(context);
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('로그아웃 실패: $e')),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.logout),
-                label: const Text('로그아웃'),
-              ),
-            ],
+                const SizedBox(height: BusinessTokens.space16),
+                _buildSection(
+                  '사업자 정보',
+                  [
+                    _buildVerifyStatusCard(),
+                    const SizedBox(height: BusinessTokens.space16),
+                    TextFormField(
+                      controller: _businessNameController,
+                      decoration: const InputDecoration(
+                        labelText: '상호명 *',
+                        hintText: '사업자 상호명을 입력하세요',
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '상호명을 입력해주세요';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: BusinessTokens.space16),
+                    TextFormField(
+                      controller: _businessNumberController,
+                      decoration: const InputDecoration(
+                        labelText: '사업자 번호 *',
+                        hintText: '123-45-67890',
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: BusinessTokens.space16),
+                    InkWell(
+                      onTap: _pickOpenDate,
+                      borderRadius: BorderRadius.circular(
+                        BusinessTokens.controlRadius,
+                      ),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '개업일 *',
+                          hintText: '예) 2020-01-15',
+                          suffixIcon: Icon(Icons.calendar_today_outlined),
+                        ),
+                        child: Text(
+                          _businessOpenDate == null
+                              ? '개업일을 선택하세요'
+                              : DateFormat('yyyy-MM-dd')
+                                  .format(_businessOpenDate!),
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: _businessOpenDate == null
+                                ? Theme.of(context).colorScheme.onSurfaceVariant
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: BusinessTokens.space12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isVerifying ? null : _verifyBusinessNumber,
+                        icon: _isVerifying
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.verified_user_outlined),
+                        label: Text(
+                          _isVerifying ? '국세청 확인 중...' : '사업자등록 진위확인',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: BusinessTokens.space16),
+                    TextFormField(
+                      controller: _addressController,
+                      decoration: InputDecoration(
+                        labelText: '주소',
+                        hintText: '주소를 검색하세요',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.search),
+                          onPressed: _openAddressSearch,
+                        ),
+                      ),
+                      readOnly: true,
+                      onTap: _openAddressSearch,
+                    ),
+                  ],
+                  subtitle: '등록 정보와 실제 사업자 정보를 동일하게 입력해 주세요.',
+                ),
+                const SizedBox(height: BusinessTokens.space16),
+                _buildSection(
+                  '제공 서비스',
+                  [
+                    _buildSelectionField(
+                      label: '전문 분야',
+                      emptyLabel: '전문 분야를 선택해 주세요.',
+                      values: _selectedSpecialties,
+                      icon: Icons.handyman_outlined,
+                      onTap: _showSpecialtyDialog,
+                    ),
+                    const SizedBox(height: BusinessTokens.space12),
+                    _buildSelectionField(
+                      label: '활동 지역',
+                      emptyLabel: '활동 지역을 선택해 주세요. (최대 5개)',
+                      values: _selectedServiceAreas,
+                      icon: Icons.location_on_outlined,
+                      onTap: _showServiceAreaDialog,
+                    ),
+                  ],
+                  subtitle: '고객이 전문가를 찾을 때 공개되는 정보입니다.',
+                ),
+                const SizedBox(height: BusinessTokens.space16),
+                _buildSection(
+                  '앱 설정',
+                  [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.notifications_active_outlined),
+                      title: const Text('기기 알림 설정 열기'),
+                      subtitle: const Text('OS의 앱 알림 설정으로 이동합니다.'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () {
+                        AppSettings.openAppSettings();
+                      },
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.logout_rounded),
+                      title: const Text('로그아웃'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () async {
+                        try {
+                          await Provider.of<AuthService>(
+                            context,
+                            listen: false,
+                          ).signOut();
+                          if (mounted) {
+                            NavigationUtils.navigateToRoleHome(context);
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('로그아웃 실패: $e')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
+        bottomNavigationBar: MediaQuery.viewInsetsOf(context).bottom > 0
+            ? null
+            : Container(
+                decoration: const BoxDecoration(
+                  color: BusinessTokens.surface,
+                  border: Border(
+                    top: BorderSide(color: BusinessTokens.border),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                  child: BusinessPrimaryButton(
+                    label: _isLoading ? '저장 중...' : '프로필 저장',
+                    icon: Icons.save_outlined,
+                    loading: _isLoading,
+                    onPressed: _saveProfile,
+                  ),
+                ),
+              ),
       ),
-    )));
+    );
   }
 
   Future<void> _pickOpenDate() async {
     final now = DateTime.now();
-    final initial = _businessOpenDate ?? DateTime(now.year - 5, now.month, now.day);
+    final initial =
+        _businessOpenDate ?? DateTime(now.year - 5, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -866,7 +730,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
             const Text('필수 사업자 정보가 모두 입력되어 확인되었습니다.'),
             if (ntsVerified && (result?.taxType ?? '').isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text('과세유형: ${result!.taxType}', style: const TextStyle(fontSize: 13)),
+              Text('과세유형: ${result!.taxType}',
+                  style: const TextStyle(fontSize: 13)),
             ],
             if (ntsVerified && (result?.bStt ?? '').isNotEmpty) ...[
               const SizedBox(height: 4),
@@ -1003,48 +868,350 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Widget _buildVerifyStatusCard() {
+  Widget _buildProfileSummary() {
     final user = Provider.of<AuthService>(context).currentUser;
-    if (user == null) return const SizedBox.shrink();
-
-    Color bg;
-    Color fg;
-    IconData icon;
-    String title;
-    String subtitle;
-
-    // 정책 변경: 사업자등록 인증 경고/안내 메시지는 표시하지 않는다.
-    // - 모든 필수 항목이 입력된 경우에만 '확인' 카드를 노출
-    // - 그 외에는 빈 위젯을 반환하여 사용자가 자율적으로 입력하도록 유도
-    if (!_hasRequiredBusinessFields() &&
-        user.businessVerifyStatus != BusinessVerifyStatus.verified) {
-      return const SizedBox.shrink();
-    }
-
-    bg = Colors.green.shade50;
-    fg = Colors.green.shade800;
-    icon = Icons.check_circle_outline;
-    title = '확인';
-    if (user.businessVerifyStatus == BusinessVerifyStatus.verified) {
-      subtitle = user.businessVerifiedAt != null
-          ? '국세청 진위확인 완료 · ${DateFormat('yyyy-MM-dd').format(user.businessVerifiedAt!.toLocal())}'
-          : '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
-    } else {
-      subtitle = '필수 사업자 정보가 모두 입력되어 확인되었습니다.';
-    }
+    final businessName = _businessNameController.text.trim();
+    final representativeName = _nameController.text.trim();
 
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: fg.withOpacity(0.3)),
+      padding: const EdgeInsets.all(BusinessTokens.space16),
+      decoration: BusinessTokens.card(
+        color: BusinessTokens.navy,
+        borderColor: BusinessTokens.navy,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: fg),
-          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: _onChangeAvatar,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                  backgroundImage:
+                      (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                          ? NetworkImage(_avatarUrl!)
+                          : null,
+                  child: (_avatarUrl == null || _avatarUrl!.isEmpty)
+                      ? const Icon(
+                          Icons.storefront_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        )
+                      : null,
+                ),
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: BusinessTokens.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: BusinessTokens.navy, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.edit_outlined,
+                      size: 13,
+                      color: BusinessTokens.navy,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: BusinessTokens.space16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  businessName.isEmpty ? '상호명 미입력' : businessName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: BusinessTokens.space4),
+                Text(
+                  representativeName.isEmpty
+                      ? '대표자명 미입력'
+                      : '대표 $representativeName',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: BusinessTokens.space12),
+                _buildVerificationChip(user?.businessVerifyStatus),
+                if (_avgRating > 0 || _reviewCount > 0) ...[
+                  const SizedBox(height: BusinessTokens.space12),
+                  Row(
+                    children: [
+                      StarRating(rating: _avgRating, size: 16),
+                      const SizedBox(width: BusinessTokens.space8),
+                      Text(
+                        '${_avgRating.toStringAsFixed(1)} · 리뷰 $_reviewCount개',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerPreview() {
+    final user = Provider.of<AuthService>(context).currentUser;
+    final businessName = _businessNameController.text.trim();
+    final address = _addressController.text.trim();
+    final phone = _phoneController.text.trim();
+
+    return Container(
+      padding: const EdgeInsets.all(BusinessTokens.space16),
+      decoration: BusinessTokens.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const BusinessSectionHeader(
+            title: '고객 공개 프로필 미리보기',
+            subtitle: '현재 입력한 내용이 고객에게 보이는 모습입니다.',
+          ),
+          const SizedBox(height: BusinessTokens.space16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(BusinessTokens.space16),
+            decoration: BusinessTokens.card(
+              color: BusinessTokens.canvas,
+              radius: BusinessTokens.controlRadius,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: BusinessTokens.blueLight,
+                      backgroundImage:
+                          (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                              ? NetworkImage(_avatarUrl!)
+                              : null,
+                      child: (_avatarUrl == null || _avatarUrl!.isEmpty)
+                          ? const Icon(
+                              Icons.storefront_outlined,
+                              color: BusinessTokens.navy,
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: BusinessTokens.space12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            businessName.isEmpty ? '상호명 미입력' : businessName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: BusinessTokens.sectionTitle,
+                          ),
+                          const SizedBox(height: BusinessTokens.space8),
+                          _buildVerificationChip(
+                            user?.businessVerifyStatus,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (_avgRating > 0 || _reviewCount > 0) ...[
+                  const SizedBox(height: BusinessTokens.space12),
+                  Row(
+                    children: [
+                      StarRating(rating: _avgRating, size: 16),
+                      const SizedBox(width: BusinessTokens.space8),
+                      Text(
+                        '${_avgRating.toStringAsFixed(1)} (리뷰 $_reviewCount개)',
+                        style: BusinessTokens.caption.copyWith(
+                          color: BusinessTokens.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: BusinessTokens.space16),
+                const Text('전문 분야', style: BusinessTokens.caption),
+                const SizedBox(height: BusinessTokens.space8),
+                if (_selectedSpecialties.isEmpty)
+                  const Text('전문 분야 미입력', style: BusinessTokens.body)
+                else
+                  Wrap(
+                    spacing: BusinessTokens.space8,
+                    runSpacing: BusinessTokens.space8,
+                    children: _selectedSpecialties
+                        .map(
+                          (specialty) => BusinessStatusChip(
+                            label: specialty,
+                            tone: BusinessStatusTone.info,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                const SizedBox(height: BusinessTokens.space16),
+                _buildPreviewLine(
+                  Icons.location_on_outlined,
+                  _selectedServiceAreas.isEmpty
+                      ? '활동 지역 미입력'
+                      : _selectedServiceAreas.join(', '),
+                ),
+                const SizedBox(height: BusinessTokens.space8),
+                _buildPreviewLine(
+                  Icons.store_mall_directory_outlined,
+                  address.isEmpty ? '주소 미입력' : address,
+                ),
+                const SizedBox(height: BusinessTokens.space8),
+                _buildPreviewLine(
+                  Icons.phone_outlined,
+                  phone.isEmpty ? '전화번호 미입력' : phone,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewLine(IconData icon, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 17, color: BusinessTokens.mutedText),
+        const SizedBox(width: BusinessTokens.space8),
+        Expanded(
+          child: Text(
+            value,
+            style: BusinessTokens.body.copyWith(fontSize: 13),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerificationChip(BusinessVerifyStatus? status) {
+    switch (status) {
+      case BusinessVerifyStatus.verified:
+        return const BusinessStatusChip(
+          label: '사업자 인증 완료',
+          tone: BusinessStatusTone.success,
+          icon: Icons.verified_outlined,
+        );
+      case BusinessVerifyStatus.failed:
+        return const BusinessStatusChip(
+          label: '사업자 인증 실패',
+          tone: BusinessStatusTone.danger,
+          icon: Icons.error_outline,
+        );
+      case BusinessVerifyStatus.closed:
+        return const BusinessStatusChip(
+          label: '휴·폐업 상태',
+          tone: BusinessStatusTone.danger,
+          icon: Icons.block_outlined,
+        );
+      case BusinessVerifyStatus.unverified:
+        return const BusinessStatusChip(
+          label: '사업자 미인증',
+          tone: BusinessStatusTone.warning,
+          icon: Icons.info_outline,
+        );
+      case null:
+        return const BusinessStatusChip(
+          label: '인증 상태 확인 불가',
+          icon: Icons.help_outline,
+        );
+    }
+  }
+
+  Widget _buildVerifyStatusCard() {
+    final user = Provider.of<AuthService>(context).currentUser;
+    final status = user?.businessVerifyStatus;
+
+    late final Color foreground;
+    late final Color background;
+    late final IconData icon;
+    late final String title;
+    late final String subtitle;
+
+    switch (status) {
+      case BusinessVerifyStatus.verified:
+        foreground = BusinessTokens.success;
+        background = BusinessTokens.success.withValues(alpha: 0.08);
+        icon = Icons.verified_outlined;
+        title = '사업자 인증 완료';
+        subtitle = user?.businessVerifiedAt != null
+            ? '국세청 진위확인 완료 · ${DateFormat('yyyy-MM-dd').format(user!.businessVerifiedAt!.toLocal())}'
+            : '국세청 사업자등록 진위확인이 완료되었습니다.';
+        break;
+      case BusinessVerifyStatus.failed:
+        foreground = BusinessTokens.danger;
+        background = BusinessTokens.danger.withValues(alpha: 0.08);
+        icon = Icons.error_outline;
+        title = '사업자 인증 실패';
+        subtitle = '입력 정보가 사업자등록 정보와 일치하지 않습니다.';
+        break;
+      case BusinessVerifyStatus.closed:
+        foreground = BusinessTokens.danger;
+        background = BusinessTokens.danger.withValues(alpha: 0.08);
+        icon = Icons.block_outlined;
+        title = '휴·폐업 상태';
+        subtitle = '현재 사업자 상태를 확인한 뒤 다시 시도해 주세요.';
+        break;
+      case BusinessVerifyStatus.unverified:
+        foreground = BusinessTokens.warning;
+        background = BusinessTokens.warning.withValues(alpha: 0.08);
+        icon = Icons.info_outline;
+        title = '사업자 미인증';
+        subtitle = '아직 국세청 사업자등록 진위확인이 완료되지 않았습니다.';
+        break;
+      case null:
+        foreground = BusinessTokens.mutedText;
+        background = BusinessTokens.canvas;
+        icon = Icons.help_outline;
+        title = '인증 상태 확인 불가';
+        subtitle = '로그인 상태를 확인한 뒤 다시 시도해 주세요.';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(BusinessTokens.space12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(BusinessTokens.controlRadius),
+        border: Border.all(color: foreground.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: foreground, size: 20),
+          const SizedBox(width: BusinessTokens.space8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1052,15 +1219,15 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                 Text(
                   title,
                   style: TextStyle(
-                    color: fg,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
+                    color: foreground,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: BusinessTokens.space4),
                 Text(
                   subtitle,
-                  style: TextStyle(color: fg, fontSize: 12),
+                  style: BusinessTokens.caption.copyWith(color: foreground),
                 ),
               ],
             ),
@@ -1080,76 +1247,149 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
       if (file == null) return;
       final url = await media.uploadProfileImage(userId: me.id, file: file);
       if (url == null) return;
-      await Supabase.instance.client.from('users').update({'avatar_url': url}).eq('id', me.id);
+      await Supabase.instance.client
+          .from('users')
+          .update({'avatar_url': url}).eq('id', me.id);
       if (!mounted) return;
       setState(() => _avatarUrl = url);
     } catch (_) {}
   }
 
   Widget _buildCompletenessCard() {
-    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     final items = <String, bool>{
-      '인증': user?.hasBusinessNumber == true,
-      '상호': _businessNameController.text.trim().isNotEmpty,
-      '전문 공정': _selectedSpecialties.isNotEmpty,
-      '서비스 지역': _selectedServiceAreas.isNotEmpty,
+      '프로필 사진': _avatarUrl?.trim().isNotEmpty == true,
+      '대표자명': _nameController.text.trim().isNotEmpty,
       '연락처': _phoneController.text.trim().isNotEmpty,
+      '상호명': _businessNameController.text.trim().isNotEmpty,
+      '사업자 번호': _businessNumberController.text.trim().isNotEmpty,
+      '개업일': _businessOpenDate != null,
+      '주소': _addressController.text.trim().isNotEmpty,
+      '전문 분야': _selectedSpecialties.isNotEmpty,
+      '활동 지역': _selectedServiceAreas.isNotEmpty,
     };
     final done = items.values.where((v) => v).length;
     final total = items.length;
     final pct = total == 0 ? 0.0 : done / total;
+    final missing = items.entries
+        .where((entry) => !entry.value)
+        .map((entry) => entry.key)
+        .toList();
+
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BusinessTheme.cardDecoration(),
+      padding: const EdgeInsets.all(BusinessTokens.space16),
+      decoration: BusinessTokens.card(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text('프로필 완성도', style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text(
+                '프로필 완성도',
+                style: BusinessTokens.sectionTitle,
+              ),
               const Spacer(),
-              Text('${(pct * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w800, color: BusinessTheme.blue)),
+              Text(
+                '${(pct * 100).round()}%',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: BusinessTokens.blue,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: BusinessTokens.space8),
           LinearProgressIndicator(
             value: pct,
             minHeight: 8,
             borderRadius: BorderRadius.circular(8),
-            color: BusinessTheme.blue,
-            backgroundColor: BusinessTheme.lightBlue,
+            color: BusinessTokens.blue,
+            backgroundColor: BusinessTokens.blueLight,
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: items.entries.map((e) {
-              return BusinessStatusBadge(
-                label: e.key,
-                color: e.value ? BusinessTheme.success : BusinessTheme.textMuted,
-              );
-            }).toList(),
+          const SizedBox(height: BusinessTokens.space12),
+          Text(
+            missing.isEmpty
+                ? '입력 가능한 프로필 항목을 모두 채웠습니다.'
+                : '$done/$total개 입력 · 미입력: ${missing.join(', ')}',
+            style: BusinessTokens.caption.copyWith(
+              color: missing.isEmpty
+                  ? BusinessTokens.success
+                  : BusinessTokens.mutedText,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSection(String title, List<Widget> children) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF102A43),
+  Widget _buildSelectionField({
+    required String label,
+    required String emptyLabel,
+    required List<String> values,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(BusinessTokens.controlRadius),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(BusinessTokens.space16),
+          decoration: BusinessTokens.card(
+            color: BusinessTokens.canvas,
+            radius: BusinessTokens.controlRadius,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: BusinessTokens.blue),
+                  const SizedBox(width: BusinessTokens.space8),
+                  Expanded(
+                    child: Text(label, style: BusinessTokens.sectionTitle),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: BusinessTokens.mutedText,
+                  ),
+                ],
+              ),
+              const SizedBox(height: BusinessTokens.space12),
+              if (values.isEmpty)
+                Text(emptyLabel, style: BusinessTokens.caption)
+              else
+                Wrap(
+                  spacing: BusinessTokens.space8,
+                  runSpacing: BusinessTokens.space8,
+                  children: values
+                      .map((value) => BusinessStatusChip(label: value))
+                      .toList(),
+                ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
-        ...children,
-      ],
+      ),
+    );
+  }
+
+  Widget _buildSection(
+    String title,
+    List<Widget> children, {
+    String? subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(BusinessTokens.space16),
+      decoration: BusinessTokens.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          BusinessSectionHeader(title: title, subtitle: subtitle),
+          const SizedBox(height: BusinessTokens.space16),
+          ...children,
+        ],
+      ),
     );
   }
 
@@ -1160,16 +1400,19 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         onNavigationRequest: (request) {
           final url = request.url;
           final allowed = url.startsWith('https://t1.daumcdn.net') ||
-                          url.startsWith('https://postcode.map.daum.net') ||
-                          url.startsWith('https://map.daum.net') ||
-                          url.startsWith('https://kakao.com') ||
-                          url.startsWith('https://www.kakao.com');
-          return allowed ? NavigationDecision.navigate : NavigationDecision.prevent;
+              url.startsWith('https://postcode.map.daum.net') ||
+              url.startsWith('https://map.daum.net') ||
+              url.startsWith('https://kakao.com') ||
+              url.startsWith('https://www.kakao.com');
+          return allowed
+              ? NavigationDecision.navigate
+              : NavigationDecision.prevent;
         },
       ))
       ..addJavaScriptChannel('flutter', onMessageReceived: (msg) {
         try {
-          final Map<String, dynamic> data = json.decode(msg.message) as Map<String, dynamic>;
+          final Map<String, dynamic> data =
+              json.decode(msg.message) as Map<String, dynamic>;
           final addr = (data['roadAddress']?.toString().isNotEmpty ?? false)
               ? data['roadAddress'].toString()
               : (data['address']?.toString() ?? '');
@@ -1226,7 +1469,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
 </html>
 ''';
 
-    await controller.loadHtmlString(html, baseUrl: 'https://postcode.map.daum.net');
+    await controller.loadHtmlString(html,
+        baseUrl: 'https://postcode.map.daum.net');
 
     if (!mounted) return;
     await showDialog(
@@ -1270,21 +1514,23 @@ class _PhoneNumberFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     final text = newValue.text;
-    
+
     if (text.isEmpty) {
       return newValue;
     }
 
     String formatted = '';
-    
+
     if (text.length <= 3) {
       formatted = text;
     } else if (text.length <= 7) {
       formatted = '${text.substring(0, 3)}-${text.substring(3)}';
     } else if (text.length <= 11) {
-      formatted = '${text.substring(0, 3)}-${text.substring(3, 7)}-${text.substring(7)}';
+      formatted =
+          '${text.substring(0, 3)}-${text.substring(3, 7)}-${text.substring(7)}';
     } else {
-      formatted = '${text.substring(0, 3)}-${text.substring(3, 7)}-${text.substring(7, 11)}';
+      formatted =
+          '${text.substring(0, 3)}-${text.substring(3, 7)}-${text.substring(7, 11)}';
     }
 
     return TextEditingValue(
@@ -1292,4 +1538,4 @@ class _PhoneNumberFormatter extends TextInputFormatter {
       selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
-} 
+}

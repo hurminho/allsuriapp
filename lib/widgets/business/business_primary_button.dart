@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/business_theme.dart';
+import 'business_tokens.dart';
 
 class BusinessPrimaryButton extends StatelessWidget {
   final String label;
@@ -8,6 +8,8 @@ class BusinessPrimaryButton extends StatelessWidget {
   final bool expanded;
   final IconData? icon;
   final bool secondary;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
 
   const BusinessPrimaryButton({
     super.key,
@@ -17,15 +19,20 @@ class BusinessPrimaryButton extends StatelessWidget {
     this.expanded = true,
     this.icon,
     this.secondary = false,
+    this.backgroundColor,
+    this.foregroundColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final child = loading
-        ? const SizedBox(
+        ? SizedBox(
             width: 20,
             height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: foregroundColor ?? Colors.white,
+            ),
           )
         : Row(
             mainAxisSize: MainAxisSize.min,
@@ -37,7 +44,8 @@ class BusinessPrimaryButton extends StatelessWidget {
               ],
               Text(
                 label,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
               ),
             ],
           );
@@ -47,7 +55,7 @@ class BusinessPrimaryButton extends StatelessWidget {
             onPressed: loading ? null : onPressed,
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(44, 48),
-              foregroundColor: BusinessTheme.navy,
+              foregroundColor: foregroundColor ?? BusinessTokens.navy,
             ),
             child: child,
           )
@@ -55,7 +63,8 @@ class BusinessPrimaryButton extends StatelessWidget {
             onPressed: loading ? null : onPressed,
             style: FilledButton.styleFrom(
               minimumSize: const Size(44, 48),
-              backgroundColor: BusinessTheme.blue,
+              backgroundColor: backgroundColor ?? BusinessTokens.blue,
+              foregroundColor: foregroundColor ?? Colors.white,
             ),
             child: child,
           );

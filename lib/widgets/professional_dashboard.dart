@@ -8,8 +8,6 @@ import '../services/ad_service.dart';
 import '../models/ad.dart';
 import 'announcement_banner.dart';
 import '../theme/business_theme.dart';
-import 'business/business_metric_card.dart';
-import 'business/business_primary_button.dart';
 import '../screens/business/estimate_requests_screen.dart';
 import '../screens/business/my_estimates_screen.dart';
 import '../screens/chat/chat_list_page.dart';
@@ -19,13 +17,17 @@ import '../screens/business/order_marketplace_screen.dart';
 import '../screens/business/my_order_management_screen.dart';
 import '../screens/business/pending_approval_screen.dart';
 import '../screens/profile/profile_screen.dart';
+import '../screens/business/create_job_screen.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/marketplace_service.dart';
 import '../services/order_service.dart';
 import '../services/push_permission_service.dart';
-import '../widgets/bottom_navigation.dart';
-import '../screens/community/community_board_screen.dart';
+import 'business/business_app_bar.dart';
+import 'business/business_bottom_navigation.dart';
+import 'business/business_empty_state.dart';
+import 'business/business_section_header.dart';
+import 'business/business_tokens.dart';
 
 /// 프로페셔널 스타일 C - 데이터 중심 대시보드
 class ProfessionalDashboard extends StatefulWidget {
@@ -36,14 +38,15 @@ class ProfessionalDashboard extends StatefulWidget {
 }
 
 class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
-  int _currentIndex = 0;
+  final int _currentIndex = 0;
   final MarketplaceService _market = MarketplaceService();
-  
+
   late Future<Map<String, int>> _dashboardDataFuture;
   // 광고/알림 Future 캐싱 (build 마다 재요청 방지)
   Future<List<Ad>>? _adBannerFuture;
   Future<int>? _notifCountFuture;
-  
+  Future<int>? _unreadChatFuture;
+
   RealtimeChannel? _marketplaceChannel;
   RealtimeChannel? _ordersChannel;
 
@@ -112,8 +115,12 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         AdService().getAdsByLocation('dashboard_ad_1'),
         AdService().getAdsByLocation('dashboard_ad_2'),
       ]).then((results) => [...results[0], ...results[1]]);
-      _notifCountFuture =
-          userId.isEmpty ? Future.value(0) : NotificationService().getUnreadCount(userId);
+      _notifCountFuture = userId.isEmpty
+          ? Future.value(0)
+          : NotificationService().getUnreadCount(userId);
+      _unreadChatFuture = userId.isEmpty
+          ? Future.value(0)
+          : NotificationService().getUnreadChatCount(userId);
     });
   }
 
@@ -165,9 +172,9 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           .from('jobs')
           .select('id')
           .eq('assigned_business_id', userId)
-          .inFilter('status', ['completed', 'awaiting_confirmation'])
-          .count(CountOption.exact);
-      
+          .inFilter('status', ['completed', 'awaiting_confirmation']).count(
+              CountOption.exact);
+
       print('🔍 [_getCompletedJobsCount] 완료한 공사: ${response.count}개');
       return response.count;
     } catch (e) {
@@ -201,7 +208,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           .inFilter('status', ['open', 'created'])
           .neq('posted_by', userId)
           .count(CountOption.exact);
-      
+
       return response.count;
     } catch (e) {
       print('❌ [_getNewOrdersCount] 에러: $e');
@@ -216,14 +223,14 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       print('🔍 [_getMyBidsCount] 입찰 대기 중 카운트 시작');
       print('   userId: $userId');
       print('   현재 시각: ${DateTime.now()}');
-      
+
       // 디버그: 모든 입찰 먼저 확인 (더 상세한 정보)
       final allBids = await Supabase.instance.client
           .from('order_bids')
           .select('id, listing_id, bidder_id, status, created_at')
           .eq('bidder_id', userId)
           .order('created_at', ascending: false);
-      
+
       print('   전체 입찰: ${allBids.length}개');
       if (allBids.isEmpty) {
         print('   ⚠️ 이 사용자의 입찰이 order_bids 테이블에 없습니다!');
@@ -235,7 +242,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           print('         created_at: ${bid['created_at']}');
         }
       }
-      
+
       // pending 상태만 카운트
       final response = await Supabase.instance.client
           .from('order_bids')
@@ -243,7 +250,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           .eq('bidder_id', userId)
           .eq('status', 'pending')
           .count(CountOption.exact);
-      
+
       print('   ✅ pending 상태 입찰: ${response.count}개');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       return response.count;
@@ -271,81 +278,114 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         final user = authService.currentUser;
         final businessStatus = user?.businessStatus?.toLowerCase() ?? '';
         final isApproved = businessStatus == 'approved';
-        
+
         if (!isApproved) {
           return const PendingApprovalScreen();
         }
-        
-        final businessName = (user?.businessName != null && user!.businessName!.trim().isNotEmpty)
+
+        final businessName = (user?.businessName != null &&
+                user!.businessName!.trim().isNotEmpty)
             ? user.businessName!
             : (user?.name ?? "사업자");
-        
-        return WillPopScope(
-          onWillPop: () async => false,
-          child: Scaffold(
-            backgroundColor: BusinessTheme.background,
-            appBar: _buildAppBar(context, user),
-            body: FutureBuilder<Map<String, int>>(
-              future: _dashboardDataFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final data = snapshot.data ?? {};
-                return Column(
-                  children: [
-                    const AnnouncementBanner(),
-                    Expanded(
-                      child: RefreshIndicator(
-                  onRefresh: () async => _refreshData(),
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          '$businessName 님',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: BusinessTheme.navy,
-                          ),
+
+        return PopScope(
+          canPop: false,
+          child: Theme(
+            data: BusinessTheme.theme(Theme.of(context)),
+            child: Scaffold(
+              backgroundColor: BusinessTokens.canvas,
+              appBar: _buildAppBar(context, user),
+              body: FutureBuilder<Map<String, int>>(
+                future: _dashboardDataFuture,
+                builder: (context, snapshot) {
+                  final loading =
+                      snapshot.connectionState == ConnectionState.waiting;
+                  final data = snapshot.data ?? {};
+                  return Column(
+                    children: [
+                      const AnnouncementBanner(),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: () async => _refreshData(),
+                          child: loading
+                              ? const BusinessListSkeleton(itemCount: 4)
+                              : ListView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                                  children: [
+                                    _buildSummaryCard(businessName, data),
+                                    const SizedBox(height: 24),
+                                    const BusinessSectionHeader(
+                                      title: '핵심 업무',
+                                      subtitle: '수주와 협업 업무를 구분해 관리하세요',
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildCoreWorkCard(
+                                      icon: Icons.search_rounded,
+                                      title: '고객 요청 찾기',
+                                      description: '내 지역의 신규 견적 요청을 확인하세요',
+                                      meta:
+                                          '신규 요청 ${data['estimateRequests'] ?? 0}건',
+                                      actionLabel: '새 일감 보기',
+                                      color: BusinessTokens.blueLight,
+                                      borderColor: BusinessTokens.blue
+                                          .withValues(alpha: 0.35),
+                                      iconColor: BusinessTokens.blue,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const EstimateRequestsScreen(),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildCoreWorkCard(
+                                      icon: Icons.add_business_outlined,
+                                      title: '협업 일감 만들기',
+                                      description: '다른 전문 사업자와 공사를 함께 진행하세요',
+                                      meta: '내 협업 일감 ${data['myOrders'] ?? 0}건',
+                                      actionLabel: '공사 만들기',
+                                      color: BusinessTokens.surface,
+                                      borderColor: BusinessTokens.yellow,
+                                      iconColor: BusinessTokens.navy,
+                                      iconBackground: BusinessTokens.yellow,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const CreateJobScreen(),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    const BusinessSectionHeader(
+                                      title: '진행 중인 업무',
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildWorkQueue(data),
+                                    const SizedBox(height: 24),
+                                    _buildAdBanner(context),
+                                  ],
+                                ),
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          '오늘 처리할 일감을 한눈에 확인하세요',
-                          style: TextStyle(color: BusinessTheme.textMuted),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildKPICards(data),
-                        const SizedBox(height: 16),
-                        BusinessPrimaryButton(
-                          label: '새 일감 보기',
-                          icon: Icons.arrow_forward,
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const EstimateRequestsScreen()));
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _buildMainMenu(context, data),
-                        const SizedBox(height: 24),
-                        _buildAdBanner(context),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
-            bottomNavigationBar: BottomNavigation(
-              currentIndex: _currentIndex,
-              onTap: (index) {
-                setState(() => _currentIndex = index);
-              },
+                    ],
+                  );
+                },
+              ),
+              bottomNavigationBar: FutureBuilder<int>(
+                future: _unreadChatFuture,
+                builder: (context, snapshot) {
+                  return BusinessBottomNavigation(
+                    currentIndex: _currentIndex,
+                    unreadChats: snapshot.data ?? 0,
+                    onTap: _handleBottomNavigation,
+                  );
+                },
+              ),
             ),
           ),
         );
@@ -354,8 +394,10 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user) {
-    return AppBar(
-      title: const Text('오늘의 업무'),
+    return BusinessAppBar(
+      title: '오늘의 업무',
+      navy: true,
+      showBackButton: false,
       actions: [
         FutureBuilder<int>(
           future: _notifCountFuture,
@@ -369,13 +411,10 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                   onPressed: () async {
                     await Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                      MaterialPageRoute(
+                          builder: (_) => const NotificationScreen()),
                     );
-                    if (mounted) {
-                      setState(() {
-                        _dashboardDataFuture = _loadDashboardData();
-                      });
-                    }
+                    if (mounted) _refreshData();
                   },
                 ),
                 if (unread > 0)
@@ -388,10 +427,14 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                         color: BusinessTheme.danger,
                         shape: BoxShape.circle,
                       ),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      constraints:
+                          const BoxConstraints(minWidth: 16, minHeight: 16),
                       child: Text(
                         unread > 9 ? '9+' : unread.toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -404,88 +447,327 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     );
   }
 
-  Widget _buildKPICards(Map<String, int> data) {
-    return Column(
-      children: [
-        Row(
+  Widget _buildSummaryCard(String businessName, Map<String, int> data) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BusinessTokens.card(
+        color: BusinessTokens.navy,
+        borderColor: BusinessTokens.navy,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            businessName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '오늘 처리할 일감을 한눈에 확인하세요',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _summaryMetric(
+                  '신규 요청',
+                  data['estimateRequests'] ?? 0,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const EstimateRequestsScreen(),
+                    ),
+                  ),
+                ),
+              ),
+              _summaryDivider(),
+              Expanded(
+                child: _summaryMetric(
+                  '입찰 대기',
+                  data['myBids'] ?? 0,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BusinessMyEstimatesScreen(
+                        initialStatus: 'pending',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              _summaryDivider(),
+              Expanded(
+                child: _summaryMetric(
+                  '수주 진행',
+                  data['inProgress'] ?? 0,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const JobManagementScreen(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryMetric(String label, int value, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
           children: [
-            Expanded(
-              child: BusinessMetricCard(
-                label: '신규 견적 요청',
-                value: '${data['estimateRequests'] ?? 0}',
-                icon: Icons.inbox_outlined,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstimateRequestsScreen())),
+            Text(
+              '$value',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: BusinessMetricCard(
-                label: '입찰 대기',
-                value: '${data['myBids'] ?? 0}',
-                icon: Icons.hourglass_empty,
-                accent: BusinessTheme.warning,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessMyEstimatesScreen(initialStatus: 'pending'))),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        BusinessMetricCard(
-          label: '수주 진행 작업',
-          value: '${data['inProgress'] ?? 0}',
-          icon: Icons.handyman_outlined,
-          accent: BusinessTheme.success,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JobManagementScreen())),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildMainMenu(BuildContext context, Map<String, int> data) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        ActionChip(
-          avatar: const Icon(Icons.shopping_bag_outlined, size: 16),
-          label: Text('오더 ${(data['newOrders'] ?? 0)}'),
-          onPressed: () async {
-            await Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderMarketplaceScreen(showSuccessMessage: false)));
-            if (mounted) _refreshData();
-          },
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.description_outlined, size: 16),
-          label: const Text('내 견적'),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessMyEstimatesScreen())),
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.work_outline, size: 16),
-          label: const Text('수주 관리'),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JobManagementScreen())),
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.folder_open_outlined, size: 16),
-          label: const Text('내 오더'),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrderManagementScreen())),
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.chat_bubble_outline, size: 16),
-          label: const Text('채팅'),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatListPage())),
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.person_outline, size: 16),
-          label: const Text('프로필'),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.groups_outlined, size: 16),
-          label: const Text('커뮤니티'),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityBoardScreen())),
-        ),
-      ],
+  Widget _summaryDivider() {
+    return Container(
+      width: 1,
+      height: 45,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: Colors.white24,
     );
+  }
+
+  Widget _buildCoreWorkCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required String meta,
+    required String actionLabel,
+    required Color color,
+    required Color borderColor,
+    required Color iconColor,
+    required VoidCallback onTap,
+    Color? iconBackground,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(BusinessTokens.cardRadius),
+        child: Ink(
+          padding: const EdgeInsets.all(18),
+          decoration: BusinessTokens.card(
+            color: color,
+            borderColor: borderColor,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: iconBackground ??
+                      BusinessTokens.surface.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: BusinessTokens.sectionTitle),
+                    const SizedBox(height: 5),
+                    Text(
+                      description,
+                      style: BusinessTokens.caption,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            meta,
+                            style: const TextStyle(
+                              color: BusinessTokens.text,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          actionLabel,
+                          style: const TextStyle(
+                            color: BusinessTokens.blue,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: BusinessTokens.blue,
+                          size: 19,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkQueue(Map<String, int> data) {
+    return Container(
+      decoration: BusinessTokens.card(),
+      child: Column(
+        children: [
+          _workQueueItem(
+            icon: Icons.description_outlined,
+            label: '내 입찰',
+            value: '${data['myBids'] ?? 0}건 대기',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BusinessMyEstimatesScreen(),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: BusinessTokens.border),
+          _workQueueItem(
+            icon: Icons.handyman_outlined,
+            label: '수주 관리',
+            value: '${data['inProgress'] ?? 0}건 진행',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const JobManagementScreen(),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: BusinessTokens.border),
+          _workQueueItem(
+            icon: Icons.travel_explore_outlined,
+            label: '협업 일감 찾기',
+            value: '${data['newOrders'] ?? 0}건 모집',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    const OrderMarketplaceScreen(showSuccessMessage: false),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: BusinessTokens.border),
+          _workQueueItem(
+            icon: Icons.hub_outlined,
+            label: '내 협업 일감',
+            value: '${data['myOrders'] ?? 0}건',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MyOrderManagementScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _workQueueItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      minTileHeight: 62,
+      leading: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: BusinessTokens.blueLight,
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Icon(icon, size: 20, color: BusinessTokens.blue),
+      ),
+      title: Text(
+        label,
+        style: const TextStyle(
+          color: BusinessTokens.text,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(value, style: BusinessTokens.caption),
+          const SizedBox(width: 4),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: BusinessTokens.mutedText,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleBottomNavigation(int index) {
+    if (index == 0) return;
+    final Widget? destination = switch (index) {
+      1 => const EstimateRequestsScreen(),
+      2 => const CreateJobScreen(),
+      3 => const ChatListPage(),
+      4 => const ProfileScreen(),
+      _ => null,
+    };
+    if (destination == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => destination),
+    ).then((_) {
+      if (mounted) _refreshData();
+    });
   }
 
   Widget _buildAdBanner(BuildContext context) {
@@ -494,7 +776,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       builder: (context, snapshot) {
         // 광고 데이터 로드
         final ads = snapshot.data ?? [];
-        
+
         // 광고가 없으면 빈 자리(placeholder)만 표시 — 연락처 노출 금지
         if (ads.isEmpty) {
           return Container(
@@ -507,7 +789,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             ),
           );
         }
-        
+
         return SizedBox(
           height: 80,
           child: _DashboardAdCarousel(ads: ads),
@@ -515,7 +797,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       },
     );
   }
-
 }
 
 class _DashboardAdCarousel extends StatefulWidget {
@@ -569,7 +850,8 @@ class _DashboardAdCarouselState extends State<_DashboardAdCarousel> {
   Future<void> _launchUrl(String urlString) async {
     try {
       final Uri url = Uri.parse(urlString);
-      if (!await url_launcher.launchUrl(url, mode: url_launcher.LaunchMode.externalApplication)) {
+      if (!await url_launcher.launchUrl(url,
+          mode: url_launcher.LaunchMode.externalApplication)) {
         throw Exception('Could not launch $url');
       }
     } catch (e) {
@@ -662,5 +944,3 @@ class _DashboardAdCarouselState extends State<_DashboardAdCarousel> {
     );
   }
 }
-
-

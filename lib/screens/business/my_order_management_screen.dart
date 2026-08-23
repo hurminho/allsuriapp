@@ -22,16 +22,18 @@ import '../chat_screen.dart'; // 추가
 /// - 입찰자 선택, 리뷰 작성 등 오더 소유자 기능
 class MyOrderManagementScreen extends StatefulWidget {
   final String? highlightedOrderId; // 포커싱할 오더 ID
-  final String? initialFilter; // 초기 필터 ('all', 'pending', 'in_progress', 'completed')
-  
+  final String?
+      initialFilter; // 초기 필터 ('all', 'pending', 'in_progress', 'completed')
+
   const MyOrderManagementScreen({
-    Key? key, 
+    Key? key,
     this.highlightedOrderId,
     this.initialFilter,
   }) : super(key: key);
 
   @override
-  State<MyOrderManagementScreen> createState() => _MyOrderManagementScreenState();
+  State<MyOrderManagementScreen> createState() =>
+      _MyOrderManagementScreenState();
 }
 
 class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
@@ -47,24 +49,24 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
   @override
   void initState() {
     super.initState();
-    
+
     // 초기 필터 설정
     _filter = widget.initialFilter ?? 'all';
-    
+
     // 🔒 사업자 승인 상태 확인
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkBusinessApproval();
     });
-    
+
     _loadMyOrders();
     _subscribeToOrderBids();
   }
-  
+
   /// 🔒 사업자 승인 상태 확인
   void _checkBusinessApproval() {
     final authService = Provider.of<AuthService>(context, listen: false);
     final user = authService.currentUser;
-    
+
     if (user == null) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +77,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       );
       return;
     }
-    
+
     if (user.role != 'business') {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -86,7 +88,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       );
       return;
     }
-    
+
     if (user.businessStatus != 'approved') {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -99,14 +101,14 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       return;
     }
   }
-  
+
   @override
   void dispose() {
     _channel?.unsubscribe();
     _scrollController.dispose();
     super.dispose();
   }
-  
+
   /// 내 오더에 대한 입찰 및 상태 변경 실시간 구독
   void _subscribeToOrderBids() {
     final currentUserId = context.read<AuthService>().currentUser?.id;
@@ -114,10 +116,10 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       print('❌ [MyOrderManagement] 현재 사용자 ID가 없어 실시간 구독 불가');
       return;
     }
-    
+
     print('🔔 [MyOrderManagement] 입찰 및 상태 실시간 알림 구독 시작');
     print('   currentUserId: $currentUserId');
-    
+
     _channel = Supabase.instance.client
         .channel('my_order_realtime_$currentUserId')
         // 새 입찰 감지
@@ -128,10 +130,10 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           callback: (payload) {
             print('🔔 [MyOrderManagement] 새 입찰 감지!');
             print('   Payload: $payload');
-            
+
             // 새 입찰이 들어온 경우 목록 새로고침
             _loadMyOrders();
-            
+
             // 사용자에게 알림 표시
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -158,16 +160,16 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
             print('🔔 [MyOrderManagement] 내 오더 상태 변경 감지!');
             print('   Old: ${payload.oldRecord}');
             print('   New: ${payload.newRecord}');
-            
+
             final oldStatus = payload.oldRecord?['status'];
             final newStatus = payload.newRecord?['status'];
-            
+
             if (oldStatus != newStatus) {
               print('   상태 변경: $oldStatus → $newStatus');
-              
+
               // 상태가 변경된 경우 목록 새로고침
               _loadMyOrders();
-              
+
               // 사용자에게 알림 표시
               if (mounted && newStatus == 'awaiting_confirmation') {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -182,12 +184,12 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           },
         )
         .subscribe((status, error) {
-          if (error != null) {
-            print('❌ [MyOrderManagement] 실시간 구독 에러: $error');
-          } else {
-            print('✅ [MyOrderManagement] 실시간 구독 상태: $status');
-          }
-        });
+      if (error != null) {
+        print('❌ [MyOrderManagement] 실시간 구독 에러: $error');
+      } else {
+        print('✅ [MyOrderManagement] 실시간 구독 상태: $status');
+      }
+    });
   }
 
   Future<void> _loadMyOrders() async {
@@ -206,7 +208,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       print('   현재 사용자 ID: $currentUserId');
 
       final api = ApiService();
-      final response = await api.get('/market/listings?status=all&postedBy=$currentUserId');
+      final response =
+          await api.get('/market/listings?status=all&postedBy=$currentUserId');
 
       if (response['success'] != true) {
         throw Exception(response['error'] ?? 'API 호출 실패');
@@ -234,14 +237,16 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     } catch (e, stackTrace) {
       print('❌ [MyOrderManagement] 오더 로드 실패: $e');
       print('   StackTrace: $stackTrace');
-      
+
       // 502 에러이거나 데이터 없음이 아닌 경우에만 에러 메시지 표시
       final errorMsg = e.toString();
-      final is502Error = errorMsg.contains('502') || errorMsg.contains('Bad Gateway');
-      
+      final is502Error =
+          errorMsg.contains('502') || errorMsg.contains('Bad Gateway');
+
       if (mounted && !is502Error) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('오더 로드 실패: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('협업 일감 로드 실패: $e'), backgroundColor: Colors.red),
         );
       } else if (is502Error) {
         // 502 에러는 로그만 출력하고 사용자에게는 표시하지 않음
@@ -250,7 +255,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
-        
+
         // 🎯 포커싱: highlightedOrderId가 있으면 해당 오더로 스크롤
         if (widget.highlightedOrderId != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -310,8 +315,9 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     // 약간의 지연을 두어 ListView가 완전히 빌드된 후 스크롤
     Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted || !_scrollController.hasClients) return;
-      
-      final index = _filteredOrders.indexWhere((order) => order['id']?.toString() == widget.highlightedOrderId);
+
+      final index = _filteredOrders.indexWhere(
+          (order) => order['id']?.toString() == widget.highlightedOrderId);
 
       print('🔍 [_scrollToHighlightedOrder] 찾는 중...');
       print('   highlightedOrderId: ${widget.highlightedOrderId}');
@@ -324,17 +330,18 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         const double itemHeight = 250.0;
         final double offset = index * itemHeight;
         final double maxScroll = _scrollController.position.maxScrollExtent;
-        
+
         // 스크롤 범위를 초과하지 않도록 제한
         final double targetOffset = offset > maxScroll ? maxScroll : offset;
-        
+
         _scrollController.animateTo(
           targetOffset,
           duration: const Duration(milliseconds: 800),
           curve: Curves.easeInOutCubic,
         );
-        
-        print('✅ [MyOrderManagement] ${widget.highlightedOrderId} 오더로 스크롤 (index: $index, offset: $targetOffset)');
+
+        print(
+            '✅ [MyOrderManagement] ${widget.highlightedOrderId} 오더로 스크롤 (index: $index, offset: $targetOffset)');
       } else {
         print('⚠️ [MyOrderManagement] highlightedOrderId를 찾을 수 없음');
         if (_filteredOrders.isNotEmpty) {
@@ -346,10 +353,10 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
 
   List<Map<String, dynamic>> get _filteredOrders {
     if (_filter == 'all') return _myOrders;
-    
+
     return _myOrders.where((order) {
       final status = order['status']?.toString() ?? '';
-      
+
       switch (_filter) {
         case 'pending':
           // 입찰 대기중 (created, open)
@@ -369,53 +376,59 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final me = context.read<AuthService>().currentUser?.id ?? '';
-    
+
     return Theme(
-      data: BusinessTheme.theme(Theme.of(context)),
-      child: Scaffold(
-      backgroundColor: BusinessTheme.background,
-      appBar: AppBar(
-        title: const Text('내 오더 관리'),
-        centerTitle: true,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadMyOrders,
-            tooltip: '새로고침',
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const LoadingIndicator(
-              message: '내 오더를 불러오는 중...',
-              subtitle: '잠시만 기다려주세요',
-            )
-          : Column(
-              children: [
-                _buildFilterChips(),
-                Expanded(
-                  child: _filteredOrders.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.separated(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          itemCount: _filteredOrders.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final order = _filteredOrders[index];
-                            final isHighlighted = widget.highlightedOrderId != null && order['id']?.toString() == widget.highlightedOrderId;
-                            return _buildOrderCard(order, me, isHighlighted);
-                          },
-                        ),
-                ),
-              ],
+        data: BusinessTheme.theme(Theme.of(context)),
+        child: Scaffold(
+          backgroundColor: BusinessTheme.background,
+          appBar: AppBar(
+            title: const Text('내 협업 일감'),
+            centerTitle: true,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+              onPressed: () => Navigator.pop(context),
             ),
-    ));
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: _loadMyOrders,
+                tooltip: '새로고침',
+              ),
+            ],
+          ),
+          body: _isLoading
+              ? const LoadingIndicator(
+                  message: '내 협업 일감을 불러오는 중...',
+                  subtitle: '잠시만 기다려주세요',
+                )
+              : Column(
+                  children: [
+                    _buildFilterChips(),
+                    Expanded(
+                      child: _filteredOrders.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.separated(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              itemCount: _filteredOrders.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final order = _filteredOrders[index];
+                                final isHighlighted =
+                                    widget.highlightedOrderId != null &&
+                                        order['id']?.toString() ==
+                                            widget.highlightedOrderId;
+                                return _buildOrderCard(
+                                    order, me, isHighlighted);
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+        ));
   }
 
   Widget _buildFilterChips() {
@@ -423,9 +436,10 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       final s = o['status']?.toString() ?? '';
       return s == 'created' || s == 'open';
     }).length;
-    
-    final inProgressCount = _myOrders.where((o) => o['status'] == 'assigned').length;
-    
+
+    final inProgressCount =
+        _myOrders.where((o) => o['status'] == 'assigned').length;
+
     final completedCount = _myOrders.where((o) {
       final s = o['status']?.toString() ?? '';
       return s == 'completed' || s == 'awaiting_confirmation';
@@ -438,13 +452,29 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            BusinessFilterChip(label: '전체', selected: _filter == 'all', count: _myOrders.length, onTap: () => setState(() => _filter = 'all')),
+            BusinessFilterChip(
+                label: '전체',
+                selected: _filter == 'all',
+                count: _myOrders.length,
+                onTap: () => setState(() => _filter = 'all')),
             const SizedBox(width: 8),
-            BusinessFilterChip(label: '입찰 대기', selected: _filter == 'pending', count: pendingCount, onTap: () => setState(() => _filter = 'pending')),
+            BusinessFilterChip(
+                label: '입찰 대기',
+                selected: _filter == 'pending',
+                count: pendingCount,
+                onTap: () => setState(() => _filter = 'pending')),
             const SizedBox(width: 8),
-            BusinessFilterChip(label: '작업 진행', selected: _filter == 'in_progress', count: inProgressCount, onTap: () => setState(() => _filter = 'in_progress')),
+            BusinessFilterChip(
+                label: '작업 진행',
+                selected: _filter == 'in_progress',
+                count: inProgressCount,
+                onTap: () => setState(() => _filter = 'in_progress')),
             const SizedBox(width: 8),
-            BusinessFilterChip(label: '완료', selected: _filter == 'completed', count: completedCount, onTap: () => setState(() => _filter = 'completed')),
+            BusinessFilterChip(
+                label: '완료',
+                selected: _filter == 'completed',
+                count: completedCount,
+                onTap: () => setState(() => _filter = 'completed')),
           ],
         ),
       ),
@@ -454,7 +484,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
   Widget _buildChip(String label, String value, IconData icon, int count) {
     final isSelected = _filter == value;
     final color = const Color(0xFFE6A700); // Orange for orders
-    
+
     return GestureDetector(
       onTap: () => setState(() => _filter = value),
       child: Container(
@@ -498,7 +528,9 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isSelected ? Colors.white.withOpacity(0.3) : color.withOpacity(0.15),
+                  color: isSelected
+                      ? Colors.white.withOpacity(0.3)
+                      : color.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -537,7 +569,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           ),
           const SizedBox(height: 20),
           const Text(
-            '생성한 오더가 없습니다',
+            '생성한 협업 일감이 없습니다',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -546,7 +578,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '공사 등록 시 "오더로 올리기"를 선택해보세요',
+            '공사 만들기에서 동료 사업자 모집을 시작해보세요',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[500],
@@ -557,12 +589,13 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     );
   }
 
-  Widget _buildOrderCard(Map<String, dynamic> order, String me, [bool isHighlighted = false]) {
+  Widget _buildOrderCard(Map<String, dynamic> order, String me,
+      [bool isHighlighted = false]) {
     final String title = order['title']?.toString() ?? '제목 없음';
     final String description = order['description']?.toString() ?? '';
     final String status = order['status']?.toString() ?? '';
-    final int bidCount = order['bid_count'] is int 
-        ? order['bid_count'] as int 
+    final int bidCount = order['bid_count'] is int
+        ? order['bid_count'] as int
         : int.tryParse(order['bid_count']?.toString() ?? '0') ?? 0;
     final String listingId = order['id']?.toString() ?? '';
     final String jobId = order['jobid']?.toString() ?? ''; // 추가
@@ -580,32 +613,36 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     print('   bidCount: $bidCount');
 
     // 상태 배지
-    final badge = _getBadgeForStatus(status, bidCount, selectedBidderId, completedBy);
+    final badge =
+        _getBadgeForStatus(status, bidCount, selectedBidderId, completedBy);
 
     // 삭제 가능 여부 (낙찰 전 상태 + 생성자)
-    final bool canDelete = (status == 'created' || status == 'open') && selectedBidderId == null;
+    final bool canDelete =
+        (status == 'created' || status == 'open') && selectedBidderId == null;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 800),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: isHighlighted 
+        border: isHighlighted
             ? Border.all(color: const Color(0xFF0B2545), width: 3)
             : Border.all(color: Colors.grey[200]!, width: 1),
-        boxShadow: isHighlighted ? [
-          BoxShadow(
-            color: const Color(0xFF0B2545).withOpacity(0.3),
-            blurRadius: 12,
-            spreadRadius: 2,
-          ),
-        ] : [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: isHighlighted
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF0B2545).withOpacity(0.3),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -617,7 +654,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
               children: [
                 // Badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                     color: badge.color,
                     borderRadius: BorderRadius.circular(8),
@@ -643,11 +681,12 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 if (listingId.isNotEmpty && selectedBidderId == null)
                   IconButton(
                     onPressed: () => _shareOrder(order),
-                    icon: const Icon(Icons.share_outlined, color: Color(0xFF0B2545), size: 22),
+                    icon: const Icon(Icons.share_outlined,
+                        color: Color(0xFF0B2545), size: 22),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
-                    tooltip: '오더 공유',
+                    tooltip: '협업 일감 공유',
                   ),
                 if (listingId.isNotEmpty && selectedBidderId == null)
                   const SizedBox(width: 8),
@@ -663,7 +702,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                         ),
                       ),
                     ),
-                    icon: const Icon(Icons.timeline_rounded, color: Color(0xFF0B2545), size: 22),
+                    icon: const Icon(Icons.timeline_rounded,
+                        color: Color(0xFF0B2545), size: 22),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
@@ -674,11 +714,12 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 if (canDelete)
                   IconButton(
                     onPressed: () => _deleteOrder(listingId, jobId, title),
-                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        color: Colors.redAccent, size: 22),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
-                    tooltip: '오더 삭제',
+                    tooltip: '협업 일감 삭제',
                   ),
                 const SizedBox(width: 8),
                 // Budget
@@ -717,7 +758,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-            
+
             // 버튼 로직: 완료 상태에 따라 다른 버튼 표시
             // 1. 완료된 오더 (completed): 상세보기 + 후기 작성/수정
             if (status == 'completed') ...[
@@ -734,12 +775,14 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18),
+                      const Icon(Icons.warning_amber_rounded,
+                          color: Color(0xFFDC2626), size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           '아직 후기/평점을 작성하지 않았습니다.',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[800]),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[800]),
                         ),
                       ),
                     ],
@@ -755,7 +798,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                       label: const Text('공사 상세 보기'),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
@@ -764,11 +808,15 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () => _openReviewScreen(order),
                       icon: Icon(
-                        _reviewedListingIds.contains(listingId) ? Icons.edit_outlined : Icons.star_outline,
+                        _reviewedListingIds.contains(listingId)
+                            ? Icons.edit_outlined
+                            : Icons.star_outline,
                         size: 18,
                       ),
                       label: Text(
-                        _reviewedListingIds.contains(listingId) ? '후기 수정' : '후기/평점 작성',
+                        _reviewedListingIds.contains(listingId)
+                            ? '후기 수정'
+                            : '후기/평점 작성',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -777,7 +825,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                             : const Color(0xFFDC2626),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                         elevation: 0,
                       ),
                     ),
@@ -788,8 +837,10 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: IconButton(
-                    onPressed: () => _openChatWithBidder(listingId, title, completedBy ?? selectedBidderId ?? claimedBy),
-                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF0B2545)),
+                    onPressed: () => _openChatWithBidder(listingId, title,
+                        completedBy ?? selectedBidderId ?? claimedBy),
+                    icon: const Icon(Icons.chat_bubble_outline,
+                        color: Color(0xFF0B2545)),
                     tooltip: '채팅',
                   ),
                 ),
@@ -803,7 +854,9 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        if (completedBy == null && selectedBidderId == null && claimedBy == null) {
+                        if (completedBy == null &&
+                            selectedBidderId == null &&
+                            claimedBy == null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('낙찰된 사업자 정보를 찾을 수 없습니다.'),
@@ -840,29 +893,34 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                             // 채팅방 이동 로직
                             try {
                               final chatService = ChatService();
-                              final authService = Provider.of<AuthService>(context, listen: false);
+                              final authService = Provider.of<AuthService>(
+                                  context,
+                                  listen: false);
                               final currentUserId = authService.currentUser?.id;
-                              
+
                               if (currentUserId == null) return;
-                              
+
                               // 상대방 ID 확인 (낙찰된 사업자)
-                              final targetUserId = completedBy ?? selectedBidderId ?? claimedBy;
-                              
+                              final targetUserId =
+                                  completedBy ?? selectedBidderId ?? claimedBy;
+
                               if (targetUserId == null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('대화할 상대방 정보를 찾을 수 없습니다.')),
+                                  const SnackBar(
+                                      content: Text('대화할 상대방 정보를 찾을 수 없습니다.')),
                                 );
                                 return;
                               }
-                              
+
                               // 채팅방 생성/조회
-                              final chatRoomId = await chatService.ensureChatRoom(
+                              final chatRoomId =
+                                  await chatService.ensureChatRoom(
                                 customerId: currentUserId, // 나 (오더 소유자)
                                 businessId: targetUserId, // 낙찰받은 사업자
                                 listingId: listingId,
                                 title: title,
                               );
-                              
+
                               // 채팅 화면으로 이동
                               Navigator.push(
                                 context,
@@ -888,7 +946,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                               color: Colors.white.withOpacity(0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 20),
+                            child: const Icon(Icons.chat_bubble_outline,
+                                color: Colors.white, size: 20),
                           ),
                         ),
                       ),
@@ -903,7 +962,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isCompleting ? null : () => _completeOrderAsOwner(order),
+                  onPressed:
+                      _isCompleting ? null : () => _completeOrderAsOwner(order),
                   icon: const Icon(Icons.check_circle_outline, size: 18),
                   label: const Text(
                     '공사 완료',
@@ -912,7 +972,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1F8A70),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -928,7 +989,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     label: Text('입찰자 보기 ($bidCount명)'),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ),
@@ -937,8 +999,10 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: IconButton(
-                    onPressed: () => _openChatWithBidder(listingId, title, selectedBidderId ?? claimedBy),
-                    icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF0B2545)),
+                    onPressed: () => _openChatWithBidder(
+                        listingId, title, selectedBidderId ?? claimedBy),
+                    icon: const Icon(Icons.chat_bubble_outline,
+                        color: Color(0xFF0B2545)),
                     tooltip: '채팅',
                   ),
                 ),
@@ -953,10 +1017,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () => _openBidderList(listingId, title),
                       icon: const Icon(Icons.people_outline, size: 18),
-                      label: Text(
-                        '입찰자 보기 ($bidCount명)', 
-                        style: const TextStyle(fontWeight: FontWeight.w600)
-                      ),
+                      label: Text('입찰자 보기 ($bidCount명)',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0B2545),
                         foregroundColor: Colors.white,
@@ -978,29 +1040,34 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                             // 채팅방 이동 로직 (낙찰자와의 채팅)
                             try {
                               final chatService = ChatService();
-                              final authService = Provider.of<AuthService>(context, listen: false);
+                              final authService = Provider.of<AuthService>(
+                                  context,
+                                  listen: false);
                               final currentUserId = authService.currentUser?.id;
-                              
+
                               if (currentUserId == null) return;
-                              
+
                               // 상대방 ID 확인 (낙찰된 사업자)
-                              final targetUserId = completedBy ?? selectedBidderId ?? claimedBy;
-                              
+                              final targetUserId =
+                                  completedBy ?? selectedBidderId ?? claimedBy;
+
                               if (targetUserId == null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('대화할 상대방 정보를 찾을 수 없습니다.')),
+                                  const SnackBar(
+                                      content: Text('대화할 상대방 정보를 찾을 수 없습니다.')),
                                 );
                                 return;
                               }
-                              
+
                               // 채팅방 생성/조회
-                              final chatRoomId = await chatService.ensureChatRoom(
+                              final chatRoomId =
+                                  await chatService.ensureChatRoom(
                                 customerId: currentUserId, // 나 (오더 소유자)
                                 businessId: targetUserId, // 낙찰받은 사업자
                                 listingId: listingId,
                                 title: title,
                               );
-                              
+
                               // 채팅 화면으로 이동
                               Navigator.push(
                                 context,
@@ -1026,7 +1093,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                               color: Colors.white.withOpacity(0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 20),
+                            child: const Icon(Icons.chat_bubble_outline,
+                                color: Colors.white, size: 20),
                           ),
                         ),
                       ),
@@ -1040,7 +1108,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     );
   }
 
-  _OrderBadge _getBadgeForStatus(String status, int bidCount, String? selectedBidderId, String? completedBy) {
+  _OrderBadge _getBadgeForStatus(String status, int bidCount,
+      String? selectedBidderId, String? completedBy) {
     switch (status) {
       case 'created':
       case 'open':
@@ -1079,22 +1148,27 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     final String description = order['description']?.toString() ?? '';
     final String listingId = order['id']?.toString() ?? '';
     final String jobId = order['jobid']?.toString() ?? '';
-    final String category =
-        (order['category'] ?? order['equipmentType'] ?? order['equipment_type'] ?? '')
-            .toString();
+    final String category = (order['category'] ??
+            order['equipmentType'] ??
+            order['equipment_type'] ??
+            '')
+        .toString();
     final String region =
-        (order['region'] ?? order['address'] ?? order['location'] ?? '').toString();
+        (order['region'] ?? order['address'] ?? order['location'] ?? '')
+            .toString();
 
     final budgetRaw = order['budget_amount'] ??
         order['estimate_amount'] ??
         order['budgetAmount'] ??
         order['estimateAmount'];
-    final double? budgetAmount =
-        budgetRaw is num ? budgetRaw.toDouble() : double.tryParse(budgetRaw?.toString() ?? '');
+    final double? budgetAmount = budgetRaw is num
+        ? budgetRaw.toDouble()
+        : double.tryParse(budgetRaw?.toString() ?? '');
 
     final commRaw = order['commission_rate'] ?? order['commissionRate'];
-    final double? commissionRate =
-        commRaw is num ? commRaw.toDouble() : double.tryParse(commRaw?.toString() ?? '');
+    final double? commissionRate = commRaw is num
+        ? commRaw.toDouble()
+        : double.tryParse(commRaw?.toString() ?? '');
 
     String? imageUrl;
     final mediaCandidates = order['media_urls'] ??
@@ -1129,12 +1203,14 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
   }
 
   /// 오더 삭제 처리
-  Future<void> _deleteOrder(String listingId, String jobId, String title) async {
+  Future<void> _deleteOrder(
+      String listingId, String jobId, String title) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('오더 삭제'),
-        content: Text('[$title] 오더를 정말 삭제하시겠습니까?\n삭제된 오더는 복구할 수 없으며 모든 입찰 내역도 함께 삭제됩니다.'),
+        title: const Text('협업 일감 삭제'),
+        content: Text(
+            '[$title] 협업 일감을 정말 삭제하시겠습니까?\n삭제된 일감은 복구할 수 없으며 모든 지원 내역도 함께 삭제됩니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1142,7 +1218,9 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            child: const Text('삭제',
+                style:
+                    TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -1159,12 +1237,16 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('오더가 삭제되었습니다.'), backgroundColor: Colors.green),
+            const SnackBar(
+                content: Text('협업 일감이 삭제되었습니다.'),
+                backgroundColor: Colors.green),
           );
           _loadMyOrders(); // 목록 새로고침
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('오더 삭제에 실패했습니다.'), backgroundColor: Colors.red),
+            const SnackBar(
+                content: Text('협업 일감 삭제에 실패했습니다.'),
+                backgroundColor: Colors.red),
           );
         }
       }
@@ -1253,7 +1335,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     if (_isCompleting) return;
 
     final listingId = order['id']?.toString();
-    final title = order['title']?.toString() ?? '오더';
+    final title = order['title']?.toString() ?? '협업 일감';
     final selectedBidderId = order['selected_bidder_id']?.toString();
     final claimedBy = order['claimed_by']?.toString();
     final revieweeId = selectedBidderId ?? claimedBy;
@@ -1312,24 +1394,18 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
 
       final now = DateTime.now().toIso8601String();
 
-      await Supabase.instance.client
-          .from('marketplace_listings')
-          .update({
-            'status': 'awaiting_confirmation',
-            'completed_at': now,
-            'completed_by': revieweeId,
-            'updatedat': now,
-          })
-          .eq('id', listingId);
+      await Supabase.instance.client.from('marketplace_listings').update({
+        'status': 'awaiting_confirmation',
+        'completed_at': now,
+        'completed_by': revieweeId,
+        'updatedat': now,
+      }).eq('id', listingId);
 
       if (jobId != null && jobId.isNotEmpty) {
-        await Supabase.instance.client
-            .from('jobs')
-            .update({
-              'status': 'awaiting_confirmation',
-              'updated_at': now,
-            })
-            .eq('id', jobId);
+        await Supabase.instance.client.from('jobs').update({
+          'status': 'awaiting_confirmation',
+          'updated_at': now,
+        }).eq('id', jobId);
       }
 
       await _sendReviewRequestNotification(
@@ -1354,7 +1430,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).maybePop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('공사 완료 처리 실패: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('공사 완료 처리 실패: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -1367,12 +1444,12 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     final completedBy = order['completed_by']?.toString();
     final selectedBidderId = order['selected_bidder_id']?.toString();
     final claimedBy = order['claimed_by']?.toString();
-    final title = order['title']?.toString() ?? '오더';
+    final title = order['title']?.toString() ?? '협업 일감';
     final jobId = order['jobid']?.toString();
-    
+
     // 리뷰 대상자 ID: completedBy > selectedBidderId > claimedBy 순서로 확인
     final revieweeId = completedBy ?? selectedBidderId ?? claimedBy;
-    
+
     print('🔍 [_openReviewScreen] 리뷰 화면 열기');
     print('   listingId: $listingId');
     print('   jobId: $jobId');
@@ -1380,19 +1457,19 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     print('   selectedBidderId: $selectedBidderId');
     print('   claimedBy: $claimedBy');
     print('   최종 revieweeId: $revieweeId');
-    
+
     // jobId는 선택사항 (없어도 리뷰 작성 가능)
     if (listingId == null || revieweeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('리뷰 작성 정보가 부족합니다.\n오더가 완료되지 않았을 수 있습니다.'),
+          content: Text('리뷰 작성 정보가 부족합니다.\n협업 일감이 완료되지 않았을 수 있습니다.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
       );
       return;
     }
-    
+
     // Get reviewee name from users table
     String revieweeName = '사업자';
     try {
@@ -1401,13 +1478,14 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           .select('businessname, name')
           .eq('id', revieweeId)
           .single();
-      
-      revieweeName = userResponse['businessname']?.toString() ?? 
-                     userResponse['name']?.toString() ?? '사업자';
+
+      revieweeName = userResponse['businessname']?.toString() ??
+          userResponse['name']?.toString() ??
+          '사업자';
     } catch (e) {
       print('⚠️ [MyOrderManagement] 사업자 이름 조회 실패: $e');
     }
-    
+
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -1420,20 +1498,20 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         ),
       ),
     );
-    
+
     // 리뷰 작성 후 새로고침
     _loadMyOrders();
   }
 
   Future<void> _showCompletedOrderDetail(Map<String, dynamic> order) async {
     final listingId = order['id']?.toString();
-    final title = order['title']?.toString() ?? '오더';
+    final title = order['title']?.toString() ?? '협업 일감';
     final description = order['description']?.toString() ?? '';
     final budget = order['budget_amount'];
     final me = context.read<AuthService>().currentUser?.id ?? '';
-    
+
     if (listingId == null) return;
-    
+
     // 내가 작성한 리뷰 가져오기
     Map<String, dynamic>? myReview;
     try {
@@ -1447,9 +1525,9 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     } catch (e) {
       print('⚠️ 리뷰 조회 실패: $e');
     }
-    
+
     if (!mounted) return;
-    
+
     // 상세보기 다이얼로그
     await showDialog(
       context: context,
@@ -1458,7 +1536,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           children: [
             const Icon(Icons.check_circle, color: Colors.green, size: 28),
             const SizedBox(width: 12),
-            const Expanded(child: Text('완료된 공사', style: TextStyle(fontSize: 18))),
+            const Expanded(
+                child: Text('완료된 공사', style: TextStyle(fontSize: 18))),
           ],
         ),
         content: SingleChildScrollView(
@@ -1467,68 +1546,88 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // 공사 제목
-              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              
+
               // 공사 설명
               if (description.isNotEmpty) ...[
-                Text(description, style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+                Text(description,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700])),
                 const SizedBox(height: 12),
               ],
-              
+
               // 예산
               if (budget != null) ...[
                 Row(
                   children: [
                     const Icon(Icons.payments_outlined, size: 16),
                     const SizedBox(width: 4),
-                    Text('예산: ₩${budget.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                        '예산: ₩${budget.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
                   ],
                 ),
                 const SizedBox(height: 16),
               ],
-              
+
               const Divider(),
               const SizedBox(height: 12),
-              
+
               // 내가 작성한 후기
               if (myReview != null) ...[
-                const Text('내가 작성한 후기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('내가 작성한 후기',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    ...List.generate(5, (i) => Icon(
-                      i < (myReview!['rating'] ?? 0) ? Icons.star : Icons.star_border,
-                      color: Colors.amber,
-                      size: 20,
-                    )),
+                    ...List.generate(
+                        5,
+                        (i) => Icon(
+                              i < (myReview!['rating'] ?? 0)
+                                  ? Icons.star
+                                  : Icons.star_border,
+                              color: Colors.amber,
+                              size: 20,
+                            )),
                     const SizedBox(width: 8),
-                    Text('${myReview['rating'] ?? 0}.0', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('${myReview['rating'] ?? 0}.0',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (myReview['tags'] != null && (myReview['tags'] as List).isNotEmpty) ...[
+                if (myReview['tags'] != null &&
+                    (myReview['tags'] as List).isNotEmpty) ...[
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: (myReview['tags'] as List).map((tag) => Chip(
-                      label: Text(tag.toString(), style: const TextStyle(fontSize: 11)),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    )).toList(),
+                    children: (myReview['tags'] as List)
+                        .map((tag) => Chip(
+                              label: Text(tag.toString(),
+                                  style: const TextStyle(fontSize: 11)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ))
+                        .toList(),
                   ),
                   const SizedBox(height: 8),
                 ],
-                if (myReview['comment'] != null && myReview['comment'].toString().isNotEmpty) ...[
-                  Text(myReview['comment'].toString(), 
-                    style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+                if (myReview['comment'] != null &&
+                    myReview['comment'].toString().isNotEmpty) ...[
+                  Text(myReview['comment'].toString(),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[700])),
                 ],
                 const SizedBox(height: 8),
-                Text('작성일: ${myReview['created_at']?.toString().substring(0, 10) ?? ''}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                Text(
+                    '작성일: ${myReview['created_at']?.toString().substring(0, 10) ?? ''}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500])),
               ] else ...[
-                const Text('작성된 후기가 없습니다.', style: TextStyle(color: Colors.grey)),
+                const Text('작성된 후기가 없습니다.',
+                    style: TextStyle(color: Colors.grey)),
               ],
             ],
           ),
@@ -1564,7 +1663,6 @@ class _OrderBadge {
   final String label;
   final Color color;
   final IconData icon;
-  
+
   const _OrderBadge(this.label, this.color, this.icon);
 }
-

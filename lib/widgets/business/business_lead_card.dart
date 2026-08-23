@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/business_theme.dart';
 import 'business_status_badge.dart';
+import 'business_tokens.dart';
 
 class BusinessLeadCard extends StatelessWidget {
   final String title;
@@ -46,9 +47,9 @@ class BusinessLeadCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(BusinessTheme.radius),
+        borderRadius: BorderRadius.circular(BusinessTokens.cardRadius),
         child: Ink(
-          decoration: BusinessTheme.cardDecoration(),
+          decoration: BusinessTokens.card(),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,35 +117,74 @@ class BusinessLeadCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   if (region != null) _meta(Icons.place_outlined, region!),
-                  if (timeLabel != null) _meta(Icons.schedule_outlined, timeLabel!),
+                  if (timeLabel != null)
+                    _meta(Icons.schedule_outlined, timeLabel!),
                   if (hasPhoto) _meta(Icons.photo_outlined, '사진 있음'),
-                  if (canBid) _meta(Icons.gavel_outlined, '입찰 가능'),
                 ],
               ),
-              if (amountLabel != null || nextAction != null || trailingAction != null) ...[
+              if (amountLabel != null) ...[
                 const SizedBox(height: 12),
+                Text(
+                  amountLabel!,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: BusinessTokens.navy,
+                  ),
+                ),
+              ],
+              if (canBid || nextAction != null || trailingAction != null) ...[
+                const SizedBox(height: 14),
+                const Divider(height: 1, color: BusinessTokens.border),
+                const SizedBox(height: 8),
                 Row(
                   children: [
-                    if (amountLabel != null)
-                      Expanded(
-                        child: Text(
-                          amountLabel!,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: BusinessTheme.navy,
+                    if (canBid)
+                      const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline_rounded,
+                            size: 16,
+                            color: BusinessTokens.success,
                           ),
-                        ),
+                          SizedBox(width: 5),
+                          Text(
+                            '입찰 가능',
+                            style: TextStyle(
+                              color: BusinessTokens.success,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       )
-                    else
-                      const Spacer(),
-                    if (nextAction != null && trailingAction == null)
+                    else if (nextAction != null && trailingAction == null)
                       Text(
                         nextAction!,
                         style: const TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: BusinessTheme.blue,
+                          fontWeight: FontWeight.w700,
+                          color: BusinessTokens.blue,
+                        ),
+                      ),
+                    const Spacer(),
+                    if (canBid && trailingAction == null)
+                      TextButton(
+                        onPressed: onTap,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(44, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '견적 작성',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            Icon(Icons.chevron_right_rounded, size: 18),
+                          ],
                         ),
                       ),
                     if (trailingAction != null) trailingAction!,

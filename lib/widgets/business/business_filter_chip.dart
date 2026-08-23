@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/business_theme.dart';
+import 'business_tokens.dart';
 
 class BusinessFilterChip extends StatelessWidget {
   final String label;
@@ -29,10 +29,10 @@ class BusinessFilterChip extends StatelessWidget {
           child: Ink(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: selected ? BusinessTheme.blue : BusinessTheme.surface,
+              color: selected ? BusinessTokens.blue : BusinessTokens.surface,
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
-                color: selected ? BusinessTheme.blue : BusinessTheme.border,
+                color: selected ? BusinessTokens.blue : BusinessTokens.border,
               ),
             ),
             child: Row(
@@ -42,7 +42,7 @@ class BusinessFilterChip extends StatelessWidget {
                   Icon(
                     icon,
                     size: 16,
-                    color: selected ? Colors.white : BusinessTheme.textMuted,
+                    color: selected ? Colors.white : BusinessTokens.mutedText,
                   ),
                   const SizedBox(width: 6),
                 ],
@@ -51,7 +51,7 @@ class BusinessFilterChip extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : BusinessTheme.textPrimary,
+                    color: selected ? Colors.white : BusinessTokens.text,
                   ),
                 ),
                 if (count != null) ...[
@@ -61,7 +61,8 @@ class BusinessFilterChip extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: selected ? Colors.white70 : BusinessTheme.textMuted,
+                      color:
+                          selected ? Colors.white70 : BusinessTokens.mutedText,
                     ),
                   ),
                 ],

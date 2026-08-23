@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/business_theme.dart';
+import 'business_tokens.dart';
 
 class BusinessMetricCard extends StatelessWidget {
   final String label;
@@ -19,15 +19,15 @@ class BusinessMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ?? BusinessTheme.blue;
+    final color = accent ?? BusinessTokens.blue;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(BusinessTheme.radius),
+        borderRadius: BorderRadius.circular(BusinessTokens.cardRadius),
         child: Ink(
-          decoration: BusinessTheme.cardDecoration(),
-          padding: const EdgeInsets.all(16),
+          decoration: BusinessTokens.card(),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -38,7 +38,7 @@ class BusinessMetricCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  color: BusinessTheme.textPrimary,
+                  color: BusinessTokens.text,
                   height: 1.1,
                 ),
               ),
@@ -48,7 +48,7 @@ class BusinessMetricCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: BusinessTheme.textMuted,
+                  color: BusinessTokens.mutedText,
                 ),
               ),
             ],
