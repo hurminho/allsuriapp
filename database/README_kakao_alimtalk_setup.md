@@ -15,6 +15,8 @@
 
 입찰 문자는 앱에서 마켓 입찰 API(`POST /api/market/listings/:id/bid`)가 호출될 때 나갑니다. (`web_order_id`가 있는 웹 오더만)
 
+**중요:** 입찰 API는 `api.allsuri.app`(allsuriapp)에서 실행됩니다. Solapi 키를 웹 사이트(allsuricommerce)에만 넣으면 입찰 문자가 나가지 않습니다. 아래 세 값을 **두 사이트 모두**에 넣으세요.
+
 낙찰 문자는 웹에서 사업자를 선택할 때 나갑니다. (allsuri-web `/api/customer/order/:id/award` 및 레거시 Netlify `customer` 함수)
 
 공사 완료·평점 문자는 사업자가 앱에서 공사 완료를 누르면 `POST /api/customer/order/:id/notify-work-done` 으로 나갑니다.
@@ -38,13 +40,15 @@ SOLAPI_SENDER_PHONE=<사전 등록된 발신번호, 숫자만. 예: 0212345678>
 ALLSURI_WEB_URL=https://allsuricommerce.netlify.app
 ```
 
-**allsuri-web Netlify** (낙찰 문자)
+**allsuri-web Netlify** (낙찰 문자 + 입찰 문자 위임)
 
 같은 `SOLAPI_*` 세 값을 넣고, 공개 사이트 주소가 다르면:
 
 ```
 NEXT_PUBLIC_SITE_URL=https://allsuricommerce.netlify.app
 ```
+
+입찰 문자는 `api.allsuri.app`에서 Solapi로 먼저 보내고, 키가 없거나 실패하면 웹 `POST /api/internal/sms`로 위임합니다. 웹에만 Solapi 키가 있어도 입찰 문자가 나갈 수 있습니다. 위임이 되려면 두 사이트의 `SUPABASE_SERVICE_ROLE_KEY`가 같아야 합니다.
 
 문자 본문의 확인 링크는 `https://allsuricommerce.netlify.app/my-order?phone=01012345678` 형식입니다. 전화번호가 미리 채워져 고객은 비밀번호만 입력하면 됩니다.
 
@@ -73,3 +77,4 @@ SOLAPI_SMS_TPL_WORK_DONE
 
 - 한글+URL이 포함되어 **LMS** 로 발송합니다.
 - 수신번호가 없거나 Solapi 설정이 비어 있으면 발송을 건너뜁니다. 입찰/낙찰/완료 처리 자체는 실패하지 않습니다.
+- 입찰 문자가 스킵/실패하면 Netlify 로그에 `[solapi-sms]` / `[market] 웹 오더 문자 미발송` 이 남습니다.

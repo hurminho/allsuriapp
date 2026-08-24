@@ -3,7 +3,7 @@
 
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
 
-import { customerOrderUrl, formatRating, formatWon, sendSms, smsBidReceived } from '../lib/solapi_sms'
+import { formatRating, formatWon, sendBidReceivedSms } from '../lib/solapi_sms'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
@@ -322,17 +322,19 @@ async function handleBidListing(event: any, path: string) {
               ? Math.round((ratings.reduce((s: number, n: number) => s + n, 0) / ratings.length) * 10) / 10
               : null
             const orderTitle = webOrder.title || listing.title || '견적 요청'
-            const link = customerOrderUrl(webOrder.customerPhone)
-            await sendSms(
-              webOrder.customerPhone,
-              smsBidReceived({
-                orderTitle,
-                businessName: bizName,
-                priceLabel: formatWon(bid_amount),
-                ratingLabel: formatRating(avg, ratings.length),
-                link,
-              })
-            )
+            const smsResult = await sendBidReceivedSms({
+              to: webOrder.customerPhone,
+              orderTitle,
+              businessName: bizName,
+              priceLabel: formatWon(bid_amount),
+              ratingLabel: formatRating(avg, ratings.length),
+              serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+            })
+            if (!smsResult.ok) {
+              console.warn('[market] 웹 오더 문자 미발송:', smsResult.error)
+            }
+          } else {
+            console.warn('[market] 웹 오더 전화번호 없음 - 문자 스킵')
           }
         } catch (e: any) {
           console.warn('[market] 웹 오더 문자 발송 실패 (무시):', e.message)
