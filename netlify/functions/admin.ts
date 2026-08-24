@@ -1012,24 +1012,25 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
         body: JSON.stringify({ adminRating: rating, adminRatingComment: comment || '', adminRatedAt: now, status: 'completed' }),
       })
 
-      // business_reviews 에도 저장 시도
+      // 평점은 order_reviews 로 통합 저장한다 (앱 B2B 평점과 같은 원천).
       const businessId = order?.technicianId || order?.technicianid
       if (businessId) {
         try {
-          await fetch(`${SUPABASE_URL}/rest/v1/business_reviews`, {
+          await fetch(`${SUPABASE_URL}/rest/v1/order_reviews?on_conflict=order_id`, {
             method: 'POST',
-            headers: { ...sbHeaders, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            headers: { ...sbHeaders, 'Content-Type': 'application/json', Prefer: 'return=minimal,resolution=merge-duplicates' },
             body: JSON.stringify({
-              business_id: businessId,
+              reviewee_id: businessId,
               order_id: orderId,
               rating,
               comment: comment || '',
               is_admin_review: true,
               created_at: now,
+              updated_at: now,
             }),
           })
         } catch (reviewErr) {
-          console.warn('[web-orders rate] business_reviews 저장 실패 (무시):', reviewErr)
+          console.warn('[web-orders rate] order_reviews 저장 실패 (무시):', reviewErr)
         }
       }
 

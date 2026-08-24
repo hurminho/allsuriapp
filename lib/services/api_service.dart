@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApiService extends ChangeNotifier {
   // API 기본 URL (dart-define로 덮어쓰기 가능)
@@ -23,10 +24,28 @@ class ApiService extends ChangeNotifier {
     _bearerToken = token;
   }
   static String? get currentBearerToken => _bearerToken;
-  Map<String, String> _headers() => {
-        'Content-Type': 'application/json',
-        if (_bearerToken != null && _bearerToken!.isNotEmpty) 'Authorization': 'Bearer $_bearerToken',
-      };
+
+  /// 로그인 시점에 저장한 토큰은 약 1시간 후 만료됩니다.
+  /// supabase_flutter가 자동 갱신하는 현재 세션 토큰을 우선 사용하고,
+  /// 세션이 없을 때만 저장된 토큰으로 폴백합니다.
+  static String? _accessToken() {
+    try {
+      final sessionToken =
+          Supabase.instance.client.auth.currentSession?.accessToken;
+      if (sessionToken != null && sessionToken.isNotEmpty) return sessionToken;
+    } catch (_) {
+      // Supabase 초기화 전 호출 등 — 저장된 토큰으로 폴백
+    }
+    return _bearerToken;
+  }
+
+  Map<String, String> _headers() {
+    final token = _accessToken();
+    return {
+      'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+  }
 
   // GET 요청
   Future<Map<String, dynamic>> get(String endpoint) async {

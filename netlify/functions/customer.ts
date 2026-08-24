@@ -17,7 +17,7 @@ const sbHeaders = {
 const JSON_HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, x-order-password, x-customer-phone',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-order-password, x-customer-phone',
 }
 
 function ok(data: any, status = 200) {
@@ -25,6 +25,37 @@ function ok(data: any, status = 200) {
 }
 function err(msg: string, status = 400) {
   return { statusCode: status, body: JSON.stringify({ error: msg }), headers: JSON_HEADERS }
+}
+
+/// Supabase JWT를 검증해 호출자 user id를 돌려줍니다. 실패하면 null.
+/// 서버 간 호출(allsuri-web 등)은 service_role 키를 허용하고 'service_role'을 반환합니다.
+async function authenticatedUserId(event: any): Promise<string | null> {
+  const headers = event.headers || {}
+  const raw = headers.authorization || headers.Authorization || ''
+  const token = String(raw).replace(/^Bearer\s+/i, '').trim()
+  if (!token) return null
+  if (SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY) return 'service_role'
+
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    console.warn('[customer] JWT 검증 실패:', res.status)
+    return null
+  }
+  const user = (await res.json().catch(() => null)) as any
+  return user?.id ? String(user.id) : null
+}
+
+/// orderId(웹 오더)에 배정된 사업자가 callerId인지 확인합니다.
+async function isAssignedBusiness(orderId: string, callerId: string): Promise<boolean> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/jobs?web_order_id=eq.${encodeURIComponent(orderId)}&assigned_business_id=eq.${encodeURIComponent(callerId)}&select=id&limit=1`,
+    { headers: sbHeaders }
+  )
+  if (!res.ok) return false
+  const rows = (await res.json().catch(() => [])) as any
+  return Array.isArray(rows) && rows.length > 0
 }
 
 // 알림 DB 저장 (FCM은 INSERT Webhook이 자동 발송)
@@ -469,10 +500,18 @@ export const handler = async (event: any) => {
 
     // ─────────────────────────────────────────────────────────────
     // POST /order/:orderId/notify-work-done  - 사업자가 "공사 완료"를 눌렀을 때
-    // 소비자에게 완료 확인 + 평점 요청 문자 발송 (인증 불필요, 앱 내부 호출용)
+    // 소비자에게 완료 확인 + 평점 요청 문자 발송
+    // 오더 ID만 알면 누구나 고객에게 문자를 보낼 수 있었으므로,
+    // 로그인 검증 + 해당 오더 담당 사업자인지 확인합니다.
     // ─────────────────────────────────────────────────────────────
     if (event.httpMethod === 'POST' && /^\/order\/[^/]+\/notify-work-done$/.test(path)) {
       const orderId = path.split('/')[2]
+
+      const callerId = await authenticatedUserId(event)
+      if (!callerId) return err('인증이 필요합니다.', 401)
+      if (callerId !== 'service_role' && !(await isAssignedBusiness(orderId, callerId))) {
+        return err('이 요청의 담당 사업자만 완료 알림을 보낼 수 있습니다.', 403)
+      }
 
       const orderRes = await fetch(
         `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=id,title,customerName,customerPhone,isAwarded,status&limit=1`,
@@ -527,15 +566,18 @@ export const handler = async (event: any) => {
         body: JSON.stringify({ adminRating: rating, adminRatingComment: comment || '', adminRatedAt: now }),
       })
 
-      // business_reviews 저장
+      // 평점은 order_reviews 로 통합 저장한다 (앱 B2B 평점과 같은 원천).
+      // order_id 유니크 인덱스 + upsert 라서 같은 오더를 두 번 평가해도 갱신된다.
       if (businessId) {
         try {
-          await fetch(`${SUPABASE_URL}/rest/v1/business_reviews`, {
+          await fetch(`${SUPABASE_URL}/rest/v1/order_reviews?on_conflict=order_id`, {
             method: 'POST',
-            headers: { ...sbHeaders, Prefer: 'return=minimal' },
-            body: JSON.stringify({ business_id: businessId, order_id: orderId, rating, comment: comment || '', is_admin_review: false, created_at: now }),
+            headers: { ...sbHeaders, Prefer: 'return=minimal,resolution=merge-duplicates' },
+            body: JSON.stringify({ reviewee_id: businessId, order_id: orderId, rating, comment: comment || '', is_admin_review: false, created_at: now, updated_at: now }),
           })
-        } catch {}
+        } catch (reviewErr: any) {
+          console.warn('[customer] order_reviews 저장 실패:', reviewErr?.message)
+        }
 
         await insertNotification(businessId, '⭐ 새로운 평점이 등록되었습니다', `고객이 ${rating}점을 남겼습니다.`, 'new_review')
       }

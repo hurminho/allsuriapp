@@ -364,7 +364,7 @@ async function afterBidInserted(opts: {
                 }
               ),
               fetch(
-                `${SUPABASE_URL}/rest/v1/business_reviews?business_id=eq.${encodeURIComponent(businessId)}&select=rating`,
+                `${SUPABASE_URL}/rest/v1/order_reviews?reviewee_id=eq.${encodeURIComponent(businessId)}&select=rating`,
                 {
                   headers: {
                     apikey: SUPABASE_SERVICE_ROLE_KEY,

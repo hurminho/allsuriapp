@@ -31,16 +31,18 @@ class BusinessReview {
     required this.updatedAt,
   });
 
+  /// order_reviews(reviewee_id/comment)와 호환 뷰(business_id/content) 양쪽
+  /// 컬럼명을 모두 받는다.
   factory BusinessReview.fromMap(Map<String, dynamic> map) {
     return BusinessReview(
       id: map['id'] ?? '',
-      businessId: map['business_id'] ?? '',
-      customerId: map['customer_id'],
+      businessId: map['reviewee_id'] ?? map['business_id'] ?? '',
+      customerId: map['reviewer_id'] ?? map['customer_id'],
       orderId: map['order_id'] ?? '',
       estimateId: map['estimate_id'],
-      rating: map['rating'] ?? 0,
+      rating: (map['rating'] as num?)?.round() ?? 0,
       title: map['title'],
-      content: map['content'],
+      content: map['comment'] ?? map['content'],
       isVerified: map['is_verified'] ?? false,
       isAnonymous: map['is_anonymous'] ?? false,
       createdAt: DateTime.parse(map['created_at'] ?? DateTime.now().toIso8601String()),
