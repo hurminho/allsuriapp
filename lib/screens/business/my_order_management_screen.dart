@@ -238,19 +238,11 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       print('❌ [MyOrderManagement] 오더 로드 실패: $e');
       print('   StackTrace: $stackTrace');
 
-      // 502 에러이거나 데이터 없음이 아닌 경우에만 에러 메시지 표시
-      final errorMsg = e.toString();
-      final is502Error =
-          errorMsg.contains('502') || errorMsg.contains('Bad Gateway');
-
-      if (mounted && !is502Error) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('협업 일감 로드 실패: $e'), backgroundColor: Colors.red),
         );
-      } else if (is502Error) {
-        // 502 에러는 로그만 출력하고 사용자에게는 표시하지 않음
-        print('ℹ️ [MyOrderManagement] 서버 일시적 오류 (502), 조용히 처리');
       }
     } finally {
       if (mounted) {

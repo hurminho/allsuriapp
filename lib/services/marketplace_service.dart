@@ -209,6 +209,48 @@ class MarketplaceService extends ChangeNotifier {
     }
   }
 
+  Future<List<Map<String, dynamic>>> listMyBids(String businessId) async {
+    final api = ApiService();
+    final response = await api.get('/market/bids?bidderId=$businessId');
+    if (response['success'] != true) {
+      throw Exception(response['error'] ?? '입찰 목록 조회 실패');
+    }
+    final raw = response['data'];
+    final bids = raw is List
+        ? raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+    final listingIds = <String>[];
+    for (final bid in bids) {
+      final embedded = bid['marketplace_listings'] ?? bid['listing'];
+      if (embedded is Map) {
+        bid['listing'] = Map<String, dynamic>.from(embedded);
+      } else {
+        final lid = bid['listing_id']?.toString();
+        if (lid != null && lid.isNotEmpty) listingIds.add(lid);
+      }
+    }
+    if (listingIds.isEmpty) return bids;
+    final uniqueIds = listingIds.toSet().toList();
+    final listings = await _sb
+        .from('marketplace_listings')
+        .select('id,title,status,region,category,description,web_order_id')
+        .inFilter('id', uniqueIds);
+    final byId = <String, Map<String, dynamic>>{
+      for (final row in listings)
+        row['id'].toString(): Map<String, dynamic>.from(row),
+    };
+    for (final bid in bids) {
+      final lid = bid['listing_id']?.toString();
+      if (lid != null && byId.containsKey(lid)) {
+        bid['listing'] = byId[lid];
+      }
+    }
+    return bids;
+  }
+
   Future<bool> claimListing(
     String listingId, {
     required String businessId,
@@ -232,11 +274,23 @@ class MarketplaceService extends ChangeNotifier {
       final response = await api.post('/market/listings/$listingId/bid', payload);
       
       if (response['success'] == true) {
-        debugPrint('✅ [MarketplaceService.claimListing] 성공');
+        debugPrint('✅ [MarketplaceService.claimListing] 성공 alreadyBid=${response['data'] is Map ? response['data']['alreadyBid'] : false}');
+        return true;
+      }
+      // 서버가 200 + alreadyBid로 응답하면 성공으로 취급합니다.
+      // (문구 비교는 서버 메시지가 바뀌면 깨지므로 플래그를 먼저 봅니다)
+      final data = response['data'];
+      if (data is Map && data['alreadyBid'] == true) {
+        debugPrint('ℹ️ [MarketplaceService.claimListing] alreadyBid — 성공으로 처리');
+        return true;
+      }
+      final msg = '${response['message'] ?? ''} ${response['error'] ?? ''}';
+      if (msg.contains('이미 입찰')) {
+        debugPrint('ℹ️ [MarketplaceService.claimListing] 이미 입찰됨 — 성공으로 처리');
         return true;
       }
       
-      debugPrint('❌ [MarketplaceService.claimListing] 실패: ${response['message']}');
+      debugPrint('❌ [MarketplaceService.claimListing] 실패: $msg');
       return false;
     } catch (e) {
       debugPrint('❌ [MarketplaceService.claimListing] 에러: $e');

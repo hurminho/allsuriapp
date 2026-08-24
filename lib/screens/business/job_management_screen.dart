@@ -702,11 +702,11 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
 
         print('   marketplace_listings 업데이트 결과: ${updateResult.length}개 행');
         if (updateResult.isEmpty) {
-          print('   ⚠️ marketplace_listings UPDATE 실패 (RLS 차단?)');
-        } else {
-          print(
-              '   ✅ marketplace_listings 업데이트 성공: ${updateResult.first['status']}');
+          // 0행 = RLS 차단 또는 대상 없음. 완료로 표시하면 유령 성공이 됩니다.
+          throw Exception('공사 상태를 변경할 권한이 없거나 대상을 찾을 수 없습니다.');
         }
+        print(
+            '   ✅ marketplace_listings 업데이트 성공: ${updateResult.first['status']}');
 
         // 오더 소유자(생성자)에게 후기/평점 작성 push 알림
         // (웹 고객 낙찰 건은 owner_business_id == 낙찰 사업자 본인이므로 자기 자신에게는 보내지 않음)
@@ -750,21 +750,11 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
           }
         }
 
+        // 로컬 상태는 아래 _loadJobs()로 서버 기준으로 다시 맞춥니다.
+        // (여기서 미리 바꾸면 뒤따르는 jobs UPDATE가 실패해도 완료로 보임)
         print('✅ [JobManagement] 공사 완료 처리 완료 (awaiting_confirmation)');
-        if (mounted && job.id != null) {
-          setState(() {
-            final idx = _combinedJobs.indexWhere((j) => j.id == job.id);
-            if (idx != -1) {
-              _combinedJobs[idx] =
-                  _combinedJobs[idx].copyWith(status: 'awaiting_confirmation');
-            }
-            if (_listingByJobId.containsKey(job.id)) {
-              _listingByJobId[job.id]!['status'] = 'awaiting_confirmation';
-            }
-          });
-        }
       } else {
-        print('⚠️ [JobManagement] listingId를 찾을 수 없음');
+        throw Exception('완료 처리할 협업 일감을 찾을 수 없습니다.');
       }
 
       // jobs 테이블도 업데이트 (실제 job이 연결된 경우만)
@@ -783,10 +773,9 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
 
         print('   jobs 업데이트 결과: ${jobUpdateResult.length}개 행');
         if (jobUpdateResult.isEmpty) {
-          print('   ⚠️ jobs UPDATE 실패 (RLS 차단?)');
-        } else {
-          print('   ✅ jobs 업데이트 성공: ${jobUpdateResult.first['status']}');
+          throw Exception('공사(jobs) 상태를 변경할 권한이 없거나 대상을 찾을 수 없습니다.');
         }
+        print('   ✅ jobs 업데이트 성공: ${jobUpdateResult.first['status']}');
       }
 
       if (mounted) {
@@ -814,6 +803,9 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
             backgroundColor: Colors.red,
           ),
         );
+
+        // 중간까지 성공한 변경이 있을 수 있으므로 서버 상태로 재동기화
+        await _loadJobs();
       }
     } finally {
       if (mounted) {

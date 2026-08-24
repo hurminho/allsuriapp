@@ -8,9 +8,12 @@
 /// 또는 `./run_app.sh` / `./run_release.sh`
 ///
 /// `dart_defines.json` 은 .gitignore — `example_dart_defines.json` 을 복사해 채우면 됩니다.
+/// dart-define이 비어도 [AppConfig] 프로덕션 기본값으로 연결됩니다.
+import 'config.dart';
+
 class SupabaseConfig {
-  static const String url = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-  static const String anonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+  static const String url = AppConfig.supabaseUrl;
+  static const String anonKey = AppConfig.supabaseAnonKey;
 }
 
 

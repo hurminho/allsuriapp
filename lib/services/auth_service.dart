@@ -11,6 +11,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'api_service.dart';
 import 'fcm_service.dart';
 import 'notification_service.dart';
+import '../config.dart';
 import '../supabase_config.dart';
 import '../models/user.dart' as app_models;
 
@@ -198,10 +199,9 @@ class AuthService extends ChangeNotifier {
     _isLoadingFromKakao = true; // onAuthStateChange 중복 방지 시작
     notifyListeners();
     try {
-      // Kakao SDK는 main.dart에서 이미 초기화됨 - 여기서는 초기화 생략으로 속도 향상
-      final nativeAppKey = const String.fromEnvironment('KAKAO_NATIVE_APP_KEY', defaultValue: '');
+      // Kakao SDK는 main.dart에서 이미 초기화됨
+      final nativeAppKey = AppConfig.kakaoNativeAppKey;
       if (nativeAppKey.isEmpty) {
-        // If no key provided and test bypass is enabled, go straight to bypass
         if (const bool.fromEnvironment('ALLOW_TEST_KAKAO', defaultValue: false)) {
           final api = ApiService();
           final resp = await api.post('/auth/kakao/login', { 'access_token': 'TEST_BYPASS' });
@@ -219,7 +219,7 @@ class AuthService extends ChangeNotifier {
             }
           }
         }
-        return false;
+        throw StateError('카카오 앱 키가 없어 로그인할 수 없습니다.');
       }
 
       // Kakao 로그인: iOS는 WebAuthenticationSession 이슈로 웹뷰 우선, Android는 톡 우선
@@ -228,7 +228,9 @@ class AuthService extends ChangeNotifier {
       if (isIOS) {
         try {
           token = await kakao.UserApi.instance.loginWithKakaoAccount();
-        } catch (_) {
+        } catch (e) {
+          final msg = e.toString().toLowerCase();
+          if (msg.contains('cancel')) rethrow;
           token = await kakao.UserApi.instance.loginWithKakaoTalk();
         }
       } else {
@@ -377,7 +379,9 @@ class AuthService extends ChangeNotifier {
       return false;
     } catch (e) {
       print('Kakao 로그인 오류: $e');
-      // 에뮬레이터/테스트 장비 우회를 위한 개발용 백도어 (서버에서 ALLOW_TEST_KAKAO=true 설정 필요)
+      final msg = e.toString().toLowerCase();
+      final canceled = msg.contains('cancel') || msg.contains('cancelled') || msg.contains('canceled');
+      if (canceled) return false;
       if (const bool.fromEnvironment('ALLOW_TEST_KAKAO', defaultValue: false)) {
         try {
           final api = ApiService();
@@ -399,7 +403,7 @@ class AuthService extends ChangeNotifier {
           }
         } catch (_) {}
       }
-      return false;
+      rethrow;
     } finally {
       _isLoading = false;
       _isLoadingFromKakao = false; // onAuthStateChange 중복 방지 해제
@@ -614,19 +618,18 @@ class AuthService extends ChangeNotifier {
       print('   업데이트 데이터: $updates');
       
       if (supaReady && uuidLike) {
-        try {
-          final result = await _sb.from('users').update(updates).eq('id', _currentUser!.id).select();
-          print('✅ Supabase 사업자 프로필 업데이트 성공: ${_currentUser!.id}');
-          print('   업데이트된 행 수: ${result.length}');
-          if (result.isNotEmpty) {
-            print('   업데이트된 데이터: ${result.first}');
-          } else {
-            print('⚠️  경고: 업데이트는 성공했으나 반환된 데이터 없음 (해당 ID를 찾지 못했을 수 있음)');
-          }
-        } catch (e) {
-          // Log and continue with local update so UI doesn't break
-          print('❌ Supabase 동기화 실패(무시하고 로컬 반영): $e');
+        // 서버 저장에 실패하면 로컬만 갱신해서 '저장됨'으로 보이던 문제가 있었습니다.
+        // 실패는 호출자에게 전달해 사용자에게 알립니다.
+        final result = await _sb
+            .from('users')
+            .update(updates)
+            .eq('id', _currentUser!.id)
+            .select();
+        print('   업데이트된 행 수: ${result.length}');
+        if (result.isEmpty) {
+          throw Exception('프로필을 저장할 권한이 없거나 계정을 찾을 수 없습니다.');
         }
+        print('✅ Supabase 사업자 프로필 업데이트 성공: ${_currentUser!.id}');
       } else {
         print('⚠️  Supabase 업데이트 건너뜀 (supaReady: $supaReady, uuidLike: $uuidLike)');
         print('   현재 사용자 ID: ${_currentUser!.id}');
@@ -645,8 +648,8 @@ class AuthService extends ChangeNotifier {
       );
       print('🎉 사업자 프로필이 업데이트되었습니다 (자동 승인)');
     } catch (e) {
-      // 변환/검증 예외는 상위에서 안내 메시지로 처리될 수 있도록 메시지만 남김
-      print('사업자 프로필 업데이트 오류(로컬 유지): $e');
+      print('사업자 프로필 업데이트 실패: $e');
+      rethrow;
     } finally {
       _isLoading = false;
       notifyListeners();

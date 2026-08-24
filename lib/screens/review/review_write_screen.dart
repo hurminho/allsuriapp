@@ -88,7 +88,16 @@ class _ReviewWriteScreenState extends State<ReviewWriteScreen> {
       ));
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('❌ [ReviewWrite] 후기 등록 실패: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('후기 등록에 실패했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

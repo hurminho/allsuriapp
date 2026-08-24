@@ -451,10 +451,17 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
         'ownerId': currentUserId,
       });
 
-      // 서버(RPC)가 BIDDER_NOT_VERIFIED 등으로 차단한 경우의 표준 에러 처리
+      // 서버(RPC)가 BIDDER_NOT_VERIFIED 등으로 차단한 경우의 표준 에러 처리.
+      // error에는 'HTTP 500: ...' 같은 일반 문구만 담기므로 message/data까지 함께 봅니다.
       if (response['success'] != true) {
-        final errStr =
-            (response['error'] ?? response['message'] ?? '').toString();
+        final data = response['data'];
+        final errStr = [
+          response['error'],
+          response['message'],
+          data is Map ? data['message'] : null,
+          data is Map ? data['code'] : null,
+          data is Map ? data['error'] : null,
+        ].where((v) => v != null).join(' ');
         if (errStr.contains('BIDDER_NOT_VERIFIED') ||
             errStr.contains('진위확인이 완료되지 않아')) {
           if (!mounted) return;
@@ -487,27 +494,30 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
           print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           print('💰 [OrderBiddersScreen] awarded_amount 업데이트 시작');
 
-          // 1. marketplace_listings의 budget_amount 조회
+          // 1. marketplace_listings의 budget_amount와 jobid 조회
+          //    (select-bidder 응답에는 jobId가 없어서 예전에는 이 블록이 항상 스킵됐음)
           final listingData = await Supabase.instance.client
               .from('marketplace_listings')
-              .select('budget_amount')
+              .select('budget_amount, jobid')
               .eq('id', widget.listingId)
               .single();
 
           final budgetAmount = listingData['budget_amount'];
+          final jobId = listingData['jobid']?.toString();
           print('   오더 예산 금액: $budgetAmount');
 
           // 2. jobs 테이블의 awarded_amount 업데이트
-          if (budgetAmount != null && response['data']?['jobId'] != null) {
-            final jobId = response['data']['jobId'];
+          if (budgetAmount != null && jobId != null && jobId.isNotEmpty) {
             print('   Job ID: $jobId');
 
-            await Supabase.instance.client
+            final updated = await Supabase.instance.client
                 .from('jobs')
-                .update({'awarded_amount': budgetAmount}).eq('id', jobId);
+                .update({'awarded_amount': budgetAmount})
+                .eq('id', jobId)
+                .select();
 
             print(
-                '✅ [OrderBiddersScreen] awarded_amount 업데이트 완료: $budgetAmount원');
+                '✅ [OrderBiddersScreen] awarded_amount 업데이트 ${updated.length}행: $budgetAmount원');
           } else {
             print('⚠️ [OrderBiddersScreen] budgetAmount 또는 jobId가 없음');
           }

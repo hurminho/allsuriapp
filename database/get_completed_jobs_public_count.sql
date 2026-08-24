@@ -16,4 +16,19 @@ $$;
 REVOKE ALL ON FUNCTION public.get_completed_jobs_public_count() FROM public;
 GRANT EXECUTE ON FUNCTION public.get_completed_jobs_public_count() TO anon, authenticated;
 
+CREATE OR REPLACE FUNCTION public.get_open_listings_public_count()
+RETURNS bigint
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT count(*)::bigint
+  FROM public.marketplace_listings
+  WHERE status IN ('open', 'created');
+$$;
+
+REVOKE ALL ON FUNCTION public.get_open_listings_public_count() FROM public;
+GRANT EXECUTE ON FUNCTION public.get_open_listings_public_count() TO anon, authenticated;
+
 COMMENT ON FUNCTION public.get_completed_jobs_public_count() IS '올수리 홈 배너용: 완료·완료확인대기 공사 총 건수 (RLS 우회 집계)';
+COMMENT ON FUNCTION public.get_open_listings_public_count() IS '올수리 홈 배너용: 공개 중인 일감 수 (RLS 우회 집계)';

@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'config.dart';
 import 'supabase_config.dart';
 import 'services/auth_service.dart';
 import 'services/order_service.dart';
@@ -53,10 +54,10 @@ void main() async {
     // 무시 가능한 외부 딥링크 예외(Supabase OAuth 등)를 앱 크래시 없이 로그만 남김
     debugPrint('FlutterError: \\n${details.exceptionAsString()}');
   };
-  // Kakao SDK 초기화 (dart-define)
-  final kakaoKey = const String.fromEnvironment('KAKAO_NATIVE_APP_KEY', defaultValue: '');
+  // Kakao SDK 초기화 (dart-define, 없으면 프로덕션 기본값)
+  final kakaoKey = AppConfig.kakaoNativeAppKey;
   print('🔍 [Main] KAKAO_NATIVE_APP_KEY: ${kakaoKey.isNotEmpty ? "로드됨(***)" : "❌ 비어있음"}');
-  
+
   if (kakaoKey.isNotEmpty) {
     kakao.KakaoSdk.init(nativeAppKey: kakaoKey);
     print('✅ [Main] Kakao SDK 초기화 완료');

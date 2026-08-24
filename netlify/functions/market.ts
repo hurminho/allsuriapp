@@ -121,7 +121,7 @@ async function handleGetListings(event: any) {
 }
 
 async function handleClaimListing(event: any, path: string) {
-  const id = path.split('/')[2]
+  const id = listingIdFromPath(path)
   const body = JSON.parse(event.body || '{}')
   const { businessId } = body
 
@@ -169,26 +169,57 @@ async function handleClaimListing(event: any, path: string) {
       return { statusCode: 200, body: JSON.stringify({ success: true }), headers: { 'Content-Type': 'application/json' } };
     }
 
-    return { statusCode: 409, body: JSON.stringify({ success: false, message: '이미 다른 사업자가 가져갔습니다' }), headers: { 'Content-Type': 'application/json' } };
+    // 409는 클라이언트가 통신 실패와 구분하지 못하므로 200 + 플래그로 내립니다.
+    return jsonRes(200, { success: false, alreadyClaimed: true, message: '이미 다른 사업자가 가져갔습니다' });
   } catch (error: any) {
     console.error('[market] claim error:', error.message)
     return { statusCode: 500, body: JSON.stringify({ message: '가져가기 처리 실패', error: error.message }), headers: { 'Content-Type': 'application/json' } };
   }
 }
 
+function jsonRes(statusCode: number, body: Record<string, unknown>) {
+  return { statusCode, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }
+}
+
+/// `/api/market/...` 리다이렉트와 `/.netlify/functions/market/...` 직접 호출 모두에서
+/// 동작하도록 세그먼트 이름을 기준으로 id를 찾습니다.
+function listingIdFromPath(path: string, segment: string = 'listings'): string {
+  const parts = String(path || '').split('/').filter(Boolean)
+  const idx = parts.indexOf(segment)
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1]
+  return parts[1] || ''
+}
+
+async function runWithTimeout(work: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      work,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timeout ${ms}ms`)), ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 async function handleBidListing(event: any, path: string) {
-  const id = path.split('/')[2]
+  const id = listingIdFromPath(path)
   const body = JSON.parse(event.body || '{}')
   const { businessId, message, bid_amount, estimated_days } = body
 
+  if (!id) {
+    return jsonRes(400, { message: 'listing id는 필수입니다' })
+  }
   if (!businessId) {
-    return { statusCode: 400, body: JSON.stringify({ message: 'businessId는 필수입니다' }), headers: { 'Content-Type': 'application/json' } };
+    return jsonRes(400, { message: 'businessId는 필수입니다' })
   }
 
   try {
     // 중복 입찰 확인 (같은 사업자가 같은 오더에 이미 입찰했는지)
     const existingRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${id}&bidder_id=eq.${businessId}&select=id&limit=1`,
+      `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${encodeURIComponent(id)}&bidder_id=eq.${encodeURIComponent(businessId)}&select=id&limit=1`,
       {
         headers: {
           apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -198,7 +229,7 @@ async function handleBidListing(event: any, path: string) {
     )
     const existing = await existingRes.json()
     if (Array.isArray(existing) && existing.length > 0) {
-      return { statusCode: 409, body: JSON.stringify({ success: false, message: '이미 입찰하셨습니다' }), headers: { 'Content-Type': 'application/json' } };
+      return jsonRes(200, { success: true, alreadyBid: true, bidId: existing[0]?.id, message: '이미 입찰하셨습니다' })
     }
 
     // 직접 INSERT (RPC 대신 - 여러 사업자가 동시 입찰 가능하도록)
@@ -226,26 +257,54 @@ async function handleBidListing(event: any, path: string) {
     const data = await insertRes.json()
 
     if (!insertRes.ok) {
-      // 409: unique constraint (이미 입찰)
-      if (insertRes.status === 409) {
-        return { statusCode: 409, body: JSON.stringify({ success: false, message: '이미 입찰하셨습니다' }), headers: { 'Content-Type': 'application/json' } };
+      const code = data?.code || data?.[0]?.code
+      // 23505 unique: 이미 입찰 — 클라이언트는 성공으로 처리해야 목록에 남음
+      if (insertRes.status === 409 && code !== '23503') {
+        return jsonRes(200, { success: true, alreadyBid: true, message: '이미 입찰하셨습니다' })
       }
       console.error('[market] bid insert error:', data)
       throw new Error(Array.isArray(data) ? data[0]?.message : data.message || 'Bid failed')
     }
 
-    // bid_count 업데이트 (marketplace_listings)
-    await fetch(`${SUPABASE_URL}/rest/v1/rpc/increment_bid_count`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ p_listing_id: id })
-    }).catch(() => {/* bid_count 업데이트 실패는 무시 */})
-
     const bidId = Array.isArray(data) ? data[0]?.id : data?.id
+    console.log(`[market] bid inserted listing=${id} bidder=${businessId} bidId=${bidId}`)
+
+    // 문자/알림이 길어도 입찰 저장은 이미 끝난 상태. 응답을 막지 않습니다.
+    // Netlify 함수 상한 10s 중 중복확인+INSERT에 쓴 시간을 빼고 남는 만큼 허용합니다.
+    // (문자 발송은 Solapi 직접 호출 실패 시 allsuri-web으로 위임까지 하므로 여유가 필요)
+    try {
+      await runWithTimeout(afterBidInserted({
+        listingId: id,
+        businessId,
+        bidAmount: bid_amount,
+      }), 7500)
+    } catch (e: any) {
+      console.warn('[market] bid side effects skipped:', e.message)
+    }
+
+    return jsonRes(200, { success: true, bidId })
+  } catch (error: any) {
+    console.error('[market] bid error:', error.message)
+    return jsonRes(500, { message: '입찰 처리 실패', error: error.message })
+  }
+}
+
+async function afterBidInserted(opts: {
+  listingId: string
+  businessId: string
+  bidAmount: unknown
+}) {
+  const { listingId: id, businessId, bidAmount: bid_amount } = opts
+  // 문자 발송이 타임아웃 예산을 최대한 쓸 수 있도록 대기하지 않습니다.
+  void fetch(`${SUPABASE_URL}/rest/v1/rpc/increment_bid_count`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_listing_id: id })
+  }).catch(() => {/* bid_count 업데이트 실패는 무시 */})
 
     // 알림 및 푸시 알림 전송
     try {
@@ -270,7 +329,8 @@ async function handleBidListing(event: any, path: string) {
       if (listing?.web_order_id) {
         try {
           // 최초 입찰 시에만 orders.status 를 'bidding'으로 전환 (이미 진행 중이면 무시)
-          await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(listing.web_order_id)}&status=eq.pending`, {
+          // 문자 발송을 지연시키지 않도록 결과를 기다리지 않습니다.
+          void fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(listing.web_order_id)}&status=eq.pending`, {
             method: 'PATCH',
             headers: {
               apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -279,7 +339,7 @@ async function handleBidListing(event: any, path: string) {
               Prefer: 'return=minimal',
             },
             body: JSON.stringify({ status: 'bidding' }),
-          })
+          }).catch((e: any) => console.warn('[market] orders 상태 전환 실패 (무시):', e?.message))
 
           const orderRes = await fetch(
             `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(listing.web_order_id)}&select=title,customerName,customerPhone&limit=1`,
@@ -412,12 +472,6 @@ async function handleBidListing(event: any, path: string) {
     } catch (e: any) {
       console.warn('[market] notification failed:', e.message)
     }
-
-    return { statusCode: 200, body: JSON.stringify({ success: true, bidId }), headers: { 'Content-Type': 'application/json' } };
-  } catch (error: any) {
-    console.error('[market] bid error:', error.message)
-    return { statusCode: 500, body: JSON.stringify({ message: '입찰 처리 실패', error: error.message }), headers: { 'Content-Type': 'application/json' } };
-  }
 }
 
 // 이름이 의미없는 기본값인지 확인
@@ -473,7 +527,7 @@ async function fetchAuthUser(userId: string): Promise<any | null> {
 }
 
 async function handleGetBids(event: any, path: string) {
-  const listingId = path.split('/')[2]
+  const listingId = listingIdFromPath(path)
 
   // GET 요청용 헤더 — Content-Type 없음 (admin.ts와 동일, PostgREST GET 표준)
   const getHeaders = {
@@ -487,7 +541,7 @@ async function handleGetBids(event: any, path: string) {
   try {
     // ── 1단계: order_bids 조회 ─────────────────────────────────────
     const bidsRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${listingId}&select=*&order=created_at.desc`,
+      `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${encodeURIComponent(listingId)}&select=*&order=created_at.desc`,
       { headers: getHeaders }
     )
     const bidsBody = await bidsRes.text()
@@ -579,34 +633,52 @@ async function handleListBids(event: any) {
   const params = event.queryStringParameters || {}
   const { bidderId, status, statuses } = params
 
-  let url = `${SUPABASE_URL}/rest/v1/order_bids?select=*`
-
+  const filters: string[] = []
   if (bidderId) {
-    url += `&bidder_id=eq.${encodeURIComponent(bidderId)}`
+    filters.push(`bidder_id=eq.${encodeURIComponent(bidderId)}`)
   }
   if (statuses) {
     const statusList = statuses.split(',').map((s: string) => s.trim()).filter(Boolean)
     if (statusList.length > 0) {
-      url += `&status=in.(${statusList.map((s: string) => encodeURIComponent(s)).join(',')})`
+      filters.push(`status=in.(${statusList.map((s: string) => encodeURIComponent(s)).join(',')})`)
     }
   } else if (status) {
-    url += `&status=eq.${encodeURIComponent(status)}`
+    filters.push(`status=eq.${encodeURIComponent(status)}`)
+  }
+  filters.push('order=created_at.desc')
+
+  const qs = filters.join('&')
+  const selects = [
+    '*,marketplace_listings(id,title,status,region,category,description,web_order_id)',
+    '*',
+  ]
+
+  let data: any = null
+  for (const select of selects) {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/order_bids?select=${encodeURIComponent(select)}&${qs}`,
+      {
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        }
+      }
+    )
+    data = await response.json()
+    if (response.ok && Array.isArray(data)) break
+    console.warn('[market] list bids select failed:', select, data)
   }
 
-  const response = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    }
-  })
+  if (!Array.isArray(data)) {
+    console.error('[market] list bids error:', data)
+    return jsonRes(500, { message: '입찰 목록 조회 실패' })
+  }
 
-  const data = await response.json()
-
-  return { statusCode: 200, body: JSON.stringify(data || []), headers: { 'Content-Type': 'application/json' } };
+  return { statusCode: 200, body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }
 }
 
 async function handleSelectBidder(event: any, path: string) {
-  const id = path.split('/')[2]
+  const id = listingIdFromPath(path)
   const body = JSON.parse(event.body || '{}')
   const { bidderId, ownerId } = body
 
@@ -637,10 +709,19 @@ async function handleSelectBidder(event: any, path: string) {
 
     if (!response.ok) {
       console.error(`[handleSelectBidder] RPC 실패:`, data)
-      throw new Error(data.message || data.hint || data.details || 'Select bidder failed')
+      const detail = [data?.message, data?.hint, data?.details].filter(Boolean).join(' ')
+      // 업무 규칙 차단은 500이 아니라 200 + code로 내려야 클라이언트가
+      // 'HTTP 500' 대신 실제 안내 문구를 보여줄 수 있습니다.
+      if (detail.includes('BIDDER_NOT_VERIFIED')) {
+        return jsonRes(200, { success: false, code: 'BIDDER_NOT_VERIFIED', message: detail })
+      }
+      throw new Error(detail || 'Select bidder failed')
     }
 
-    // 알림 및 푸시 알림 전송
+    // 알림/채팅 생성이 느려도 낙찰(select_bidder RPC)은 이미 커밋된 상태입니다.
+    // 응답을 막으면 타임아웃 시 클라이언트가 실패로 오인해 재시도하고,
+    // 알림·채팅방이 중복 생성됩니다.
+    const sideEffects = (async () => {
     try {
       // 오더 정보 조회
       const listingResponse = await fetch(
@@ -806,8 +887,15 @@ async function handleSelectBidder(event: any, path: string) {
     } catch (e: any) {
       console.warn('[market] notification/push failed:', e.message)
     }
+    })()
 
-    return { statusCode: 200, body: JSON.stringify({ success: true }), headers: { 'Content-Type': 'application/json' } };
+    try {
+      await runWithTimeout(sideEffects, 6000)
+    } catch (e: any) {
+      console.warn('[market] select-bidder side effects skipped:', e.message)
+    }
+
+    return jsonRes(200, { success: true })
   } catch (error: any) {
     console.error('[handleSelectBidder] 에러:', error.message)
     return { statusCode: 500, body: JSON.stringify({ 
@@ -819,12 +907,15 @@ async function handleSelectBidder(event: any, path: string) {
 }
 
 async function handleDeleteBid(event: any, path: string) {
-  const listingId = path.split('/')[2]
+  const listingId = listingIdFromPath(path, 'bids')
   const params = event.queryStringParameters || {}
   const { bidderId } = params
 
   console.log(`[handleDeleteBid] listingId=${listingId}, bidderId=${bidderId}`)
 
+  if (!listingId) {
+    return { statusCode: 400, body: JSON.stringify({ success: false, message: 'listing id는 필수입니다' }), headers: { 'Content-Type': 'application/json' } };
+  }
   if (!bidderId) {
     return { statusCode: 400, body: JSON.stringify({ success: false, message: 'bidderId는 필수입니다' }), headers: { 'Content-Type': 'application/json' } };
   }
@@ -832,7 +923,7 @@ async function handleDeleteBid(event: any, path: string) {
   try {
     // Service Role로 RLS 우회하여 삭제
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${listingId}&bidder_id=eq.${bidderId}`,
+      `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${encodeURIComponent(listingId)}&bidder_id=eq.${encodeURIComponent(bidderId)}`,
       {
         method: 'DELETE',
         headers: {
@@ -854,8 +945,10 @@ async function handleDeleteBid(event: any, path: string) {
     
     console.log(`[handleDeleteBid] ${deletedCount}개 행 삭제 완료`)
 
+    // 이미 삭제된 입찰이면 취소 목적은 달성된 상태이므로 성공으로 응답합니다.
+    // (재시도/중복 탭에서 실패로 보이지 않게 하기 위함)
     if (deletedCount === 0) {
-      return { statusCode: 404, body: JSON.stringify({ success: false, message: '삭제할 입찰을 찾을 수 없습니다' }), headers: { 'Content-Type': 'application/json' } };
+      return { statusCode: 200, body: JSON.stringify({ success: true, deleted: 0, alreadyDeleted: true, message: '이미 취소된 입찰입니다' }), headers: { 'Content-Type': 'application/json' } };
     }
 
     return { statusCode: 200, body: JSON.stringify({ success: true, deleted: deletedCount }), headers: { 'Content-Type': 'application/json' } };

@@ -44,6 +44,7 @@ echo "   (시간이 다소 걸립니다 - 약 5~10분)"
 echo ""
 
 flutter build ipa \
+    --release \
     --dart-define-from-file=$DEFINES_FILE \
     --export-method=app-store \
     $BUILD_NUM_OPT

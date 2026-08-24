@@ -73,15 +73,26 @@ class ApiService extends ChangeNotifier {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final responseData = json.decode(response.body);
         print('[API][POST] Decoded response: $responseData');
+        final nestedSuccess = responseData is Map && responseData['success'] == false
+            ? false
+            : true;
         return {
-          'success': true,
+          'success': nestedSuccess,
           'data': responseData,
-          'message': 'Created successfully',
+          'message': responseData is Map
+              ? (responseData['message']?.toString() ?? 'Created successfully')
+              : 'Created successfully',
         };
       } else {
+        dynamic decoded;
+        try {
+          decoded = json.decode(response.body);
+        } catch (_) {}
         return {
           'success': false,
           'error': 'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+          'message': decoded is Map ? decoded['message']?.toString() : null,
+          'data': decoded,
         };
       }
     } catch (e) {
@@ -131,15 +142,29 @@ class ApiService extends ChangeNotifier {
         headers: _headers(),
       );
       
+      dynamic decoded;
+      if (response.body.isNotEmpty) {
+        try {
+          decoded = json.decode(response.body);
+        } catch (_) {}
+      }
+      final bodyMessage =
+          decoded is Map ? decoded['message']?.toString() : null;
+
       if (response.statusCode == 200 || response.statusCode == 204) {
         return {
-          'success': true,
-          'message': 'Deleted successfully',
+          'success': decoded is Map && decoded['success'] == false
+              ? false
+              : true,
+          'data': decoded,
+          'message': bodyMessage ?? 'Deleted successfully',
         };
       } else {
         return {
           'success': false,
           'error': 'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+          'message': bodyMessage,
+          'data': decoded,
         };
       }
     } catch (e) {

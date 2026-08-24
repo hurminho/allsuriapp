@@ -60,41 +60,47 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<int> _countByStatus(String table, List<String> statuses) async {
+    final response = await Supabase.instance.client
+        .from(table)
+        .select('id')
+        .inFilter('status', statuses)
+        .count(CountOption.exact);
+    return response.count;
+  }
+
+  Future<int> _rpcCount(String fn) async {
+    final raw = await Supabase.instance.client.rpc(fn);
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw.toString()) ?? 0;
+  }
+
   Future<void> _loadStatistics() async {
     try {
-      // 플랫폼 전체 완료 건수: jobs RLS는 본인 관련 행만 보이므로
-      // Supabase에 `get_completed_jobs_public_count` RPC가 있어야 정확함 (database/get_completed_jobs_public_count.sql).
       int total = 0;
       try {
-        final raw = await Supabase.instance.client
-            .rpc('get_completed_jobs_public_count');
-        if (raw is int) {
-          total = raw;
-        } else if (raw is num) {
-          total = raw.toInt();
-        }
+        total = await _rpcCount('get_completed_jobs_public_count');
       } catch (rpcErr) {
-        debugPrint('⚠️ [HomeScreen] 공개 집계 RPC 없음/실패, RLS 기준 count로 폴백: $rpcErr');
-        final response = await Supabase.instance.client
-            .from('jobs')
-            .select('id')
-            .inFilter('status', ['completed', 'awaiting_confirmation'])
-            .count(CountOption.exact);
-        total = response.count;
+        debugPrint('⚠️ [HomeScreen] 완료 공사 RPC 실패, 테이블 count 폴백: $rpcErr');
+        total = await _countByStatus(
+          'jobs',
+          const ['completed', 'awaiting_confirmation'],
+        );
       }
 
       int openListings = 0;
       try {
-        final open = await Supabase.instance.client
-            .from('marketplace_listings')
-            .select('id')
-            .inFilter('status', ['open', 'created'])
-            .count(CountOption.exact);
-        openListings = open.count;
+        openListings = await _rpcCount('get_open_listings_public_count');
       } catch (e) {
-        debugPrint('⚠️ [HomeScreen] 공개 일감 수 조회 실패: $e');
+        debugPrint('⚠️ [HomeScreen] 공개 일감 RPC 실패, 테이블 count 폴백: $e');
+        openListings = await _countByStatus(
+          'marketplace_listings',
+          const ['open', 'created'],
+        );
       }
 
+      debugPrint('📊 [HomeScreen] completed=$total open=$openListings');
       if (mounted) {
         setState(() {
           _totalCompletedJobs = total;
@@ -471,47 +477,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleKakaoLogin(BuildContext context) async {
-    // 로딩 다이얼로그 표시
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return WillPopScope(
-          onWillPop: () async => false,
-          child: const Dialog(
-            backgroundColor: BusinessTheme.surface,
-            child: Padding(
-              padding: EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('연결하는 중…'),
-                ],
-              ),
-            ),
+    // iOS에서는 로딩 다이얼로그를 먼저 띄우면 Kakao WebAuth 시트가 가려져
+    // 버튼이 눌려도 아무 반응이 없는 것처럼 보입니다. SDK 로그인 먼저 호출합니다.
+    try {
+      final ok = await Provider.of<AuthService>(context, listen: false).signInWithKakao();
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('카카오 로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
+            backgroundColor: Colors.orange,
           ),
         );
-      },
-    );
-
-    try {
-      // 카카오 로그인 실행
-      await Provider.of<AuthService>(context, listen: false).signInWithKakao();
-      
-      if (context.mounted) {
-        // 로그인 성공 시 로딩 닫기
-        Navigator.of(context, rootNavigator: true).pop();
-        
-        // 화면은 자동으로 BusinessDashboard로 전환됨 (HomeScreen 빌더에서 역할에 따라 위젯 교체)
       }
     } catch (e) {
       if (context.mounted) {
-        // 로딩 닫기
-        Navigator.of(context, rootNavigator: true).pop();
-        
-        // 에러 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('로그인 실패: $e'),

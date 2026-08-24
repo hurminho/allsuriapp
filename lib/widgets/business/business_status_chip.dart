@@ -25,6 +25,7 @@ class BusinessStatusChip extends StatelessWidget {
         );
       case 'approved':
       case 'awarded':
+      case 'selected':
         return const BusinessStatusChip(
           label: '선택됨',
           tone: BusinessStatusTone.success,

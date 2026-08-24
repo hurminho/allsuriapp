@@ -82,7 +82,10 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
       _ownerInfo = owner != null ? Map<String, dynamic>.from(owner) : null;
     }
 
-    final claimedBy = _listing!['claimed_by'];
+    // B2B 낙찰(select_bidder)은 selected_bidder_id에 기록되고, 즉시잡기(claim)는
+    // claimed_by에 기록됩니다. 하나만 보면 낙찰자가 표시되지 않습니다.
+    final claimedBy =
+        _listing!['claimed_by'] ?? _listing!['selected_bidder_id'];
     if (claimedBy != null) {
       final bids = await _sb
           .from('order_bids')
@@ -716,7 +719,9 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
         builder: (_) => OrderReviewScreen(
           listingId: widget.listingId,
           jobId: _listing?['jobid']?.toString() ?? '',
-          revieweeId: _listing!['claimed_by'],
+          revieweeId: _winnerInfo!['id']?.toString() ??
+              (_listing!['claimed_by'] ?? _listing!['selected_bidder_id'])
+                  .toString(),
           revieweeName:
               _winnerInfo!['businessname'] ?? _winnerInfo!['name'] ?? '사업자',
           orderTitle: widget.orderTitle,

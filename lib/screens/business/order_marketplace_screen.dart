@@ -13,6 +13,7 @@ import 'package:allsuriapp/services/auth_service.dart';
 import 'package:allsuriapp/screens/business/order_bidders_screen.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:allsuriapp/widgets/empty_state_widget.dart';
+import 'package:allsuriapp/utils/bid_action.dart';
 import 'package:allsuriapp/utils/business_verify_guard.dart';
 import 'package:allsuriapp/widgets/business/business_app_shell.dart';
 import 'package:allsuriapp/widgets/business/business_empty_state.dart';
@@ -383,11 +384,17 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       print('🔍 [_loadMyBidsData] 내 입찰 목록 로드 중...');
 
       final response = await _api.get(
-        '/market/bids?bidderId=$currentUserId&statuses=pending,selected,awaiting_confirmation',
+        '/market/bids?bidderId=$currentUserId&statuses=pending,selected,rejected',
       );
 
       if (response['success'] == true) {
-        final bids = List<Map<String, dynamic>>.from(response['data'] ?? []);
+        final raw = response['data'];
+        final bids = raw is List
+            ? raw
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : <Map<String, dynamic>>[];
         final statusMap = <String, String>{
           for (final bid in bids)
             if ((bid['listing_id']?.toString() ?? '').isNotEmpty)
@@ -677,11 +684,11 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
     final currentUserId = authService.currentUser?.id;
     final isOwner = currentUserId == postedBy;
     final myBidStatus = _myBidStatusByListing[id];
-    final hasPendingBid = _myActiveBidListingIds.contains(id);
-    final hasAnyBid = myBidStatus != null;
-    final canBid =
-        (status == 'open' || status == 'withdrawn' || status == 'created') &&
-            !hasPendingBid;
+    final bidAction =
+        resolveBidAction(listingStatus: status, myBidStatus: myBidStatus);
+    final hasPendingBid = bidAction == BidAction.cancel;
+    final hasAnyBid = hasAnyBidStatus(myBidStatus);
+    final canBid = bidAction == BidAction.bid;
 
     return Container(
       decoration: BusinessTokens.card(
@@ -991,13 +998,14 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                               final isOwner = currentUserId == postedBy;
                               final String? myBidStatus =
                                   _myBidStatusByListing[id];
+                              final BidAction bidAction = resolveBidAction(
+                                  listingStatus: status,
+                                  myBidStatus: myBidStatus);
                               final bool hasPendingBid =
-                                  _myActiveBidListingIds.contains(id);
-                              final bool hasAnyBid = myBidStatus != null;
-                              final bool canBid = (status == 'open' ||
-                                      status == 'withdrawn' ||
-                                      status == 'created') &&
-                                  !hasPendingBid;
+                                  bidAction == BidAction.cancel;
+                              final bool hasAnyBid =
+                                  hasAnyBidStatus(myBidStatus);
+                              final bool canBid = bidAction == BidAction.bid;
 
                               // 상태 라벨은 이 화면에서 불필요 (항상 오픈/철회만 표시)
 
@@ -1699,22 +1707,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
 
       if (confirmed != true) return;
 
-      // 낙관적 UI 업데이트
-      setState(() {
-        _myActiveBidListingIds.remove(listingId);
-        _myBidStatusByListing.remove(listingId);
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('지원이 취소되었습니다'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-
-      // 백엔드 API로 입찰 취소 (RLS 우회)
+      // 서버 삭제가 끝난 뒤에만 UI를 바꿉니다. (먼저 바꾸면 실패해도 취소된 것처럼 보임)
       print('   → 백엔드 API로 입찰 취소 요청 중...');
       print('   listingId: $listingId');
       print('   currentUserId: $currentUserId');
@@ -1722,69 +1715,48 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       final response =
           await _api.delete('/market/bids/$listingId?bidderId=$currentUserId');
 
-      print('   삭제 응답: ${response['success']}');
-      final deleteSuccess = response['success'] == true;
-      print('✅ [_cancelBid] 입찰 취소 완료 (성공: $deleteSuccess)');
+      final errorMsg = response['error']?.toString() ?? '';
+      // 404 = 이미 삭제된 입찰. 취소 목적은 달성된 상태이므로 성공으로 봅니다.
+      final deleteSuccess =
+          response['success'] == true || errorMsg.contains('404');
+      print('✅ [_cancelBid] 입찰 취소 응답 (성공: $deleteSuccess) $errorMsg');
 
-      // 삭제가 성공한 경우에만 리스트 새로고침
+      if (!mounted) return;
+
       if (deleteSuccess) {
-        print('   ✅ DELETE 성공, 리스트 새로고침');
+        setState(() {
+          _myActiveBidListingIds.remove(listingId);
+          _myBidStatusByListing.remove(listingId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('지원이 취소되었습니다'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
         await _reload();
       } else {
-        final errorMsg = response['error']?.toString() ?? '';
-        final is502Error =
-            errorMsg.contains('502') || errorMsg.contains('Bad Gateway');
-
-        print('   ⚠️ DELETE 실패, 에러: $errorMsg');
-
-        // 502 에러가 아닌 경우에만 롤백하고 에러 메시지 표시
-        if (!is502Error) {
-          // 실패 시 롤백
-          setState(() {
-            _myBidStatusByListing[listingId] = 'pending';
-            _myActiveBidListingIds.add(listingId);
-          });
-
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('지원 취소 실패: $errorMsg'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        } else {
-          // 502 에러는 조용히 처리 (실제로는 성공했을 가능성이 높음)
-          print('   ℹ️ 502 에러 조용히 처리 (실제로는 성공했을 수 있음)');
-        }
-      }
-    } catch (e, stackTrace) {
-      final errorMsg = e.toString();
-      final is502Error =
-          errorMsg.contains('502') || errorMsg.contains('Bad Gateway');
-
-      print('❌ [_cancelBid] 에러 발생: $errorMsg');
-      print('   StackTrace: $stackTrace');
-
-      // 502 에러가 아닌 경우에만 롤백하고 에러 메시지 표시
-      if (!is502Error) {
-        // 실패 시 롤백
-        setState(() {
-          _myBidStatusByListing[listingId] = 'pending';
-          _myActiveBidListingIds.add(listingId);
-        });
-
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('지원 취소 실패: $errorMsg'),
+            content: Text('지원 취소 실패: ${response['message'] ?? errorMsg}'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
         );
-      } else {
-        // 502 에러는 조용히 처리 (실제로는 성공했을 가능성이 높음)
-        print('   ℹ️ 502 에러 조용히 처리 (catch 블록)');
+      }
+    } catch (e, stackTrace) {
+      print('❌ [_cancelBid] 에러 발생: $e');
+      print('   StackTrace: $stackTrace');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('지원 취소 실패: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -2042,7 +2014,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       }
 
       // ✅ 이미 이 오더에 입찰했는지 확인 (같은 오더 중복 입찰 방지)
-      if (_myActiveBidListingIds.contains(id)) {
+      if (_myBidStatusByListing.containsKey(id)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2054,23 +2026,6 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
         return;
       }
 
-      // 낙관적 UI 업데이트: 즉시 입찰 상태 반영
-      setState(() {
-        _myActiveBidListingIds.add(id);
-        _myBidStatusByListing[id] = 'pending';
-      });
-
-      // 즉시 성공 메시지 표시
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('지원이 완료되었습니다. 발주 사업자의 선택을 기다려주세요.'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
-        ),
-      );
-
-      // 백그라운드에서 실제 API 호출
       print('   → marketplace_service에서 오더 잡기 요청 중...');
       final ok = await _market.claimListing(id,
           businessId: currentUserId,
@@ -2080,94 +2035,41 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
 
       if (!mounted) return;
 
-      // 입찰 성공 시 오더 발주자에게 알림 전송
       if (ok) {
-        try {
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          print('📤 [_claimListing] 입찰 알림 전송 시작...');
-          print('   오더 ID: $id');
-
-          // 1. 오더 정보 조회 (발주자 ID, 제목)
-          final listing = await Supabase.instance.client
-              .from('marketplace_listings')
-              .select('posted_by, title')
-              .eq('id', id)
-              .single();
-
-          final ownerId = listing['posted_by'];
-          final orderTitle = listing['title'] ?? '오더';
-
-          print('   오더 소유자 ID: $ownerId');
-          print('   오더 제목: $orderTitle');
-
-          // 2. 입찰자 이름 조회
-          final authService = Provider.of<AuthService>(context, listen: false);
-          final bidderName = authService.currentUser?.businessName ??
-              authService.currentUser?.name ??
-              '사업자';
-
-          print('   입찰자 이름: $bidderName');
-          print('   입찰자 ID: ${authService.currentUser?.id}');
-
-          // 3. 알림 전송
-          print('   알림 내용: "$bidderName 사장님이 [$orderTitle] 공사에 입찰 하셨어요!"');
-
-          final notificationService = NotificationService();
-          await notificationService.sendNotification(
-            userId: ownerId,
-            title: '새로운 협업 지원',
-            body: '$bidderName 사업자가 [$orderTitle] 협업 일감에 지원했습니다.',
-            type: 'new_bid',
-            orderId: id,
-            jobTitle: orderTitle,
-          );
-
-          print('✅ [_claimListing] 입찰 알림 전송 완료!');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        } catch (notiErr, stackTrace) {
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          print('❌ [_claimListing] 입찰 알림 전송 실패!');
-          print('   에러: $notiErr');
-          print('   스택: $stackTrace');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          // 알림 실패해도 입찰은 성공
-        }
-      }
-
-      if (!ok) {
-        // 실패 시 롤백 (하지만 502 에러는 조용히 처리)
-        print('   ❌ 오더 잡기 실패 - 확인 중...');
-
-        // 실제로는 성공했는지 확인 (Supabase에서 직접 조회)
-        // 여기서는 단순히 502 에러가 아닌 경우에만 롤백
         setState(() {
-          _myActiveBidListingIds.remove(id);
-          _myBidStatusByListing.remove(id);
+          _myActiveBidListingIds.add(id);
+          _myBidStatusByListing[id] = 'pending';
         });
-
-        // 502 에러가 아닌 경우에만 에러 메시지 표시
-        // (502는 조용히 처리)
-        print('   ℹ️ 입찰 실패 처리 (에러 메시지 표시 안 함 - 502일 가능성)');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('지원이 완료되었습니다. 발주 사업자의 선택을 기다려주세요.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        // 발주자/입찰자 알림은 서버(afterBidInserted)에서 생성합니다.
+        // 여기서 한 번 더 보내면 발주자에게 알림이 중복으로 갑니다.
+      } else {
+        print('   ❌ 오더 잡기 실패');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('지원에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e, stackTrace) {
-      final errorMsg = e.toString();
-      final is502Error =
-          errorMsg.contains('502') || errorMsg.contains('Bad Gateway');
-
-      print('❌ [_claimListing] 에러 발생: $errorMsg');
+      print('❌ [_claimListing] 에러 발생: $e');
       print('   StackTrace: $stackTrace');
-
-      // 502 에러가 아닌 경우에만 에러 메시지 표시
-      if (!is502Error && mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('협업 지원 실패: $errorMsg'),
+            content: Text('협업 지원 실패: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
         );
-      } else if (is502Error) {
-        print('   ℹ️ 502 에러 조용히 처리 (catch 블록)');
       }
     } finally {
       if (mounted) {
@@ -2181,10 +2083,18 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       print('🔍 [_deleteJob] 공사 삭제 시작: $jobId');
 
       // jobs 테이블에서 삭제 (marketplace_listings는 ON DELETE CASCADE로 자동 삭제)
-      final response =
-          await Supabase.instance.client.from('jobs').delete().eq('id', jobId);
+      // .select()로 실제 삭제된 행을 확인합니다. RLS에 막히면 0행이라
+      // 예전에는 삭제되지 않았는데도 '삭제되었습니다'가 떴습니다.
+      final deleted = await Supabase.instance.client
+          .from('jobs')
+          .delete()
+          .eq('id', jobId)
+          .select();
 
-      print('✅ [_deleteJob] 공사 삭제 완료');
+      if (deleted.isEmpty) {
+        throw Exception('삭제할 권한이 없거나 이미 삭제된 공사입니다.');
+      }
+      print('✅ [_deleteJob] 공사 삭제 완료 (${deleted.length}건)');
 
       if (!mounted) return;
 
@@ -2225,8 +2135,8 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
     final isOwner = currentUserId == postedBy;
     final listingId = data['id']?.toString() ?? '';
     final myBidStatus = _myBidStatusByListing[listingId];
-    final bool hasAnyBid = alreadyBid || myBidStatus != null;
-    final bool hasPendingBid = (myBidStatus ?? '') == 'pending';
+    final bool hasAnyBid = alreadyBid || hasAnyBidStatus(myBidStatus);
+    final bool hasPendingBid = hasPendingBidStatus(myBidStatus);
     final int bidCount = data['bid_count'] is int
         ? data['bid_count'] as int
         : int.tryParse(data['bid_count']?.toString() ?? '0') ?? 0;
@@ -2534,12 +2444,18 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                 );
                               },
                             )
+                          // hasAnyBid && !hasPendingBid: 이미 낙찰/미선정된 입찰이라
+                          // 취소도 재지원도 할 수 없는 상태
                           : ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: hasPendingBid
                                     ? Colors.red
                                     : const Color(0xFF0B2545),
                                 foregroundColor: Colors.white,
+                                disabledBackgroundColor:
+                                    const Color(0xFFCBD5E0),
+                                disabledForegroundColor:
+                                    const Color(0xFF4A5568),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -2547,24 +2463,35 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                               ),
                               icon: Icon(hasPendingBid
                                   ? Icons.cancel_outlined
-                                  : Icons.check_circle_outline),
+                                  : hasAnyBid
+                                      ? Icons.how_to_vote_outlined
+                                      : Icons.check_circle_outline),
                               label: Text(
-                                hasPendingBid ? '지원 취소' : '지원하기',
+                                hasPendingBid
+                                    ? '지원 취소'
+                                    : hasAnyBid
+                                        ? (myBidStatus == 'selected'
+                                            ? '낙찰된 일감입니다'
+                                            : '이미 지원한 일감입니다')
+                                        : '지원하기',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              onPressed: () async {
-                                Navigator.pop(context);
-                                if (hasPendingBid) {
-                                  await _cancelBid(data['id'].toString());
-                                } else {
-                                  await _showBidDialog(
-                                      data['id'].toString(), title,
-                                      isWebOrder: postedBy.isEmpty);
-                                }
-                              },
+                              onPressed: hasAnyBid && !hasPendingBid
+                                  ? null
+                                  : () async {
+                                      Navigator.pop(context);
+                                      if (hasPendingBid) {
+                                        await _cancelBid(
+                                            data['id'].toString());
+                                      } else {
+                                        await _showBidDialog(
+                                            data['id'].toString(), title,
+                                            isWebOrder: postedBy.isEmpty);
+                                      }
+                                    },
                             ),
                     ),
                   ),

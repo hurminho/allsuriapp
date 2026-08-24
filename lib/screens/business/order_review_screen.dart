@@ -129,42 +129,63 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           .eq('reviewer_id', currentUserId)
           .maybeSingle();
       
+      // .select()로 실제 반영된 행을 확인합니다. RLS에 막히면 0행이 돌아오는데,
+      // 예전에는 이를 확인하지 않아 '등록 완료'만 뜨고 저장은 안 되는 경우가 있었습니다.
       if (existingReview != null) {
         // 이미 리뷰가 있으면 업데이트
         print('ℹ️ [OrderReview] 기존 리뷰 발견, 업데이트');
-        await Supabase.instance.client.from('order_reviews').update({
-          'rating': _rating,
-          'tags': _selectedTags.toList(),
-          'comment': _commentController.text.trim(),
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', existingReview['id']);
+        final updated = await Supabase.instance.client
+            .from('order_reviews')
+            .update({
+              'rating': _rating,
+              'tags': _selectedTags.toList(),
+              'comment': _commentController.text.trim(),
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', existingReview['id'])
+            .select();
+        if (updated.isEmpty) {
+          throw Exception('리뷰를 수정할 권한이 없습니다.');
+        }
         print('✅ [OrderReview] 리뷰 업데이트 완료');
       } else {
         // 새 리뷰 저장
-        await Supabase.instance.client.from('order_reviews').insert({
-          'listing_id': widget.listingId,
-          'job_id': widget.jobId,
-          'reviewer_id': currentUserId,
-          'reviewee_id': widget.revieweeId,
-          'rating': _rating,
-          'tags': _selectedTags.toList(),
-          'comment': _commentController.text.trim(),
-          'created_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        });
+        final inserted = await Supabase.instance.client
+            .from('order_reviews')
+            .insert({
+              'listing_id': widget.listingId,
+              'job_id': widget.jobId,
+              'reviewer_id': currentUserId,
+              'reviewee_id': widget.revieweeId,
+              'rating': _rating,
+              'tags': _selectedTags.toList(),
+              'comment': _commentController.text.trim(),
+              'created_at': DateTime.now().toIso8601String(),
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .select();
+        if (inserted.isEmpty) {
+          throw Exception('리뷰를 저장하지 못했습니다.');
+        }
         print('✅ [OrderReview] 리뷰 저장 완료');
       }
 
       // marketplace_listings 상태를 'completed'로 업데이트
-      await Supabase.instance.client
+      // 리뷰 자체는 이미 저장됐으므로 상태 전환 실패는 경고만 남깁니다.
+      final listingUpdated = await Supabase.instance.client
           .from('marketplace_listings')
           .update({
             'status': 'completed',
             'updatedat': DateTime.now().toIso8601String(),
           })
-          .eq('id', widget.listingId);
+          .eq('id', widget.listingId)
+          .select();
 
-      print('✅ [OrderReview] marketplace_listings 완료 처리');
+      if (listingUpdated.isEmpty) {
+        print('⚠️ [OrderReview] marketplace_listings 완료 처리 0행 (권한/대상 확인 필요)');
+      } else {
+        print('✅ [OrderReview] marketplace_listings 완료 처리');
+      }
 
       // jobs 상태를 'completed'로 업데이트 (jobId가 있는 경우만)
       final jobIdValue = widget.jobId;

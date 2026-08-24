@@ -637,13 +637,18 @@ class _CallMarketplaceScreenState extends State<CallMarketplaceScreen> {
       print('🔍 [_deleteJob] 공사 삭제 시작: $jobId');
       
       // jobs 테이블에서 삭제 (marketplace_listings는 ON DELETE CASCADE로 자동 삭제)
-      final response = await Supabase.instance.client
+      // .select()로 실제 삭제된 행을 확인 (RLS 차단 시 0행)
+      final deleted = await Supabase.instance.client
           .from('jobs')
           .delete()
-          .eq('id', jobId);
-      
-      print('✅ [_deleteJob] 공사 삭제 완료');
-      
+          .eq('id', jobId)
+          .select();
+
+      if (deleted.isEmpty) {
+        throw Exception('삭제할 권한이 없거나 이미 삭제된 공사입니다.');
+      }
+      print('✅ [_deleteJob] 공사 삭제 완료 (${deleted.length}건)');
+
       if (!mounted) return;
       
       ScaffoldMessenger.of(context).showSnackBar(

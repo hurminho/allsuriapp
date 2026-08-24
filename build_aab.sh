@@ -9,16 +9,16 @@ BUILD_NUMBER=${2:-}
 if [ "$ENV" == "dev" ]; then
     echo "🔨 개발 환경 AAB 빌드 중..."
     if [ -n "$BUILD_NUMBER" ]; then
-        flutter build appbundle --dart-define-from-file=dart_defines.dev.json --build-number=$BUILD_NUMBER
+        flutter build appbundle --release --dart-define-from-file=dart_defines.dev.json --build-number=$BUILD_NUMBER
     else
-        flutter build appbundle --dart-define-from-file=dart_defines.dev.json
+        flutter build appbundle --release --dart-define-from-file=dart_defines.dev.json
     fi
 elif [ "$ENV" == "prod" ]; then
     echo "🚀 프로덕션 환경 AAB 빌드 중..."
     if [ -n "$BUILD_NUMBER" ]; then
-        flutter build appbundle --dart-define-from-file=dart_defines.json --build-number=$BUILD_NUMBER
+        flutter build appbundle --release --dart-define-from-file=dart_defines.json --build-number=$BUILD_NUMBER
     else
-        flutter build appbundle --dart-define-from-file=dart_defines.json
+        flutter build appbundle --release --dart-define-from-file=dart_defines.json
     fi
 else
     echo "❌ 잘못된 환경: $ENV"
