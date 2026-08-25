@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/feature_flags.dart';
 import '../models/ad.dart';
 
 class AdService {
@@ -6,6 +7,7 @@ class AdService {
 
   // 특정 위치의 활성 광고 조회
   Future<List<Ad>> getAdsByLocation(String location) async {
+    if (!FeatureFlags.adsEnabled) return [];
     try {
       final response = await _sb
           .from('ads')

@@ -456,7 +456,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
   @override
   Widget build(BuildContext context) {
     return BusinessAppShell(
-      title: '협업 일감',
+      title: '오더 찾기',
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh_rounded),

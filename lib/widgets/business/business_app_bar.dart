@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'business_tab_scope.dart';
 import 'business_tokens.dart';
 
 class BusinessAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -28,6 +29,18 @@ class BusinessAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = navy ? Colors.white : BusinessTokens.text;
+    final tabScope = BusinessTabScope.maybeOf(context);
+    final inTab = tabScope != null;
+    final showLeading = showBackButton && !inTab;
+    final mergedActions = <Widget>[
+      ...?actions,
+      if (inTab)
+        IconButton(
+          tooltip: '오늘의 업무',
+          icon: const Icon(Icons.home_outlined),
+          onPressed: tabScope.openDashboard,
+        ),
+    ];
     return AppBar(
       title: Text(
         title,
@@ -44,14 +57,14 @@ class BusinessAppBar extends StatelessWidget implements PreferredSizeWidget {
       foregroundColor: foreground,
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
-      leading: showBackButton
+      leading: showLeading
           ? IconButton(
               onPressed: onBack ?? () => Navigator.maybePop(context),
               tooltip: '뒤로가기',
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
             )
           : null,
-      actions: actions,
+      actions: mergedActions.isEmpty ? null : mergedActions,
       bottom: bottom,
       shape: navy
           ? null

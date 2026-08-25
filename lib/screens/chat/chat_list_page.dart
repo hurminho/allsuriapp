@@ -6,6 +6,7 @@ import 'package:allsuriapp/widgets/loading_indicator.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
 import '../../theme/business_theme.dart';
+import '../../widgets/business/business_app_bar.dart';
 import '../chat_screen.dart';
 
 class ChatListPage extends StatefulWidget {
@@ -53,14 +54,14 @@ class _ChatListPageState extends State<ChatListPage> {
         if (user == null) {
         return Scaffold(
           backgroundColor: BusinessTheme.background,
-          appBar: AppBar(title: const Text('채팅')),
+          appBar: const BusinessAppBar(title: '채팅'),
           body: SafeArea(child: _buildLoginGuide(context)),
         );
         }
         return Scaffold(
           backgroundColor: BusinessTheme.background,
-          appBar: AppBar(
-            title: const Text('채팅'),
+          appBar: BusinessAppBar(
+            title: '채팅',
             actions: [
               IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadChatRooms),
             ],

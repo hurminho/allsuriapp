@@ -304,7 +304,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
     // 사업자 진위확인 가드
     final canProceed =
-        await BusinessVerifyGuard.ensure(context, action: '협업 일감 등록');
+        await BusinessVerifyGuard.ensure(context, action: '오더 등록');
     if (!canProceed) return;
 
     setState(() => _submitting = true);
@@ -350,7 +350,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('협업 일감 정보가 저장되었습니다.')),
+        const SnackBar(content: Text('오더 정보가 저장되었습니다.')),
       );
 
       // 다음 단계 선택: 오더로 올리기 또는 이관하기
@@ -374,7 +374,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('협업 일감 등록에 실패했습니다: ${e.toString()}'),
+          content: Text('오더 등록에 실패했습니다: ${e.toString()}'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -590,7 +590,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   @override
   Widget build(BuildContext context) {
     return BusinessAppShell(
-      title: '협업 일감 등록',
+      title: '오더 등록',
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
@@ -602,7 +602,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             ),
           ),
           child: BusinessPrimaryButton(
-            label: '협업 일감 등록',
+            label: '오더 등록',
             icon: Icons.group_add_outlined,
             loading: _submitting,
             onPressed: _submitting ? null : _submitJob,
@@ -804,7 +804,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '새로운 협업 일감을 카카오톡 단체방에 공유하시겠어요?',
+              '새로운 오더을 카카오톡 단체방에 공유하시겠어요?',
               style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 12),
@@ -821,7 +821,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                     children: [
                       Icon(Icons.check_circle, color: Colors.green, size: 16),
                       SizedBox(width: 4),
-                      Text('단체방에 협업 일감 정보 공유'),
+                      Text('단체방에 오더 정보 공유'),
                     ],
                   ),
                   SizedBox(height: 4),
@@ -829,7 +829,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                     children: [
                       Icon(Icons.check_circle, color: Colors.green, size: 16),
                       SizedBox(width: 4),
-                      Text('더 많은 사업자에게 협업 일감 노출'),
+                      Text('더 많은 사업자에게 오더 노출'),
                     ],
                   ),
                 ],
@@ -906,7 +906,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '협업 일감 정보 저장 완료',
+                  '오더 정보 저장 완료',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -951,7 +951,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                       // 사업자 진위확인 가드
                       final canProceed = await BusinessVerifyGuard.ensure(
                         context,
-                        action: '협업 일감 등록',
+                        action: '오더 등록',
                       );
                       if (!canProceed) return;
 
@@ -1006,8 +1006,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                               final bulkResult = await notificationService
                                   .sendBulkNotification(
                                 userIds: userIds,
-                                title: '새로운 협업 일감',
-                                body: '$title 협업 일감이 등록되었습니다.',
+                                title: '새로운 오더',
+                                body: '$title 오더이 등록되었습니다.',
                                 type: 'new_order',
                                 orderId: result['id']?.toString(),
                                 jobTitle: title,
@@ -1057,14 +1057,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                         } else {
                           ScaffoldMessenger.of(parentContext).showSnackBar(
                             const SnackBar(
-                                content: Text('협업 일감 등록에 실패했습니다. 다시 시도해주세요.')),
+                                content: Text('오더 등록에 실패했습니다. 다시 시도해주세요.')),
                           );
                         }
                       } catch (e) {
                         print('오더 등록 에러: $e');
                         if (!mounted) return;
                         ScaffoldMessenger.of(parentContext).showSnackBar(
-                          SnackBar(content: Text('협업 일감 등록 실패: $e')),
+                          SnackBar(content: Text('오더 등록 실패: $e')),
                         );
                       } finally {
                         if (mounted) {
@@ -1082,7 +1082,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                     ),
                     icon: const Icon(Icons.campaign, size: 28),
                     label: const Text(
-                      '협업 일감으로 모집하기',
+                      '오더으로 모집하기',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,

@@ -26,13 +26,13 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('홈'), findsOneWidget);
-    expect(find.text('새 일감'), findsOneWidget);
-    expect(find.text('공사 만들기'), findsOneWidget);
+    expect(find.text('내 매출'), findsOneWidget);
+    expect(find.text('공사 관리'), findsOneWidget);
+    expect(find.text('오더 만들기'), findsOneWidget);
     expect(find.text('채팅'), findsOneWidget);
     expect(find.text('내 정보'), findsOneWidget);
 
-    await tester.tap(find.text('공사 만들기'));
+    await tester.tap(find.text('오더 만들기'));
     expect(tapped, 2);
 
     await tester.binding.setSurfaceSize(const Size(412, 915));

@@ -5,17 +5,19 @@ import '../../services/marketplace_service.dart';
 import '../../widgets/business/business_app_shell.dart';
 import '../../widgets/business/business_empty_state.dart';
 import '../../widgets/business/business_filter_chip.dart';
-import '../../widgets/business/business_primary_button.dart';
 import '../../widgets/business/business_section_header.dart';
 import '../../widgets/business/business_status_chip.dart';
 import '../../widgets/business/business_tokens.dart';
-import 'job_management_screen.dart';
-import 'create_job_screen.dart';
 import 'order_marketplace_screen.dart';
 
 class BusinessMyEstimatesScreen extends StatefulWidget {
   final String? initialStatus;
-  const BusinessMyEstimatesScreen({super.key, this.initialStatus});
+  final bool embedded;
+  const BusinessMyEstimatesScreen({
+    super.key,
+    this.initialStatus,
+    this.embedded = false,
+  });
 
   @override
   State<BusinessMyEstimatesScreen> createState() =>
@@ -97,6 +99,45 @@ class _BusinessMyEstimatesScreenState extends State<BusinessMyEstimatesScreen> {
   @override
   Widget build(BuildContext context) {
     final filtered = _bids.where(_matchesFilter).toList();
+    final body = Column(
+      children: [
+        _buildFilterBar(),
+        Expanded(
+          child: _loadError != null
+              ? BusinessEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: '내 입찰을 불러오지 못했습니다',
+                  subtitle: _loadError,
+                  actionLabel: '다시 시도',
+                  onAction: _loadBids,
+                )
+              : _loading
+                  ? const BusinessListSkeleton()
+                  : filtered.isEmpty
+                      ? const BusinessEmptyState(
+                          icon: Icons.description_outlined,
+                          title: '해당 상태의 입찰이 없습니다',
+                          subtitle: '제출한 입찰이 생기면 여기에 표시됩니다.',
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadBids,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(
+                              BusinessTokens.pagePadding,
+                            ),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => const SizedBox(
+                              height: BusinessTokens.space12,
+                            ),
+                            itemBuilder: (context, index) =>
+                                _buildBidCard(filtered[index]),
+                          ),
+                        ),
+        ),
+      ],
+    );
+    if (widget.embedded) return body;
     return BusinessAppShell(
       title: '내 입찰',
       actions: [
@@ -106,86 +147,7 @@ class _BusinessMyEstimatesScreenState extends State<BusinessMyEstimatesScreen> {
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
-      body: Column(
-        children: [
-          _buildFilterBar(),
-          Expanded(
-            child: _loadError != null
-                ? BusinessEmptyState(
-                    icon: Icons.cloud_off_outlined,
-                    title: '내 입찰을 불러오지 못했습니다',
-                    subtitle: _loadError,
-                    actionLabel: '다시 시도',
-                    onAction: _loadBids,
-                  )
-                : _loading
-                    ? const BusinessListSkeleton()
-                    : filtered.isEmpty
-                        ? const BusinessEmptyState(
-                            icon: Icons.description_outlined,
-                            title: '해당 상태의 입찰이 없습니다',
-                            subtitle: '제출한 입찰이 생기면 여기에 표시됩니다.',
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _loadBids,
-                            child: ListView.separated(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(
-                                BusinessTokens.pagePadding,
-                              ),
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const SizedBox(
-                                height: BusinessTokens.space12,
-                              ),
-                              itemBuilder: (context, index) =>
-                                  _buildBidCard(filtered[index]),
-                            ),
-                          ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            BusinessTokens.pagePadding,
-            BusinessTokens.space8,
-            BusinessTokens.pagePadding,
-            BusinessTokens.space8,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: BusinessPrimaryButton(
-                  label: '공사 만들기',
-                  icon: Icons.add_business,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CreateJobScreen()),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: BusinessTokens.space12),
-              Expanded(
-                child: BusinessPrimaryButton(
-                  label: '공사 관리',
-                  secondary: true,
-                  icon: Icons.work_outline,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const JobManagementScreen()),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      body: body,
     );
   }
 

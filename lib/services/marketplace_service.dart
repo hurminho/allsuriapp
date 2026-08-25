@@ -209,6 +209,26 @@ class MarketplaceService extends ChangeNotifier {
     }
   }
 
+  /// 웹에서 들어온 고객 오더는 orders 와 marketplace_listings 양쪽에 생성된다.
+  /// 그 미러 리스팅 id 를 찾아 입찰을 order_bids 로 보낼 수 있게 한다.
+  /// 앱에서 직접 만든 고객 오더는 미러가 없어 null 을 돌려준다.
+  Future<String?> findListingIdForWebOrder(String orderId) async {
+    if (orderId.isEmpty) return null;
+    try {
+      final rows = await _sb
+          .from('marketplace_listings')
+          .select('id')
+          .eq('web_order_id', orderId)
+          .limit(1);
+      if (rows.isEmpty) return null;
+      return rows.first['id']?.toString();
+    } catch (e) {
+      // web_order_id 컬럼이 아직 없는 환경에서는 조용히 기존 경로를 쓴다.
+      debugPrint('findListingIdForWebOrder 실패(무시): $e');
+      return null;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> listMyBids(String businessId) async {
     final api = ApiService();
     final response = await api.get('/market/bids?bidderId=$businessId');

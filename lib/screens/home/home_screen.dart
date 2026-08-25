@@ -9,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import '../../services/auth_service.dart';
 import '../../services/ad_service.dart';
 import '../../models/ad.dart';
-import '../../widgets/professional_dashboard.dart';
+import '../../widgets/business/business_tab_shell.dart';
 import '../../widgets/kakao_login_button.dart';
 import '../../widgets/business/business_metric_card.dart';
 import '../business/business_profile_screen.dart';
@@ -148,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
           print('   - Business Status: $status');
 
           if (status == 'approved') {
-            return const ProfessionalDashboard();
+            return const BusinessTabShell();
           }
 
           if (!hasBusinessName) {

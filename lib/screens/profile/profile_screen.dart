@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../app_navigator_key.dart';
+import '../../widgets/business/business_app_bar.dart';
+import '../../widgets/business/business_tokens.dart';
 import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../business/business_profile_screen.dart';
@@ -28,27 +30,15 @@ class ProfileScreen extends StatelessWidget {
         // 로그인하지 않은 사용자에게 안내
         if (user == null) {
           return Scaffold(
-            backgroundColor: const Color(0xFFF7FAFC),
-            appBar: AppBar(
-              title: const Text('프로필'),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
+            backgroundColor: BusinessTokens.canvas,
+            appBar: const BusinessAppBar(title: '내 정보'),
             body: _buildLoginGuide(context),
           );
         }
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF7FAFC),
-          appBar: AppBar(
-            title: const Text('프로필'),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
+          backgroundColor: BusinessTokens.canvas,
+          appBar: const BusinessAppBar(title: '내 정보'),
           body: _buildProfileContent(context, user),
         );
       },

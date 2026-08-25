@@ -8,6 +8,7 @@ import '../models/estimate.dart';
 import '../models/order.dart';
 import '../services/estimate_service.dart';
 import '../services/auth_service.dart';
+import '../services/marketplace_service.dart';
 import '../services/media_service.dart';
 import '../utils/business_verify_guard.dart';
 import '../widgets/business/business_app_shell.dart';
@@ -40,6 +41,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
   bool _isUploadingImages = false;
   final _imagePicker = ImagePicker();
   final _mediaService = MediaService();
+  final _market = MarketplaceService();
 
   @override
   void dispose() {
@@ -293,6 +295,26 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
 
       final parsedAmount =
           double.parse(_amountController.text.trim().replaceAll(',', ''));
+      final estimatedDays = int.parse(_estimatedDaysController.text.trim());
+      final description = _descriptionController.text.trim();
+
+      // 웹에서 들어온 고객 오더는 marketplace_listings 미러가 있어 입찰을
+      // order_bids 로 보내야 한다. 그래야 '내 입찰'·대시보드 '입찰 대기'와
+      // 고객의 웹 조회 화면에 함께 나타난다. estimates 로만 쓰면 세 곳 모두
+      // 조회 대상이 아니라 입찰이 사라진 것처럼 보인다.
+      final listingId =
+          await _market.findListingIdForWebOrder(widget.order.id ?? '');
+      if (listingId != null) {
+        await _market.claimListing(
+          listingId,
+          businessId: user.id,
+          bidAmount: parsedAmount,
+          estimatedDays: estimatedDays,
+          message: description,
+        );
+        if (mounted) _showSubmitted();
+        return;
+      }
 
       final customerId = widget.order.customerId ?? '';
       final estimate = Estimate(
@@ -305,8 +327,8 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
         businessPhone: user.phoneNumber ?? '',
         equipmentType: widget.order.equipmentType,
         amount: parsedAmount,
-        description: _descriptionController.text.trim(),
-        estimatedDays: int.parse(_estimatedDaysController.text.trim()),
+        description: description,
+        estimatedDays: estimatedDays,
         createdAt: DateTime.now(),
         visitDate: widget.order.visitDate,
         status: Estimate.STATUS_PENDING,
@@ -315,24 +337,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
 
       await estimateService.createEstimate(estimate);
 
-      if (mounted) {
-        showCupertinoDialog(
-          context: context,
-          builder: (context) => CupertinoAlertDialog(
-            title: const Text('견적 제출 완료'),
-            content: const Text('견적이 성공적으로 제출되었습니다!'),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
-                child: const Text('확인'),
-              ),
-            ],
-          ),
-        );
-      }
+      if (mounted) _showSubmitted();
     } catch (e) {
       if (mounted) {
         _showError('견적 제출 중 오류가 발생했습니다: $e');
@@ -342,6 +347,25 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _showSubmitted() {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('견적 제출 완료'),
+        content: const Text('견적이 성공적으로 제출되었습니다!'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showError(String message) {

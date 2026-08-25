@@ -239,25 +239,41 @@ class JobService extends ChangeNotifier {
   }
 
   /// 공사 취소 처리 (사업자용)
-  /// - 마켓플레이스 리스팅도 함께 취소 처리
-  Future<void> cancelJobByAssignee(String jobId, String listingId) async {
+  Future<void> cancelJobByAssignee(
+    String jobId,
+    String listingId, {
+    String? reasonCategory,
+    String? reasonDetail,
+  }) async {
     try {
-      // 1. 공사 상태 취소로 변경
-      await _supabase
-          .from('jobs')
-          .update({'status': 'cancelled'})
-          .eq('id', jobId);
+      final reasonNote = [
+        if (reasonCategory != null && reasonCategory.isNotEmpty) reasonCategory,
+        if (reasonDetail != null && reasonDetail.isNotEmpty) reasonDetail,
+      ].join(' / ');
 
-      // 2. 마켓플레이스 리스팅 상태 취소로 변경
-      await _supabase
-          .from('marketplace_listings')
-          .update({'status': 'cancelled'})
-          .eq('id', listingId);
+      Future<void> patch(String table, String id) async {
+        final full = {
+          'status': 'cancelled',
+          if (reasonCategory != null) 'cancel_category': reasonCategory,
+          if (reasonNote.isNotEmpty) 'cancel_reason': reasonNote,
+        };
+        try {
+          await _supabase.from(table).update(full).eq('id', id);
+        } catch (_) {
+          await _supabase.from(table).update({'status': 'cancelled'}).eq('id', id);
+        }
+      }
 
-      // 3. 알림 전송은 updateJobStatus 내부 로직 활용을 위해 재호출하거나 직접 구현
-      // 여기서는 명시적으로 호출
-      await updateJobStatus(jobId: jobId, status: 'cancelled');
-      
+      if (jobId.isNotEmpty && !jobId.startsWith('listing:')) {
+        await patch('jobs', jobId);
+      }
+      if (listingId.isNotEmpty) {
+        await patch('marketplace_listings', listingId);
+      }
+
+      if (jobId.isNotEmpty && !jobId.startsWith('listing:')) {
+        await updateJobStatus(jobId: jobId, status: 'cancelled');
+      }
     } catch (e) {
       if (kDebugMode) {
         print('❌ [JobService] 공사 취소 실패: $e');

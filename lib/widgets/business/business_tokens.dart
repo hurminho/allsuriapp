@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
+// 웹(allsuricommerce.netlify.app)과 톤을 맞춘 값. 웹은 Tailwind 기본
+// 팔레트를 쓰므로 blue-600/blue-800/yellow-400/gray-50 을 그대로 가져온다.
 const businessNavy = Color(0xFF0B2545);
-const businessBlue = Color(0xFF2E74B5);
-const businessBlueLight = Color(0xFFE8EEF5);
-const businessCanvas = Color(0xFFF7FAFC);
-const businessText = Color(0xFF102A43);
-const businessMutedText = Color(0xFF6B7D90);
-const businessBorder = Color(0xFFDCE6F0);
-const businessYellow = Color(0xFFF5C400);
+const businessBlue = Color(0xFF2563EB); // blue-600
+const businessBlueDark = Color(0xFF1D4ED8); // blue-700
+const businessHeroEnd = Color(0xFF1E40AF); // blue-800
+const businessBlueLight = Color(0xFFEFF6FF); // blue-50
+const businessCanvas = Color(0xFFF9FAFB); // gray-50
+const businessText = Color(0xFF111827); // gray-900
+const businessMutedText = Color(0xFF6B7280); // gray-500
+const businessBorder = Color(0xFFE5E7EB); // gray-200
+const businessYellow = Color(0xFFFACC15); // yellow-400
 const businessSuccess = Color(0xFF1F8A70);
 const businessWarning = Color(0xFFE6A700);
 const businessDanger = Color(0xFFC9403A);
@@ -16,6 +20,8 @@ const businessDanger = Color(0xFFC9403A);
 abstract final class BusinessTokens {
   static const navy = businessNavy;
   static const blue = businessBlue;
+  static const blueDark = businessBlueDark;
+  static const heroEnd = businessHeroEnd;
   static const blueLight = businessBlueLight;
   static const canvas = businessCanvas;
   static const text = businessText;
@@ -46,6 +52,18 @@ abstract final class BusinessTokens {
       color: color,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: borderColor),
+    );
+  }
+
+  /// 웹 히어로 섹션과 같은 blue-600 → blue-800 그라데이션.
+  static BoxDecoration hero({double radius = cardRadius}) {
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(radius),
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [blue, heroEnd],
+      ),
     );
   }
 

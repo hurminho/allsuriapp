@@ -4,27 +4,23 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
+import '../config/feature_flags.dart';
 import '../services/ad_service.dart';
 import '../models/ad.dart';
 import 'announcement_banner.dart';
 import '../theme/business_theme.dart';
 import '../screens/business/estimate_requests_screen.dart';
-import '../screens/business/my_estimates_screen.dart';
-import '../screens/chat/chat_list_page.dart';
+import '../screens/business/work_hub_screen.dart';
 import '../screens/notification/notification_screen.dart';
-import '../screens/business/job_management_screen.dart';
 import '../screens/business/order_marketplace_screen.dart';
 import '../screens/business/my_order_management_screen.dart';
 import '../screens/business/pending_approval_screen.dart';
-import '../screens/profile/profile_screen.dart';
-import '../screens/business/create_job_screen.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/marketplace_service.dart';
 import '../services/order_service.dart';
 import '../services/push_permission_service.dart';
 import 'business/business_app_bar.dart';
-import 'business/business_bottom_navigation.dart';
 import 'business/business_empty_state.dart';
 import 'business/business_section_header.dart';
 import 'business/business_tokens.dart';
@@ -38,14 +34,12 @@ class ProfessionalDashboard extends StatefulWidget {
 }
 
 class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
-  final int _currentIndex = 0;
   final MarketplaceService _market = MarketplaceService();
 
   late Future<Map<String, int>> _dashboardDataFuture;
   // 광고/알림 Future 캐싱 (build 마다 재요청 방지)
   Future<List<Ad>>? _adBannerFuture;
   Future<int>? _notifCountFuture;
-  Future<int>? _unreadChatFuture;
 
   RealtimeChannel? _marketplaceChannel;
   RealtimeChannel? _ordersChannel;
@@ -118,9 +112,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       _notifCountFuture = userId.isEmpty
           ? Future.value(0)
           : NotificationService().getUnreadCount(userId);
-      _unreadChatFuture = userId.isEmpty
-          ? Future.value(0)
-          : NotificationService().getUnreadChatCount(userId);
     });
   }
 
@@ -289,7 +280,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             : (user?.name ?? "사업자");
 
         return PopScope(
-          canPop: false,
+          canPop: true,
           child: Theme(
             data: BusinessTheme.theme(Theme.of(context)),
             child: Scaffold(
@@ -319,16 +310,16 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                                     const SizedBox(height: 24),
                                     const BusinessSectionHeader(
                                       title: '핵심 업무',
-                                      subtitle: '수주와 협업 업무를 구분해 관리하세요',
+                                      subtitle: '오더와 공사를 한곳에서 관리하세요',
                                     ),
                                     const SizedBox(height: 12),
                                     _buildCoreWorkCard(
                                       icon: Icons.search_rounded,
-                                      title: '고객 요청 찾기',
+                                      title: '새 오더',
                                       description: '내 지역의 신규 견적 요청을 확인하세요',
                                       meta:
                                           '신규 요청 ${data['estimateRequests'] ?? 0}건',
-                                      actionLabel: '새 일감 보기',
+                                      actionLabel: '새 오더 보기',
                                       color: BusinessTokens.blueLight,
                                       borderColor: BusinessTokens.blue
                                           .withValues(alpha: 0.35),
@@ -338,25 +329,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                                         MaterialPageRoute(
                                           builder: (_) =>
                                               const EstimateRequestsScreen(),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    _buildCoreWorkCard(
-                                      icon: Icons.add_business_outlined,
-                                      title: '협업 일감 만들기',
-                                      description: '다른 전문 사업자와 공사를 함께 진행하세요',
-                                      meta: '내 협업 일감 ${data['myOrders'] ?? 0}건',
-                                      actionLabel: '공사 만들기',
-                                      color: BusinessTokens.surface,
-                                      borderColor: BusinessTokens.yellow,
-                                      iconColor: BusinessTokens.navy,
-                                      iconBackground: BusinessTokens.yellow,
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const CreateJobScreen(),
                                         ),
                                       ),
                                     ),
@@ -376,16 +348,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                   );
                 },
               ),
-              bottomNavigationBar: FutureBuilder<int>(
-                future: _unreadChatFuture,
-                builder: (context, snapshot) {
-                  return BusinessBottomNavigation(
-                    currentIndex: _currentIndex,
-                    unreadChats: snapshot.data ?? 0,
-                    onTap: _handleBottomNavigation,
-                  );
-                },
-              ),
             ),
           ),
         );
@@ -396,8 +358,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user) {
     return BusinessAppBar(
       title: '오늘의 업무',
-      navy: true,
-      showBackButton: false,
+      showBackButton: true,
       actions: [
         FutureBuilder<int>(
           future: _notifCountFuture,
@@ -450,10 +411,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   Widget _buildSummaryCard(String businessName, Map<String, int> data) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BusinessTokens.card(
-        color: BusinessTokens.navy,
-        borderColor: BusinessTokens.navy,
-      ),
+      decoration: BusinessTokens.hero(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -500,9 +458,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                   () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const BusinessMyEstimatesScreen(
-                        initialStatus: 'pending',
-                      ),
+                      builder: (_) => const WorkHubScreen(initialTab: 0),
                     ),
                   ),
                 ),
@@ -510,12 +466,12 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
               _summaryDivider(),
               Expanded(
                 child: _summaryMetric(
-                  '수주 진행',
+                  '공사 진행',
                   data['inProgress'] ?? 0,
                   () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const JobManagementScreen(),
+                      builder: (_) => const WorkHubScreen(initialTab: 1),
                     ),
                   ),
                 ),
@@ -665,26 +621,26 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const BusinessMyEstimatesScreen(),
+                builder: (_) => const WorkHubScreen(initialTab: 0),
               ),
             ),
           ),
           const Divider(height: 1, color: BusinessTokens.border),
           _workQueueItem(
             icon: Icons.handyman_outlined,
-            label: '수주 관리',
+            label: '공사 관리',
             value: '${data['inProgress'] ?? 0}건 진행',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const JobManagementScreen(),
+                builder: (_) => const WorkHubScreen(initialTab: 1),
               ),
             ),
           ),
           const Divider(height: 1, color: BusinessTokens.border),
           _workQueueItem(
             icon: Icons.travel_explore_outlined,
-            label: '협업 일감 찾기',
+            label: '오더 찾기',
             value: '${data['newOrders'] ?? 0}건 모집',
             onTap: () => Navigator.push(
               context,
@@ -697,7 +653,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           const Divider(height: 1, color: BusinessTokens.border),
           _workQueueItem(
             icon: Icons.hub_outlined,
-            label: '내 협업 일감',
+            label: '내 오더',
             value: '${data['myOrders'] ?? 0}건',
             onTap: () => Navigator.push(
               context,
@@ -752,25 +708,9 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     );
   }
 
-  void _handleBottomNavigation(int index) {
-    if (index == 0) return;
-    final Widget? destination = switch (index) {
-      1 => const EstimateRequestsScreen(),
-      2 => const CreateJobScreen(),
-      3 => const ChatListPage(),
-      4 => const ProfileScreen(),
-      _ => null,
-    };
-    if (destination == null) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => destination),
-    ).then((_) {
-      if (mounted) _refreshData();
-    });
-  }
-
   Widget _buildAdBanner(BuildContext context) {
+    // 광고를 끈 동안에는 회색 placeholder 자리도 남기지 않는다.
+    if (!FeatureFlags.adsEnabled) return const SizedBox.shrink();
     return FutureBuilder<List<Ad>>(
       future: _adBannerFuture,
       builder: (context, snapshot) {

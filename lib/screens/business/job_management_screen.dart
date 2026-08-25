@@ -20,16 +20,21 @@ import '../../widgets/business/business_tokens.dart';
 import '../../widgets/modern_order_card.dart';
 import 'order_bidders_screen.dart';
 import 'order_review_screen.dart';
+import 'job_cancel_reason_screen.dart';
 import '../chat_screen.dart'; // 추가
 
 class JobManagementScreen extends StatefulWidget {
   final String? highlightedJobId; // 포커싱할 공사 ID
   final String? initialFilter; // 초기 필터 ('in_progress', 'completed')
+  final bool embedded;
+  final bool hideFilters;
 
   const JobManagementScreen({
     super.key,
     this.highlightedJobId,
     this.initialFilter,
+    this.embedded = false,
+    this.hideFilters = false,
   });
 
   @override
@@ -242,8 +247,10 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         final listingStatus = listing?['status']?.toString();
         return job.status == 'completed' ||
             job.status == 'awaiting_confirmation' ||
+            job.status == 'cancelled' ||
             listingStatus == 'completed' ||
-            listingStatus == 'awaiting_confirmation';
+            listingStatus == 'awaiting_confirmation' ||
+            listingStatus == 'cancelled';
       }).toList();
 
       _combinedJobs = myJobs.where((job) {
@@ -251,8 +258,10 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         final listingStatus = listing?['status']?.toString();
         final isDone = job.status == 'completed' ||
             job.status == 'awaiting_confirmation' ||
+            job.status == 'cancelled' ||
             listingStatus == 'completed' ||
-            listingStatus == 'awaiting_confirmation';
+            listingStatus == 'awaiting_confirmation' ||
+            listingStatus == 'cancelled';
         return !isDone;
       }).toList();
 
@@ -346,6 +355,39 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final body = _isLoading
+        ? const BusinessListSkeleton()
+        : _loadError != null
+            ? BusinessEmptyState(
+                icon: Icons.refresh_rounded,
+                title: _loadError!,
+                subtitle: '네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+                actionLabel: '다시 시도',
+                onAction: _loadJobs,
+              )
+            : Column(
+                children: [
+                  if (!widget.hideFilters) _buildModernFilterChips(),
+                  Expanded(
+                    child: _ModernJobsList(
+                      jobs: _filteredByBadge(
+                        _combinedJobs,
+                        context.read<AuthService>().currentUser?.id ?? '',
+                      ),
+                      currentUserId:
+                          context.read<AuthService>().currentUser?.id ?? '',
+                      listingsByJobId: _listingByJobId,
+                      onViewBidders: _openBidderList,
+                      onCompleteJob: _completeJob,
+                      onCancelJob: _cancelJob,
+                      onReview: _openReviewScreen,
+                      scrollController: _scrollController,
+                      highlightedJobId: widget.highlightedJobId,
+                    ),
+                  ),
+                ],
+              );
+    if (widget.embedded) return body;
     return BusinessAppShell(
       title: '진행 관리',
       actions: [
@@ -355,38 +397,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
           tooltip: '새로고침',
         ),
       ],
-      body: _isLoading
-          ? const BusinessListSkeleton()
-          : _loadError != null
-              ? BusinessEmptyState(
-                  icon: Icons.refresh_rounded,
-                  title: _loadError!,
-                  subtitle: '네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
-                  actionLabel: '다시 시도',
-                  onAction: _loadJobs,
-                )
-              : Column(
-                  children: [
-                    _buildModernFilterChips(),
-                    Expanded(
-                      child: _ModernJobsList(
-                        jobs: _filteredByBadge(
-                          _combinedJobs,
-                          context.read<AuthService>().currentUser?.id ?? '',
-                        ),
-                        currentUserId:
-                            context.read<AuthService>().currentUser?.id ?? '',
-                        listingsByJobId: _listingByJobId,
-                        onViewBidders: _openBidderList,
-                        onCompleteJob: _completeJob,
-                        onCancelJob: _cancelJob,
-                        onReview: _openReviewScreen,
-                        scrollController: _scrollController,
-                        highlightedJobId: widget.highlightedJobId,
-                      ),
-                    ),
-                  ],
-                ),
+      body: body,
     );
   }
 
@@ -421,7 +432,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const BusinessSectionHeader(
-            title: '협업 일감',
+            title: '오더',
             subtitle: '배정된 작업의 현재 단계와 다음 할 일을 확인하세요',
           ),
           const SizedBox(height: BusinessTokens.space12),
@@ -546,44 +557,34 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
     if (listing == null) return;
 
     final listingId = listing['id']?.toString() ?? '';
+    if (listingId.isEmpty) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('작업 취소'),
-        content: Text(
-          '[${job.title}] 작업을 취소하시겠습니까?\n'
-          '취소 시 요청 업체에 알림이 전송됩니다.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('아니오', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('취소하기',
-                style:
-                    TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
+    final reason = await Navigator.push<JobCancelReason>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JobCancelReasonScreen(jobTitle: job.title),
       ),
     );
-
-    if (confirmed != true) return;
+    if (reason == null || !mounted) return;
 
     setState(() => _isLoading = true);
 
     try {
       final jobService = context.read<JobService>();
-      await jobService.cancelJobByAssignee(job.id!, listingId);
+      final rawJobId = job.id ?? '';
+      await jobService.cancelJobByAssignee(
+        rawJobId,
+        listingId,
+        reasonCategory: reason.category,
+        reasonDetail: reason.detail,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('공사가 취소되었습니다.'), backgroundColor: Colors.orange),
         );
-        await _loadJobs(); // 목록 새로고침
+        await _loadJobs();
       }
     } catch (e) {
       print('❌ [JobManagement] 공사 취소 에러: $e');
@@ -1691,8 +1692,10 @@ class _ModernJobsList extends StatelessWidget {
                 style: BusinessTokens.title,
               ),
               const SizedBox(height: BusinessTokens.space16),
-              _buildTimeline(effectiveStatus),
-              const SizedBox(height: BusinessTokens.space16),
+              if (effectiveStatus != 'cancelled') ...[
+                _buildTimeline(effectiveStatus),
+                const SizedBox(height: BusinessTokens.space16),
+              ],
               const Divider(height: 1, color: BusinessTokens.border),
               const SizedBox(height: BusinessTokens.space12),
               const BusinessSectionHeader(title: '현재 정보'),
@@ -1912,11 +1915,12 @@ class _ModernJobsList extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // 공사 진행 현황 타임라인
-                _buildTimeline(job.status),
-                const SizedBox(height: 20),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
+                if (job.status != 'cancelled') ...[
+                  _buildTimeline(job.status),
+                  const SizedBox(height: 20),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                ],
 
                 // ── 웹 고객 연락처 (웹 낙찰일 때만) ──────────────────────
                 if (isWebOrder) ...[

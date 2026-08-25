@@ -241,7 +241,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('협업 일감 로드 실패: $e'), backgroundColor: Colors.red),
+              content: Text('오더 로드 실패: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -374,7 +374,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         child: Scaffold(
           backgroundColor: BusinessTheme.background,
           appBar: AppBar(
-            title: const Text('내 협업 일감'),
+            title: const Text('내 오더'),
             centerTitle: true,
             elevation: 0,
             leading: IconButton(
@@ -391,7 +391,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           ),
           body: _isLoading
               ? const LoadingIndicator(
-                  message: '내 협업 일감을 불러오는 중...',
+                  message: '내 오더을 불러오는 중...',
                   subtitle: '잠시만 기다려주세요',
                 )
               : Column(
@@ -561,7 +561,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
           ),
           const SizedBox(height: 20),
           const Text(
-            '생성한 협업 일감이 없습니다',
+            '생성한 오더이 없습니다',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -678,7 +678,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
-                    tooltip: '협업 일감 공유',
+                    tooltip: '오더 공유',
                   ),
                 if (listingId.isNotEmpty && selectedBidderId == null)
                   const SizedBox(width: 8),
@@ -711,7 +711,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
-                    tooltip: '협업 일감 삭제',
+                    tooltip: '오더 삭제',
                   ),
                 const SizedBox(width: 8),
                 // Budget
@@ -1200,9 +1200,9 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('협업 일감 삭제'),
+        title: const Text('오더 삭제'),
         content: Text(
-            '[$title] 협업 일감을 정말 삭제하시겠습니까?\n삭제된 일감은 복구할 수 없으며 모든 지원 내역도 함께 삭제됩니다.'),
+            '[$title] 오더을 정말 삭제하시겠습니까?\n삭제된 일감은 복구할 수 없으며 모든 지원 내역도 함께 삭제됩니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1230,14 +1230,14 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('협업 일감이 삭제되었습니다.'),
+                content: Text('오더이 삭제되었습니다.'),
                 backgroundColor: Colors.green),
           );
           _loadMyOrders(); // 목록 새로고침
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('협업 일감 삭제에 실패했습니다.'),
+                content: Text('오더 삭제에 실패했습니다.'),
                 backgroundColor: Colors.red),
           );
         }
@@ -1327,7 +1327,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     if (_isCompleting) return;
 
     final listingId = order['id']?.toString();
-    final title = order['title']?.toString() ?? '협업 일감';
+    final title = order['title']?.toString() ?? '오더';
     final selectedBidderId = order['selected_bidder_id']?.toString();
     final claimedBy = order['claimed_by']?.toString();
     final revieweeId = selectedBidderId ?? claimedBy;
@@ -1436,7 +1436,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     final completedBy = order['completed_by']?.toString();
     final selectedBidderId = order['selected_bidder_id']?.toString();
     final claimedBy = order['claimed_by']?.toString();
-    final title = order['title']?.toString() ?? '협업 일감';
+    final title = order['title']?.toString() ?? '오더';
     final jobId = order['jobid']?.toString();
 
     // 리뷰 대상자 ID: completedBy > selectedBidderId > claimedBy 순서로 확인
@@ -1454,7 +1454,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
     if (listingId == null || revieweeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('리뷰 작성 정보가 부족합니다.\n협업 일감이 완료되지 않았을 수 있습니다.'),
+          content: Text('리뷰 작성 정보가 부족합니다.\n오더이 완료되지 않았을 수 있습니다.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
@@ -1497,7 +1497,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
 
   Future<void> _showCompletedOrderDetail(Map<String, dynamic> order) async {
     final listingId = order['id']?.toString();
-    final title = order['title']?.toString() ?? '협업 일감';
+    final title = order['title']?.toString() ?? '오더';
     final description = order['description']?.toString() ?? '';
     final budget = order['budget_amount'];
     final me = context.read<AuthService>().currentUser?.id ?? '';

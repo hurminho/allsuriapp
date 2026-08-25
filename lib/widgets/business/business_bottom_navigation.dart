@@ -29,20 +29,20 @@ class BusinessBottomNavigation extends StatelessWidget {
             children: [
               _item(
                 index: 0,
-                icon: Icons.home_outlined,
-                selectedIcon: Icons.home_rounded,
-                label: '홈',
+                icon: Icons.bar_chart_outlined,
+                selectedIcon: Icons.bar_chart_rounded,
+                label: '내 매출',
               ),
               _item(
                 index: 1,
-                icon: Icons.assignment_outlined,
-                selectedIcon: Icons.assignment_rounded,
-                label: '새 일감',
+                icon: Icons.handyman_outlined,
+                selectedIcon: Icons.handyman_rounded,
+                label: '공사 관리',
               ),
               Expanded(
                 child: Semantics(
                   button: true,
-                  label: '공사 만들기',
+                  label: '오더 만들기',
                   child: InkWell(
                     onTap: () => onTap(2),
                     child: Transform.translate(
@@ -69,7 +69,7 @@ class BusinessBottomNavigation extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           const Text(
-                            '공사 만들기',
+                            '오더 만들기',
                             maxLines: 1,
                             style: TextStyle(
                               color: BusinessTokens.navy,

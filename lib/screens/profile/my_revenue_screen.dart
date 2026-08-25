@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/business/business_app_shell.dart';
 import '../../widgets/loading_indicator.dart';
 
 /// 내 매출 화면
@@ -24,6 +25,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
   int _totalReviews = 0;
   Map<int, int> _ratingDistribution = {}; // 별점별 개수
   Map<String, double> _monthlyCommission = {}; // 월별 수수료 (YYYY-MM: 금액)
+  bool _chartByYear = false;
 
   @override
   void initState() {
@@ -44,10 +46,10 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
 
       // 최근 6개월 날짜 계산
       final now = DateTime.now();
-      final sixMonthsAgo = DateTime(now.year, now.month - 6, now.day);
-      final sixMonthsAgoStr = sixMonthsAgo.toIso8601String();
+      final lookback = DateTime(now.year - 3, 1, 1);
+      final lookbackStr = lookback.toIso8601String();
       
-      print('   조회 기간: ${sixMonthsAgo.year}-${sixMonthsAgo.month.toString().padLeft(2, '0')}-${sixMonthsAgo.day} ~ ${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day}');
+      print('   조회 기간: ${lookback.year}-${lookback.month.toString().padLeft(2, '0')} ~ ${now.year}-${now.month.toString().padLeft(2, '0')}');
 
       // 1. 완료된 공사 조회 (최근 6개월, 내가 낙찰받아 완료한 공사)
       // awarded_amount가 없으면 jobs.budget_amount 사용
@@ -56,7 +58,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
           .select('id, awarded_amount, budget_amount, commission_rate, status, updated_at')
           .eq('assigned_business_id', currentUserId)
           .inFilter('status', ['completed', 'awaiting_confirmation'])
-          .gte('updated_at', sixMonthsAgoStr)
+          .gte('updated_at', lookbackStr)
           .order('updated_at', ascending: false);
 
       print('   조회된 공사: ${jobs.length}개 (최근 6개월)');
@@ -145,7 +147,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
           .from('order_reviews')
           .select('rating, created_at')
           .eq('reviewee_id', currentUserId)
-          .gte('created_at', sixMonthsAgoStr);
+          .gte('created_at', lookbackStr);
 
       print('   조회된 리뷰: ${reviews.length}개 (최근 6개월)');
 
@@ -189,27 +191,15 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFC),
-      appBar: AppBar(
-        title: const Text(
-          '내 매출',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+    return BusinessAppShell(
+      title: '내 매출',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded),
+          onPressed: _loadRevenueData,
+          tooltip: '새로고침',
         ),
-        centerTitle: true,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadRevenueData,
-            tooltip: '새로고침',
-          ),
-        ],
-      ),
+      ],
       body: _isLoading
           ? const LoadingIndicator(message: '매출 데이터를 불러오는 중...')
           : SingleChildScrollView(
@@ -306,7 +296,7 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
                   ),
                   SizedBox(height: 2),
                   Text(
-                    '최근 6개월',
+                    '최근 3년',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.white70,
@@ -398,28 +388,36 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
   }
 
   Widget _buildRevenueChart() {
-    // 최근 6개월 데이터 준비
     final now = DateTime.now();
-    final List<String> last6Months = [];
-    final List<double> commissionData = [];
+    final labels = <String>[];
+    final commissionData = <double>[];
     double maxCommission = 0;
 
-    for (int i = 5; i >= 0; i--) {
-      final date = DateTime(now.year, now.month - i, 1);
-      final monthKey = '${date.year}-${date.month.toString().padLeft(2, '0')}';
-      last6Months.add(monthKey);
-      
-      final commission = _monthlyCommission[monthKey] ?? 0;
-      commissionData.add(commission);
-      
-      if (commission > maxCommission) {
-        maxCommission = commission;
+    if (_chartByYear) {
+      for (int i = 3; i >= 0; i--) {
+        final year = '${now.year - i}';
+        labels.add(year);
+        var sum = 0.0;
+        _monthlyCommission.forEach((key, value) {
+          if (key.startsWith(year)) sum += value;
+        });
+        commissionData.add(sum);
+        if (sum > maxCommission) maxCommission = sum;
+      }
+    } else {
+      for (int i = 11; i >= 0; i--) {
+        final date = DateTime(now.year, now.month - i, 1);
+        final monthKey =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}';
+        labels.add(monthKey);
+        final commission = _monthlyCommission[monthKey] ?? 0;
+        commissionData.add(commission);
+        if (commission > maxCommission) maxCommission = commission;
       }
     }
 
-    // 데이터가 없으면 기본값 설정
     if (maxCommission == 0) {
-      maxCommission = 100000; // 10만원을 기본 최대값으로
+      maxCommission = 100000;
     }
 
     return Container(
@@ -439,30 +437,25 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                '월별 수수료 현황',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0B2545),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  '최근 6개월',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFF59E0B),
+              Expanded(
+                child: Text(
+                  _chartByYear ? '연도별 수수료 현황' : '월별 수수료 현황',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0B2545),
                   ),
                 ),
+              ),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('월')),
+                  ButtonSegment(value: true, label: Text('년')),
+                ],
+                selected: {_chartByYear},
+                onSelectionChanged: (s) =>
+                    setState(() => _chartByYear = s.first),
               ),
             ],
           ),
@@ -497,12 +490,17 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
                       reservedSize: 30,
                       getTitlesWidget: (value, meta) {
                         final index = value.toInt();
-                        if (index >= 0 && index < last6Months.length) {
-                          final parts = last6Months[index].split('-');
+                        if (index >= 0 && index < labels.length) {
+                          final raw = labels[index];
+                          final label = _chartByYear
+                              ? '${raw.substring(2)}년'
+                              : (index % 2 == 0
+                                  ? '${raw.split('-')[1]}월'
+                                  : '');
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
-                              '${parts[1]}월',
+                              label,
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey[600],
@@ -575,9 +573,16 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
                         final index = spot.x.toInt();
-                        final parts = last6Months[index].split('-');
+                        final raw = (index >= 0 && index < labels.length)
+                            ? labels[index]
+                            : '';
+                        final title = _chartByYear
+                            ? '$raw년'
+                            : raw.contains('-')
+                                ? '${raw.split('-')[0]}년 ${raw.split('-')[1]}월'
+                                : raw;
                         return LineTooltipItem(
-                          '${parts[0]}년 ${parts[1]}월\n${_formatNumberWithComma(spot.y)}원',
+                          '$title\n${_formatNumberWithComma(spot.y)}원',
                           const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,

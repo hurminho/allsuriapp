@@ -62,7 +62,7 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _loadError = '신규 일감을 불러오지 못했습니다.';
+        _loadError = '새 오더를 불러오지 못했습니다.';
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -291,7 +291,7 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return BusinessAppShell(
-      title: '신규 일감',
+      title: '새 오더',
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh_rounded),

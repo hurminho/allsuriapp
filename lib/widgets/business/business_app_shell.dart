@@ -15,6 +15,7 @@ class BusinessAppShell extends StatelessWidget {
   final bool navyAppBar;
   final VoidCallback? onBack;
   final Color? backgroundColor;
+  final PreferredSizeWidget? appBarBottom;
 
   const BusinessAppShell({
     super.key,
@@ -28,6 +29,7 @@ class BusinessAppShell extends StatelessWidget {
     this.navyAppBar = false,
     this.onBack,
     this.backgroundColor,
+    this.appBarBottom,
   });
 
   @override
@@ -42,6 +44,7 @@ class BusinessAppShell extends StatelessWidget {
           navy: navyAppBar,
           onBack: onBack,
           actions: actions,
+          bottom: appBarBottom,
         ),
         body: body,
         floatingActionButton: floatingActionButton,
