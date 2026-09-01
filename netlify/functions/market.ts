@@ -3,6 +3,7 @@
 
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
 
+import crypto from 'crypto'
 import { afterBidInserted } from '../lib/market_after_bid'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
@@ -289,6 +290,10 @@ async function enqueueAfterBid(opts: {
     process.env.URL || process.env.DEPLOY_PRIME_URL || 'https://api.allsuri.app',
   ).replace(/\/$/, '')
   const bgUrl = `${site}/.netlify/functions/market-after-bid-background`
+  const hmac = crypto
+    .createHmac('sha256', SUPABASE_SERVICE_ROLE_KEY || 'missing')
+    .update(`${opts.listingId}:${opts.businessId}`)
+    .digest('hex')
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), 800)
   try {
@@ -297,8 +302,9 @@ async function enqueueAfterBid(opts: {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'x-allsuri-internal': SUPABASE_SERVICE_ROLE_KEY,
       },
-      body: JSON.stringify(opts),
+      body: JSON.stringify({ ...opts, t: hmac }),
       signal: ac.signal,
     })
     clearTimeout(timer)

@@ -53,7 +53,8 @@ export async function afterBidInserted(opts: {
       )
       const listings = await listingResponse.json()
       const listing = Array.isArray(listings) && listings.length > 0 ? listings[0] : null
-      
+
+      console.log(`[after-bid] start listing=${id} bidder=${businessId}`)
       console.log(`[market] 📧 알림 전송 시작:`)
       console.log(`   - Listing: ${listing?.title} (${id})`)
       console.log(`   - web_order_id: ${listing?.web_order_id || '없음'}`)
