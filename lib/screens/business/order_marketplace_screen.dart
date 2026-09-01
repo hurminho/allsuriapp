@@ -2013,7 +2013,6 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
         return;
       }
 
-      // ✅ 이미 이 오더에 입찰했는지 확인 (같은 오더 중복 입찰 방지)
       if (_myBidStatusByListing.containsKey(id)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2026,6 +2025,21 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
         return;
       }
 
+      if (!mounted) return;
+      setState(() {
+        _isClaiming = true;
+        _myActiveBidListingIds.add(id);
+        _myBidStatusByListing[id] = 'pending';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('오더를 잡아올게요!'),
+          backgroundColor: Color(0xFF0B2545),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      await WidgetsBinding.instance.endOfFrame;
+
       print('   → marketplace_service에서 오더 잡기 요청 중...');
       final ok = await _market.claimListing(id,
           businessId: currentUserId,
@@ -2035,21 +2049,11 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
 
       if (!mounted) return;
 
-      if (ok) {
+      if (!ok) {
         setState(() {
-          _myActiveBidListingIds.add(id);
-          _myBidStatusByListing[id] = 'pending';
+          _myActiveBidListingIds.remove(id);
+          _myBidStatusByListing.remove(id);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('지원이 완료되었습니다. 발주 사업자의 선택을 기다려주세요.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-        // 발주자/입찰자 알림은 서버(afterBidInserted)에서 생성합니다.
-        // 여기서 한 번 더 보내면 발주자에게 알림이 중복으로 갑니다.
-      } else {
         print('   ❌ 오더 잡기 실패');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2063,6 +2067,10 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       print('❌ [_claimListing] 에러 발생: $e');
       print('   StackTrace: $stackTrace');
       if (mounted) {
+        setState(() {
+          _myActiveBidListingIds.remove(id);
+          _myBidStatusByListing.remove(id);
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('협업 지원 실패: $e'),
