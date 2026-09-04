@@ -17,7 +17,10 @@ import 'create_request_screen.dart';
 import '../../services/review_service.dart';
 import '../../widgets/star_rating.dart';
 import '../../services/marketplace_service.dart';
- 
+import '../../utils/api_failure.dart';
+import '../../utils/app_logger.dart';
+import '../../widgets/error_state_view.dart';
+
 
 class CustomerMyEstimatesScreen extends StatefulWidget {
   const CustomerMyEstimatesScreen({super.key});
@@ -31,7 +34,14 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
   Map<String, List<Estimate>> _orderEstimates = {};
   bool _isLoading = true;
   String _selectedStatus = 'all';
-  
+
+  /// 목록을 불러오지 못한 이유. 조용히 빈 화면을 보여주지 않기 위해 남깁니다.
+  String? _loadError;
+
+  /// 낙찰·거절 처리 중인 견적 id. 이중 탭으로 같은 견적이 두 번
+  /// 채택되면 수수료 알림도 두 번 나가므로 반드시 막아야 합니다.
+  String? _processingEstimateId;
+
 
   @override
   void initState() {
@@ -42,6 +52,7 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
+      _loadError = null;
     });
 
     try {
@@ -93,12 +104,16 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
       }
 
       // 고객 화면에서는 사업자 Call 목록을 표시하지 않습니다 (요청사항 반영)
-    } catch (e) {
-      debugPrint('❌ 데이터 로드 오류: $e');
+    } catch (e, stack) {
+      AppLog.error('CustomerMyEstimates', e, stack: stack, message: '목록 로드');
+      _loadError = ApiFailure.from(e).message;
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      // 로드 중 화면을 벗어났으면 setState 가 예외를 던지므로 반드시 확인합니다.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -139,6 +154,11 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    // 로드 실패를 빈 상태로 보여주면 "견적이 없다"고 오해하게 됩니다.
+    if (_loadError != null && _orders.isEmpty) {
+      return ErrorStateView(message: _loadError!, onRetry: _loadData);
     }
 
     if (_orders.isEmpty) {
@@ -692,26 +712,40 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
                       const Text('연락처: 낙찰 후 공개'),
                     if (!order.isAwarded) ...[
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: CupertinoButton(
-                              onPressed: () => _rejectEstimate(order, estimate),
-                              child: const Text(
-                                '거절',
-                                style: TextStyle(color: CupertinoColors.systemRed),
+                      Builder(builder: (context) {
+                        // 처리 중에는 두 버튼 모두 잠그고, 진행 중인 견적에는
+                        // 스피너를 보여 사용자가 다시 누르지 않도록 합니다.
+                        final busy = _processingEstimateId != null;
+                        final busyThis = _processingEstimateId == estimate.id;
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: CupertinoButton(
+                                onPressed: busy
+                                    ? null
+                                    : () => _rejectEstimate(order, estimate),
+                                child: const Text(
+                                  '거절',
+                                  style: TextStyle(
+                                      color: CupertinoColors.systemRed),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: CupertinoButton.filled(
-                              onPressed: () => _awardEstimate(order, estimate),
-                              child: const Text('선택'),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: CupertinoButton.filled(
+                                onPressed: busy
+                                    ? null
+                                    : () => _awardEstimate(order, estimate),
+                                child: busyThis
+                                    ? const CupertinoActivityIndicator(
+                                        color: CupertinoColors.white)
+                                    : const Text('선택'),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        );
+                      }),
                     ] else ...[
                       const SizedBox(height: 12),
                       Row(
@@ -913,6 +947,11 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
   }
 
   Future<void> _awardEstimate(Order order, Estimate estimate) async {
+    // 이미 처리 중이면 무시합니다. 중복 채택은 수수료 알림 중복 발송으로
+    // 이어지므로 UI 비활성화만으로는 부족하고 진입 시점에서 한 번 더 막습니다.
+    if (_processingEstimateId != null) return;
+    setState(() => _processingEstimateId = estimate.id);
+
     try {
       final orderService = Provider.of<OrderService>(context, listen: false);
       final estimateService = Provider.of<EstimateService>(context, listen: false);
@@ -957,13 +996,14 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLog.error('CustomerMyEstimates', e, stack: stack, message: '견적 채택');
       if (mounted) {
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
             title: const Text('오류'),
-            content: Text('견적 채택 중 오류가 발생했습니다: $e'),
+            content: Text('견적을 채택하지 못했습니다.\n${ApiFailure.from(e).message}'),
             actions: [
               CupertinoDialogAction(
                 onPressed: () => Navigator.pop(context),
@@ -973,10 +1013,15 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _processingEstimateId = null);
     }
   }
 
   Future<void> _rejectEstimate(Order order, Estimate estimate) async {
+    if (_processingEstimateId != null) return;
+    setState(() => _processingEstimateId = estimate.id);
+
     try {
       final orderService = Provider.of<OrderService>(context, listen: false);
       final estimateService = Provider.of<EstimateService>(context, listen: false);
@@ -1013,13 +1058,14 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLog.error('CustomerMyEstimates', e, stack: stack, message: '견적 거절');
       if (mounted) {
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
             title: const Text('오류'),
-            content: Text('견적 거절 중 오류가 발생했습니다: $e'),
+            content: Text('견적을 거절하지 못했습니다.\n${ApiFailure.from(e).message}'),
             actions: [
               CupertinoDialogAction(
                 onPressed: () => Navigator.pop(context),
@@ -1029,6 +1075,8 @@ class _CustomerMyEstimatesScreenState extends State<CustomerMyEstimatesScreen> {
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _processingEstimateId = null);
     }
   }
-} 
+}

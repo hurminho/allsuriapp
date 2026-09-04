@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../screens/business/create_job_screen.dart';
 import '../../screens/business/work_hub_screen.dart';
 import '../../screens/chat/chat_list_page.dart';
-import '../../screens/profile/my_revenue_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
@@ -14,8 +13,7 @@ import 'business_bottom_navigation.dart';
 import 'business_tab_scope.dart';
 import 'business_tokens.dart';
 
-/// 승인된 사업자의 루트 셸. 하단 5탭은 IndexedStack 으로 유지하고,
-/// 오늘의 업무 대시보드는 상단 홈 아이콘에서 연다.
+/// 승인된 사업자의 루트 셸. 첫 탭이 홈(대시보드)이다.
 class BusinessTabShell extends StatefulWidget {
   final int initialIndex;
 
@@ -43,19 +41,15 @@ class _BusinessTabShellState extends State<BusinessTabShell> {
     if (mounted) setState(() => _unreadChats = count);
   }
 
-  void _openDashboard() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProfessionalDashboard()),
-    ).then((_) {
-      if (mounted) _refreshUnread();
-    });
+  void _goHome() {
+    setState(() => _index = 0);
+    _refreshUnread();
   }
 
   @override
   Widget build(BuildContext context) {
     return BusinessTabScope(
-      openDashboard: _openDashboard,
+      openDashboard: _goHome,
       currentIndex: _index,
       onSelectTab: (i) => setState(() => _index = i),
       child: PopScope(
@@ -67,7 +61,7 @@ class _BusinessTabShellState extends State<BusinessTabShell> {
             body: IndexedStack(
               index: _index,
               children: const [
-                MyRevenueScreen(),
+                ProfessionalDashboard(),
                 WorkHubScreen(),
                 CreateJobScreen(),
                 ChatListPage(),

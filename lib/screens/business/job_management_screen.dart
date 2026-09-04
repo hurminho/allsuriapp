@@ -9,8 +9,10 @@ import '../../services/auth_service.dart';
 import '../../services/job_service.dart';
 import '../../services/chat_service.dart'; // 추가
 import '../../services/api_service.dart';
+import '../../services/price_service.dart';
 import '../../models/job.dart';
 import '../../widgets/business/business_app_shell.dart';
+import '../../widgets/business/completion_amount_sheet.dart';
 import '../../widgets/business/business_empty_state.dart';
 import '../../widgets/business/business_filter_chip.dart';
 import '../../widgets/business/business_primary_button.dart';
@@ -50,6 +52,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
   Map<String, Map<String, dynamic>> _listingByJobId = {};
   bool _isCompleting = false; // 공사 완료 중 플래그
   final ScrollController _scrollController = ScrollController();
+  final PriceService _priceService = PriceService();
 
   @override
   void initState() {
@@ -791,6 +794,9 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         );
 
         await _loadJobs(); // 목록 새로고침
+
+        // 실제 정산금액은 입찰가와 다릅니다. 가격 엔진 1순위 표본이라 여기서 따로 받습니다.
+        await _recordFinalAmount(job, listingId, realJobId);
       }
     } catch (e) {
       print('❌ [JobManagement] 공사 완료 실패: $e');
@@ -813,6 +819,33 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         setState(() => _isCompleting = false);
       }
     }
+  }
+
+  /// 완료 확정금액 기록. 건너뛰어도 완료 처리에는 영향이 없습니다.
+  Future<void> _recordFinalAmount(
+      Job job, String? listingId, String? realJobId) async {
+    if (!mounted) return;
+    final suggested = (job.awardedAmount ?? job.budgetAmount)?.round();
+    final draft = await CompletionAmountSheet.show(
+      context,
+      jobTitle: job.title,
+      suggestedAmount: suggested != null && suggested > 0 ? suggested : null,
+    );
+    if (draft == null || !mounted) return;
+
+    final error = await _priceService.recordCompletedJob(
+      draft: draft,
+      listingId: listingId,
+      jobId: realJobId != null && !_isListingOnlyJobId(realJobId) ? realJobId : null,
+      address: job.location,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error ?? '정산금액을 기록했습니다. 같은 공정의 예상 범위에 반영됩니다.'),
+        backgroundColor: error == null ? Colors.green : Colors.red,
+      ),
+    );
   }
 
   Future<void> _openReviewScreen(Job job) async {

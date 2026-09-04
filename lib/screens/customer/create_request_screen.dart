@@ -14,6 +14,7 @@ import '../../services/kakao_share_service.dart';
 import '../../providers/user_provider.dart';
 import '../../utils/responsive_utils.dart';
 import '../../widgets/common_app_bar.dart';
+import 'package:allsuriapp/utils/app_logger.dart';
 // 사용하지 않는 import 정리
 
 class CreateRequestScreen extends StatefulWidget {
@@ -144,7 +145,8 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
         // 로그인한 사용자인 경우
         phoneNumber = currentUser.phoneNumber ?? _phoneController.text;
         customerName = currentUser.name ?? _nameController.text.trim();
-        print('로그인한 사용자 정보 사용: $customerName, $phoneNumber');
+        // 이름·전화번호를 로그로 남기지 않습니다.
+        AppLog.debug('CreateRequest', '로그인 사용자 정보로 요청 작성');
       } else {
         // 로그인하지 않은 사용자인 경우
         phoneNumber = _phoneController.text;
@@ -153,7 +155,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       
       // 전화번호 정규화
       final normalizedPhone = _normalizePhoneNumber(phoneNumber);
-      print('최종 정규화된 전화번호: $normalizedPhone');
+      AppLog.debug('CreateRequest', '연락처 정규화 완료 (자릿수 ${normalizedPhone.length})');
       
       final orderService = Provider.of<OrderService>(context, listen: false);
       
@@ -1165,4 +1167,4 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       },
     );
   }
-} 
+}

@@ -47,11 +47,21 @@ abstract final class BusinessTokens {
     Color color = surface,
     Color borderColor = border,
     double radius = cardRadius,
+    bool elevated = true,
   }) {
     return BoxDecoration(
       color: color,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: borderColor),
+      boxShadow: elevated
+          ? [
+              BoxShadow(
+                color: navy.withValues(alpha: 0.045),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ]
+          : null,
     );
   }
 
@@ -64,6 +74,13 @@ abstract final class BusinessTokens {
         end: Alignment.bottomRight,
         colors: [blue, heroEnd],
       ),
+      boxShadow: [
+        BoxShadow(
+          color: blue.withValues(alpha: 0.22),
+          blurRadius: 22,
+          offset: const Offset(0, 10),
+        ),
+      ],
     );
   }
 

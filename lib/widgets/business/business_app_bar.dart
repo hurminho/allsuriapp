@@ -34,9 +34,9 @@ class BusinessAppBar extends StatelessWidget implements PreferredSizeWidget {
     final showLeading = showBackButton && !inTab;
     final mergedActions = <Widget>[
       ...?actions,
-      if (inTab)
+      if (inTab && tabScope.currentIndex != 0)
         IconButton(
-          tooltip: '오늘의 업무',
+          tooltip: '홈',
           icon: const Icon(Icons.home_outlined),
           onPressed: tabScope.openDashboard,
         ),
@@ -55,6 +55,8 @@ class BusinessAppBar extends StatelessWidget implements PreferredSizeWidget {
       scrolledUnderElevation: 0,
       backgroundColor: navy ? BusinessTokens.navy : BusinessTokens.surface,
       foregroundColor: foreground,
+      iconTheme: IconThemeData(color: foreground),
+      actionsIconTheme: IconThemeData(color: foreground),
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
       leading: showLeading

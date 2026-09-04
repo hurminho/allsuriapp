@@ -4,8 +4,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:allsuriapp/services/kakao_share_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:allsuriapp/models/bid_breakdown.dart';
+import 'package:allsuriapp/models/price_estimate.dart';
 import 'package:allsuriapp/services/marketplace_service.dart';
 import 'package:allsuriapp/services/api_service.dart';
+import 'package:allsuriapp/services/price_service.dart';
+import 'package:allsuriapp/widgets/business/bid_cost_fields.dart';
+import 'package:allsuriapp/widgets/business/price_estimate_card.dart';
 import 'package:allsuriapp/widgets/loading_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:allsuriapp/services/notification_service.dart';
@@ -26,12 +31,14 @@ class OrderMarketplaceScreen extends StatefulWidget {
   final bool showSuccessMessage;
   final String? createdByUserId;
   final bool showMyBidsOnly;
+  final Map<String, dynamic>? initialListing;
 
   const OrderMarketplaceScreen({
     Key? key,
     this.showSuccessMessage = false,
     this.createdByUserId,
     this.showMyBidsOnly = false,
+    this.initialListing,
   }) : super(key: key);
 
   @override
@@ -41,6 +48,7 @@ class OrderMarketplaceScreen extends StatefulWidget {
 class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
   final MarketplaceService _market = MarketplaceService();
   final ApiService _api = ApiService();
+  final PriceService _priceService = PriceService();
   String _status = 'all';
   RealtimeChannel? _channel;
   Set<String> _myActiveBidListingIds = {}; // 'pending' 상태 입찰
@@ -62,6 +70,10 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialListing != null) {
+      _items.add(Map<String, dynamic>.from(widget.initialListing!));
+      _isInitialLoading = false;
+    }
     print('OrderMarketplaceScreen initState 시작');
 
     // 사용자 인증 상태 확인
@@ -229,20 +241,23 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
   /// 첫 페이지 로드 (입찰 정보 + 오더 첫 페이지 병렬)
   Future<void> _loadFirstPage() async {
     if (!mounted) return;
+    final hasInitialListing = _items.isNotEmpty;
     setState(() {
-      _isInitialLoading = true;
+      _isInitialLoading = !hasInitialListing;
       _error = null;
       _hasMore = true;
       _serverOffset = 0;
       _newOrderBadge = 0;
-      _items.clear();
+      if (!hasInitialListing) _items.clear();
     });
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentUserId = authService.currentUser?.id;
 
       final results = await Future.wait([
-        _loadMyBidsData(currentUserId),
+        widget.createdByUserId == null
+            ? _loadMyBidsData(currentUserId)
+            : Future<Map<String, dynamic>?>.value(null),
         _market.listListings(
           status: _status,
           throwOnError: true,
@@ -292,7 +307,17 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       final filtered = _filterListings(firstPage, currentUserId);
       if (!mounted) return;
       setState(() {
-        _items.addAll(filtered);
+        final byId = <String, Map<String, dynamic>>{
+          for (final item in _items)
+            if ((item['id']?.toString() ?? '').isNotEmpty)
+              item['id'].toString(): item,
+          for (final item in filtered)
+            if ((item['id']?.toString() ?? '').isNotEmpty)
+              item['id'].toString(): item,
+        };
+        _items
+          ..clear()
+          ..addAll(byId.values);
         _serverOffset = serverFirstPage.length;
         _hasMore = serverFirstPage.length >= _pageSize;
       });
@@ -1717,8 +1742,9 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
 
       final errorMsg = response['error']?.toString() ?? '';
       // 404 = 이미 삭제된 입찰. 취소 목적은 달성된 상태이므로 성공으로 봅니다.
+      // 문구 대신 상태 코드를 봅니다(오류 문구는 사용자용 한국어로 바뀔 수 있음).
       final deleteSuccess =
-          response['success'] == true || errorMsg.contains('404');
+          response['success'] == true || response['statusCode'] == 404;
       print('✅ [_cancelBid] 입찰 취소 응답 (성공: $deleteSuccess) $errorMsg');
 
       if (!mounted) return;
@@ -1781,6 +1807,9 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
     final amountCtrl = TextEditingController();
     final daysCtrl = TextEditingController();
     final msgCtrl = TextEditingController();
+    final costCtrl = BidCostFormController();
+    // 이 공정의 최근 완료 범위. 실패하면 카드가 데이터 부족 상태로 표시됩니다.
+    final priceFuture = _priceService.estimate(listingId: id, text: title);
 
     final result = await showModalBottomSheet<dynamic>(
       context: context,
@@ -1796,189 +1825,225 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
           right: 20,
           top: 20,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-                child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            Text('협업 지원',
-                style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0B2545))),
-            const SizedBox(height: 4),
-            Text(title,
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 16),
-            // B2B 전용: 바로 입찰하기 (견적가 없이 즉시 입찰)
-            if (!isWebOrder) ...[
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(ctx, 'quick'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1F8A70),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.flash_on_rounded),
-                  label: const Text('조건 없이 바로 지원',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: Divider(color: Colors.grey[300])),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('또는 제안 조건 입력',
-                        style:
-                            TextStyle(fontSize: 11, color: Colors.grey[500])),
-                  ),
-                  Expanded(child: Divider(color: Colors.grey[300])),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            TextField(
-              controller: amountCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: isWebOrder ? '견적가 (원)' : '견적가 (원, 선택)',
-                hintText: '예: 500000',
-                prefixIcon: const Icon(Icons.attach_money_rounded,
-                    color: Color(0xFF0B2545)),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.grey[50],
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: daysCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: isWebOrder ? '예상 공사 기일 (일)' : '예상 공사 기일 (일, 선택)',
-                hintText: '예: 3',
-                prefixIcon: const Icon(Icons.calendar_today_outlined,
-                    color: Color(0xFF0B2545)),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.grey[50],
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: msgCtrl,
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: '메시지 (선택)',
-                hintText: '공사에 대한 간략한 설명',
-                prefixIcon: const Icon(Icons.message_outlined,
-                    color: Color(0xFF0B2545)),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.grey[50],
-              ),
-            ),
-            if (isWebOrder) ...[
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                  child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2)))),
               const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF7ED),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFDBA74)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.info_outline,
-                        color: Color(0xFFEA580C), size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '소비자 견적에 선정될 경우 10%의 시스템 유지비가 선정된 사업자에게 부과됩니다.',
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey[800], height: 1.4),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('취소'),
+              Text('협업 지원',
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0B2545))),
+              const SizedBox(height: 4),
+              Text(title,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 16),
+              FutureBuilder<PriceEstimate>(
+                future: priceFuture,
+                builder: (_, snapshot) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: PriceEstimateCard(
+                    estimate: snapshot.data,
+                    loading:
+                        snapshot.connectionState == ConnectionState.waiting,
+                    compact: true,
+                    title: '이 공정 최근 완료 범위',
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx, true),
+              ),
+              // B2B 전용: 바로 입찰하기 (견적가 없이 즉시 입찰)
+              if (!isWebOrder) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(ctx, 'quick'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0B2545),
+                      backgroundColor: const Color(0xFF1F8A70),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
-                    child: Text(
-                      isWebOrder ? '지원하기' : '조건 포함 지원',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    icon: const Icon(Icons.flash_on_rounded),
+                    label: const Text('조건 없이 바로 지원',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.grey[300])),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('또는 제안 조건 입력',
+                          style:
+                              TextStyle(fontSize: 11, color: Colors.grey[500])),
                     ),
+                    Expanded(child: Divider(color: Colors.grey[300])),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: isWebOrder ? '견적가 (원)' : '견적가 (원, 선택)',
+                  hintText: '예: 500000',
+                  prefixIcon: const Icon(Icons.attach_money_rounded,
+                      color: Color(0xFF0B2545)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: daysCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: isWebOrder ? '예상 공사 기일 (일)' : '예상 공사 기일 (일, 선택)',
+                  hintText: '예: 3',
+                  prefixIcon: const Icon(Icons.calendar_today_outlined,
+                      color: Color(0xFF0B2545)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: msgCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: '메시지 (선택)',
+                  hintText: '공사에 대한 간략한 설명',
+                  prefixIcon: const Icon(Icons.message_outlined,
+                      color: Color(0xFF0B2545)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+              ),
+              const SizedBox(height: 12),
+              BidCostFields(controller: costCtrl),
+              if (isWebOrder) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFDBA74)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline,
+                          color: Color(0xFFEA580C), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '소비자 견적에 선정될 경우 10%의 시스템 유지비가 선정된 사업자에게 부과됩니다.',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[800],
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
-          ],
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('취소'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0B2545),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        isWebOrder ? '지원하기' : '조건 포함 지원',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
+
+    final breakdown = costCtrl.build();
+    costCtrl.dispose();
 
     if (result == 'quick') {
       // B2B 바로 입찰 (견적가 없이)
       await _claimListing(id);
     } else if (result == true) {
-      final bidAmount = double.tryParse(amountCtrl.text.replaceAll(',', ''));
+      final typedAmount = BidBreakdown.parseWon(amountCtrl.text);
+      // 총액을 비워도 세부 항목 합계로 입찰할 수 있습니다.
+      final resolved = breakdown.resolvedTotal(typedAmount);
       final estimatedDays = int.tryParse(daysCtrl.text);
       final msg = msgCtrl.text.trim();
+      for (final warning in breakdown.warnings(typedAmount)) {
+        if (!mounted) break;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(warning), backgroundColor: Colors.blueGrey),
+        );
+      }
       await _claimListing(id,
-          bidAmount: bidAmount, estimatedDays: estimatedDays, message: msg);
+          bidAmount: resolved?.toDouble(),
+          estimatedDays: estimatedDays,
+          message: msg,
+          breakdown: breakdown);
     }
   }
 
   Future<void> _claimListing(String id,
-      {double? bidAmount, int? estimatedDays, String? message}) async {
+      {double? bidAmount,
+      int? estimatedDays,
+      String? message,
+      BidBreakdown? breakdown}) async {
     // 중복 실행 방지
     if (_isClaiming) {
       print('⚠️ [_claimListing] 이미 잡기 작업 진행 중, 무시');
@@ -2045,7 +2110,8 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
           businessId: currentUserId,
           bidAmount: bidAmount,
           estimatedDays: estimatedDays,
-          message: message);
+          message: message,
+          breakdown: breakdown);
 
       if (!mounted) return;
 
@@ -2492,8 +2558,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                   : () async {
                                       Navigator.pop(context);
                                       if (hasPendingBid) {
-                                        await _cancelBid(
-                                            data['id'].toString());
+                                        await _cancelBid(data['id'].toString());
                                       } else {
                                         await _showBidDialog(
                                             data['id'].toString(), title,

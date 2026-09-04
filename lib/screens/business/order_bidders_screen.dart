@@ -31,6 +31,9 @@ class OrderBiddersScreen extends StatefulWidget {
 class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
   List<Map<String, dynamic>> _bidders = [];
   bool _loading = true;
+
+  /// 사업자 배정 요청이 진행 중인지. 중복 배정을 막습니다.
+  bool _assigning = false;
   String? _error;
   String? _selectedBidderId;
   String? _selectedBidderName;
@@ -331,6 +334,24 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
   }
 
   Future<void> _selectBidder(String bidderId, String bidderName) async {
+    // 배정은 채팅방 생성·타 지원자 미선정 처리·알림 발송을 함께 일으킵니다.
+    // 확인 시트를 통과한 뒤 자격 조회를 기다리는 동안 목록이 아직 눌리므로,
+    // 진입 시점에서 재진입을 막습니다.
+    if (_assigning) return;
+    _assigning = true;
+    try {
+      await _selectBidderInternal(bidderId, bidderName);
+    } finally {
+      if (mounted) {
+        setState(() => _assigning = false);
+      } else {
+        _assigning = false;
+      }
+    }
+  }
+
+  Future<void> _selectBidderInternal(
+      String bidderId, String bidderName) async {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: BusinessTokens.surface,
@@ -658,9 +679,9 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
                   ),
                 ),
                 child: BusinessPrimaryButton(
-                  label: '선택한 사업자 배정',
+                  label: _assigning ? '배정 중…' : '선택한 사업자 배정',
                   icon: Icons.assignment_turned_in_outlined,
-                  onPressed: _selectedBidderId == null
+                  onPressed: (_selectedBidderId == null || _assigning)
                       ? null
                       : () => _selectBidder(
                             _selectedBidderId!,

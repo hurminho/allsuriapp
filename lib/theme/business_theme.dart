@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/business/business_tokens.dart';
+
 /// 올수리 앱 공통 디자인 토큰 (네이비·블루 B2B).
 class BusinessTheme {
-  static const Color navy = Color(0xFF0B2545);
-  static const Color blue = Color(0xFF2E74B5);
-  static const Color lightBlue = Color(0xFFE8EEF5);
-  static const Color background = Color(0xFFF7FAFC);
-  static const Color textPrimary = Color(0xFF102A43);
-  static const Color success = Color(0xFF1F8A70);
-  static const Color warning = Color(0xFFE6A700);
-  static const Color danger = Color(0xFFC9403A);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color border = Color(0xFFD9E2EC);
-  static const Color textMuted = Color(0xFF627D98);
+  static const Color navy = BusinessTokens.navy;
+  static const Color blue = BusinessTokens.blue;
+  static const Color lightBlue = BusinessTokens.blueLight;
+  static const Color background = BusinessTokens.canvas;
+  static const Color textPrimary = BusinessTokens.text;
+  static const Color success = BusinessTokens.success;
+  static const Color warning = BusinessTokens.warning;
+  static const Color danger = BusinessTokens.danger;
+  static const Color surface = BusinessTokens.surface;
+  static const Color border = BusinessTokens.border;
+  static const Color textMuted = BusinessTokens.mutedText;
 
   static const double radius = 14;
   static const double radiusSm = 12;
@@ -36,6 +38,55 @@ class BusinessTheme {
       error: danger,
       brightness: Brightness.light,
     );
+    final textTheme = base.textTheme
+        .apply(
+          fontFamily: 'NotoSansKR',
+          bodyColor: textPrimary,
+          displayColor: textPrimary,
+        )
+        .copyWith(
+          headlineSmall: const TextStyle(
+            fontFamily: 'NotoSansKR',
+            color: textPrimary,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            height: 1.3,
+          ),
+          titleLarge: const TextStyle(
+            fontFamily: 'NotoSansKR',
+            color: textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            height: 1.35,
+          ),
+          titleMedium: const TextStyle(
+            fontFamily: 'NotoSansKR',
+            color: textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            height: 1.35,
+          ),
+          bodyLarge: const TextStyle(
+            fontFamily: 'NotoSansKR',
+            color: textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
+            height: 1.55,
+          ),
+          bodyMedium: const TextStyle(
+            fontFamily: 'NotoSansKR',
+            color: textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            height: 1.5,
+          ),
+          labelLarge: const TextStyle(
+            fontFamily: 'NotoSansKR',
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            height: 1.3,
+          ),
+        );
 
     return base.copyWith(
       useMaterial3: true,
@@ -77,6 +128,7 @@ class BusinessTheme {
           backgroundColor: blue,
           foregroundColor: Colors.white,
           minimumSize: const Size(44, 48),
+          textStyle: textTheme.labelLarge,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusSm),
           ),
@@ -88,6 +140,7 @@ class BusinessTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           minimumSize: const Size(44, 48),
+          textStyle: textTheme.labelLarge,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusSm),
           ),
@@ -97,6 +150,7 @@ class BusinessTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: navy,
           minimumSize: const Size(44, 48),
+          textStyle: textTheme.labelLarge,
           side: const BorderSide(color: border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusSm),
@@ -107,6 +161,7 @@ class BusinessTheme {
         style: TextButton.styleFrom(
           foregroundColor: blue,
           minimumSize: const Size(44, 44),
+          textStyle: textTheme.labelLarge,
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -131,7 +186,7 @@ class BusinessTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: lightBlue.withOpacity(0.5),
+        fillColor: lightBlue.withValues(alpha: 0.5),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusSm),
           borderSide: const BorderSide(color: border),
@@ -144,28 +199,28 @@ class BusinessTheme {
           borderRadius: BorderRadius.circular(radiusSm),
           borderSide: const BorderSide(color: blue, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-      dividerTheme: const DividerThemeData(color: border, thickness: 1, space: 1),
+      dividerTheme:
+          const DividerThemeData(color: border, thickness: 1, space: 1),
       listTileTheme: ListTileThemeData(
         iconColor: navy,
         textColor: textPrimary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusSm)),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(color: blue),
-      textTheme: base.textTheme.apply(
-        bodyColor: textPrimary,
-        displayColor: textPrimary,
-      ),
+      textTheme: textTheme,
     );
   }
 
   static String formatWon(num amount) {
     final n = amount.round();
     final s = n.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
-    );
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
     return '$s원';
   }
 

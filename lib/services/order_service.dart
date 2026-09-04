@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../supabase_config.dart';
 import '../models/order.dart' as app_models;
+import 'package:allsuriapp/utils/app_logger.dart';
 
 class OrderService extends ChangeNotifier {
   final SupabaseClient _sb = Supabase.instance.client;
@@ -70,12 +71,10 @@ class OrderService extends ChangeNotifier {
           .map((r) => app_models.Order.fromMap(Map<String, dynamic>.from(r)))
           .toList();
       
-      print('🔍 변환된 주문 수: ${_orders.length}');
-      if (_orders.isNotEmpty) {
-        print('🔍 첫 번째 주문: ${_orders.first.title} (고객: ${_orders.first.customerName}, 전화: ${_orders.first.customerPhone})');
-      }
-    } catch (e) {
-      print('❌ 주문 로드 오류: $e');
+      // 고객명·전화번호는 로그에 남기지 않습니다.
+      AppLog.debug('OrderService', '변환된 주문 수: ${_orders.length}');
+    } catch (e, stack) {
+      AppLog.error('OrderService', e, stack: stack, message: '주문 로드');
       _orders = [];
     } finally {
       _isLoading = false;
@@ -160,4 +159,4 @@ class OrderService extends ChangeNotifier {
       _notifyListenersSafely();
     }
   }
-} 
+}

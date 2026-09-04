@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:allsuriapp/utils/app_logger.dart';
 
 class MediaService {
   final ImagePicker _picker = ImagePicker();
@@ -142,11 +143,11 @@ class MediaService {
     try {
       // 인증 상태 확인
       final session = _sb.auth.currentSession;
-      debugPrint('🔐 [uploadMessageImage] 인증 상태: ${session != null ? "인증됨" : "인증 안됨"}');
-      if (session != null) {
-        debugPrint('   User ID: ${session.user.id}');
-        debugPrint('   Access Token: ${session.accessToken.substring(0, 20)}...');
-      }
+      // 액세스 토큰 일부라도 로그에 남기지 않습니다.
+      AppLog.debug(
+          'MediaService',
+          '업로드 인증 ${session != null ? "확인" : "없음"}'
+              '${session == null ? '' : ' uid=${AppLog.shortId(session.user.id)}'}');
       
       final fileName = 'msg_${userId}_${DateTime.now().millisecondsSinceEpoch}${p.extension(file.path)}';
       final path = 'attachments_messages/$roomId/$fileName';

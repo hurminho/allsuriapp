@@ -53,6 +53,17 @@ class BusinessStatusChip extends StatelessWidget {
     }
   }
 
+  factory BusinessStatusChip.forOrderOrigin(String origin) {
+    final isConsumer = origin == 'consumer';
+    return BusinessStatusChip(
+      label: isConsumer ? '소비자 견적' : '사업자 견적',
+      tone: isConsumer ? BusinessStatusTone.info : BusinessStatusTone.neutral,
+      icon: isConsumer
+          ? Icons.person_outline_rounded
+          : Icons.storefront_outlined,
+    );
+  }
+
   factory BusinessStatusChip.forJob(String status) {
     switch (status) {
       case 'created':

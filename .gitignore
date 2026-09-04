@@ -54,6 +54,7 @@ app.*.map.json
 # Build outputs
 build/
 **/build/
+/dist/
 
 # Gradle files
 .gradle/
@@ -97,3 +98,6 @@ android/*.keystore
 android/app/*.jks
 android/app/*.keystore
 KEYSTORE_BACKUP_INFO.txt
+
+# Local Netlify folder
+.netlify

@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../app_navigator_key.dart';
 import '../../widgets/business/business_app_bar.dart';
+import '../../widgets/business/business_tab_scope.dart';
 import '../../widgets/business/business_tokens.dart';
 import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../business/business_profile_screen.dart';
+import '../business/rate_card_screen.dart';
 import '../admin/ad_management_screen.dart';
 import '../home/home_screen.dart';
 import 'my_revenue_screen.dart';
@@ -68,7 +70,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => BusinessTabScope.popIfPushedRoute(context),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0B2545),
               foregroundColor: Colors.white,
@@ -245,6 +247,19 @@ class ProfileScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const BusinessProfileScreen()),
+              );
+            },
+          ),
+        // 표준 단가 (등록하면 가격 기준 협력업체로 노출됩니다)
+        if (user.role == 'business')
+          _buildActionTile(
+            context,
+            Icons.price_change_outlined,
+            '표준 단가 등록',
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RateCardScreen()),
               );
             },
           ),

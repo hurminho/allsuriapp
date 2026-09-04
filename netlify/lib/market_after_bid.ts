@@ -1,7 +1,51 @@
+import { resolveTrade } from './price_catalog'
+import { listingContext, loadCatalog } from './price_repository'
 import { formatRating, formatWon, sendBidReceivedSms } from './solapi_sms'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
+
+/**
+ * 입찰에 공정(trade_id)을 표시해 둡니다. 가격 엔진은 trade_id 가 있는 입찰만 표본으로 씁니다.
+ * 실패해도 입찰과 문자에는 영향이 없습니다.
+ */
+async function stampBidTrade(bidId: string, listingId: string): Promise<void> {
+  try {
+    const [catalog, ctx] = await Promise.all([loadCatalog(), listingContext(listingId)])
+    if (!ctx.listing) return
+    const match = resolveTrade(catalog.trades, {
+      tradeId: ctx.order?.tradeId,
+      category: ctx.order?.category || ctx.listing.category,
+      subcategory: ctx.order?.subcategory,
+      text: `${ctx.listing.title || ''} ${ctx.listing.description || ''}`,
+    })
+    if (!match.trade) {
+      console.log(`[after-bid] 공정 미확정 — trade_id 생략 listing=${listingId}`)
+      return
+    }
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/order_bids?id=eq.${encodeURIComponent(bidId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ trade_id: match.trade.id }),
+      },
+    )
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      console.warn('[after-bid] trade_id 기록 생략:', text.slice(0, 160))
+      return
+    }
+    console.log(`[after-bid] trade_id=${match.trade.id} bid=${bidId}`)
+  } catch (e: any) {
+    console.warn('[after-bid] trade_id 기록 실패 (무시):', e?.message)
+  }
+}
 
 /** notifications.jobid → jobs.id FK. 리스팅 id를 넣으면 웹 오더에서 23503이 납니다. */
 function notificationRow(opts: {
@@ -27,8 +71,10 @@ export async function afterBidInserted(opts: {
   listingId: string
   businessId: string
   bidAmount: unknown
+  bidId?: string | null
 }) {
   const { listingId: id, businessId, bidAmount: bid_amount } = opts
+  if (opts.bidId) void stampBidTrade(String(opts.bidId), id)
   // 문자 발송이 타임아웃 예산을 최대한 쓸 수 있도록 대기하지 않습니다.
   void fetch(`${SUPABASE_URL}/rest/v1/rpc/increment_bid_count`, {
     method: 'POST',

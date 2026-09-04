@@ -14,6 +14,7 @@ import 'notification_service.dart';
 import '../config.dart';
 import '../supabase_config.dart';
 import '../models/user.dart' as app_models;
+import 'package:allsuriapp/utils/app_logger.dart';
 
 class AuthService extends ChangeNotifier {
   final SupabaseClient _sb = Supabase.instance.client;
@@ -300,11 +301,12 @@ class AuthService extends ChangeNotifier {
       if (resp['success'] == true) {
         // ApiService.post()가 응답을 한 번 감싸므로, resp['data']가 실제 백엔드 응답
         final backendResponse = resp['data'] as Map<String, dynamic>;
-        print('🔍 [signInWithKakao] backendResponse: $backendResponse');
-        
+
         // 백엔드 응답에서 실제 데이터 추출
+        // 응답 본문에는 토큰과 사용자 정보가 함께 들어 있어 전문을 찍지 않습니다.
         final actualData = backendResponse['data'] as Map<String, dynamic>?;
-        print('🔍 [signInWithKakao] actualData: $actualData');
+        AppLog.debug('AuthService',
+            '카카오 로그인 응답 수신 (data ${actualData == null ? '없음' : '있음'})');
         
         if (actualData != null) {
           // Supabase 토큰을 JWT 토큰으로 사용
@@ -319,7 +321,8 @@ class AuthService extends ChangeNotifier {
             ApiService.setBearerToken(supabaseAccessToken);
             
             final user = actualData['user'] as Map<String, dynamic>?;
-            print('🔍 [signInWithKakao] user: $user');
+            AppLog.debug('AuthService',
+                '사용자 정보 ${user == null ? '없음' : 'uid=${AppLog.shortId(user['id'])}'}');
             
             if (user != null) {
               final uid = user['id'] as String;
@@ -720,4 +723,4 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
     }
   }
-} 
+}

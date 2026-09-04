@@ -10,6 +10,7 @@ import '../firebase_options.dart';
 import '../screens/chat_screen.dart';
 import '../screens/business/job_management_screen.dart';
 import 'version_service.dart';
+import 'package:allsuriapp/utils/app_logger.dart';
 
 /// Firebase Cloud Messaging 서비스
 /// 실시간 푸시 알림을 처리하고 FCM 토큰을 관리합니다.
@@ -70,7 +71,9 @@ class FCMService {
 
       // FCM 토큰 가져오기
       _fcmToken = await _messaging.getToken();
-      print('🔑 FCM 토큰: $_fcmToken');
+      // 토큰 전문은 남기지 않습니다. 발급 여부만 확인합니다.
+      AppLog.debug('FCMService',
+          'FCM 토큰 ${_fcmToken == null ? '발급 실패' : '발급됨'}');
 
       // 로컬 알림 초기화
       await _initializeLocalNotifications();
@@ -88,7 +91,7 @@ class FCMService {
 
       // 토큰 갱신 리스너
       _messaging.onTokenRefresh.listen((newToken) {
-        print('🔄 FCM 토큰 갱신: $newToken');
+        AppLog.debug('FCMService', 'FCM 토큰 갱신됨');
         _fcmToken = newToken;
         // 서버에 토큰 업데이트 (로그인 후 자동으로 업데이트됨)
       });

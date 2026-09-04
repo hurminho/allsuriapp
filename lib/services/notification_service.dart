@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'api_service.dart';
+import 'package:allsuriapp/utils/app_logger.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -51,10 +52,8 @@ class NotificationService {
         final apiResponse = await api.get('/notifications?userId=$userId');
         if (apiResponse['success'] == true) {
           final data = List<Map<String, dynamic>>.from(apiResponse['data'] ?? []);
-          debugPrint('✅ [NotificationService] API에서 ${data.length}개 알림 조회');
-          if (data.isNotEmpty) {
-            debugPrint('   첫 번째 알림(API): ${data.first}');
-          }
+          // 알림 레코드에는 주소·연락처가 섞여 있어 건수만 남깁니다.
+          AppLog.debug('NotificationService', 'API에서 ${data.length}개 알림 조회');
           return data;
         } else {
           debugPrint('⚠️ [NotificationService] API 조회 실패: ${apiResponse['error']}');
@@ -70,12 +69,9 @@ class NotificationService {
           .eq('userid', userId)
           .order('createdat', ascending: false);
       
-      debugPrint('✅ [NotificationService] ${response.length}개 알림 조회 완료 (Supabase)');
-      
-      if (response.isNotEmpty) {
-        debugPrint('   첫 번째 알림: ${response.first}');
-      }
-      
+      AppLog.debug('NotificationService',
+          '${response.length}개 알림 조회 완료 (Supabase)');
+
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint('❌ [NotificationService] 알림 목록 가져오기 실패: $e');

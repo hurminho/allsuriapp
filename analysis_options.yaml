@@ -9,6 +9,21 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # 사용하지 않는 벤더 템플릿. 앱은 이 디렉터리를 참조하지 않지만
+    # 분석 대상에 남아 있어서 `flutter analyze` 가 526개의 error 를 뱉었고,
+    # 그 탓에 lib/ 의 실제 문제를 걸러내지도, CI 게이트로 쓰지도 못했습니다.
+    - E-commerce-Complete-Flutter-UI-master/**
+    # 생성 파일
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+  errors:
+    # await 뒤에서 BuildContext 를 쓰면 화면이 사라진 뒤 예외가 납니다.
+    # 릴리즈 전 반드시 확인해야 하는 항목이라 경고로 올립니다.
+    use_build_context_synchronously: warning
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

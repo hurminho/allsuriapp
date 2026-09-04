@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import '../config/feature_flags.dart';
 import '../services/ad_service.dart';
 import '../models/ad.dart';
+import '../models/order.dart' as app_models;
 import 'announcement_banner.dart';
 import '../theme/business_theme.dart';
 import '../screens/business/estimate_requests_screen.dart';
@@ -15,6 +16,8 @@ import '../screens/notification/notification_screen.dart';
 import '../screens/business/order_marketplace_screen.dart';
 import '../screens/business/my_order_management_screen.dart';
 import '../screens/business/pending_approval_screen.dart';
+import '../screens/profile/my_revenue_screen.dart';
+import 'business/business_tab_scope.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/marketplace_service.dart';
@@ -22,6 +25,8 @@ import '../services/order_service.dart';
 import '../services/push_permission_service.dart';
 import 'business/business_app_bar.dart';
 import 'business/business_empty_state.dart';
+import 'business/business_lead_card.dart';
+import 'business/business_primary_button.dart';
 import 'business/business_section_header.dart';
 import 'business/business_tokens.dart';
 
@@ -36,7 +41,7 @@ class ProfessionalDashboard extends StatefulWidget {
 class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   final MarketplaceService _market = MarketplaceService();
 
-  late Future<Map<String, int>> _dashboardDataFuture;
+  late Future<Map<String, dynamic>> _dashboardDataFuture;
   // 광고/알림 Future 캐싱 (build 마다 재요청 방지)
   Future<List<Ad>>? _adBannerFuture;
   Future<int>? _notifCountFuture;
@@ -48,7 +53,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   void initState() {
     super.initState();
     _setupRealtimeListeners();
-    _refreshData();
 
     // 로그인 후 푸시 알림 권한 체크 (딜레이 후 표시)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -95,9 +99,13 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     super.dispose();
   }
 
+  bool _didLoad = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_didLoad) return;
+    _didLoad = true;
     _refreshData();
   }
 
@@ -115,7 +123,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     });
   }
 
-  Future<Map<String, int>> _loadDashboardData() async {
+  Future<Map<String, dynamic>> _loadDashboardData() async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentUserId = authService.currentUser?.id;
@@ -129,16 +137,18 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         _getNewOrdersCount(currentUserId),
         _getMyBidsCount(currentUserId),
         _getMyOrdersCount(currentUserId),
-        _getEstimateRequestsCount(),
+        _getEstimateRequests(),
       ]);
 
+      final estimateRequests = results[5] as List<app_models.Order>;
       return {
         'completed': results[0],
         'inProgress': results[1],
         'newOrders': results[2],
         'myBids': results[3],
         'myOrders': results[4],
-        'estimateRequests': results[5],
+        'estimateRequests': estimateRequests.length,
+        'newOrderItems': estimateRequests.take(3).toList(),
       };
     } catch (e) {
       debugPrint('❌ [_loadDashboardData] 에러: $e');
@@ -146,13 +156,17 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     }
   }
 
-  Future<int> _getEstimateRequestsCount() async {
+  Future<List<app_models.Order>> _getEstimateRequests() async {
     try {
       final orderService = Provider.of<OrderService>(context, listen: false);
       final all = await orderService.getOrders();
-      return all.where((o) => o.status == 'pending' && !o.isAwarded).length;
+      final available = all
+          .where((o) => o.status == 'pending' && !o.isAwarded)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return available;
     } catch (_) {
-      return 0;
+      return [];
     }
   }
 
@@ -210,31 +224,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   // ⚡ 성능 개선: 이중 쿼리 제거, 서버에서 직접 count
   Future<int> _getMyBidsCount(String userId) async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🔍 [_getMyBidsCount] 입찰 대기 중 카운트 시작');
-      print('   userId: $userId');
-      print('   현재 시각: ${DateTime.now()}');
-
-      // 디버그: 모든 입찰 먼저 확인 (더 상세한 정보)
-      final allBids = await Supabase.instance.client
-          .from('order_bids')
-          .select('id, listing_id, bidder_id, status, created_at')
-          .eq('bidder_id', userId)
-          .order('created_at', ascending: false);
-
-      print('   전체 입찰: ${allBids.length}개');
-      if (allBids.isEmpty) {
-        print('   ⚠️ 이 사용자의 입찰이 order_bids 테이블에 없습니다!');
-      } else {
-        for (var bid in allBids) {
-          print('      입찰 ID: ${bid['id']}');
-          print('         listing_id: ${bid['listing_id']}');
-          print('         status: ${bid['status']}');
-          print('         created_at: ${bid['created_at']}');
-        }
-      }
-
-      // pending 상태만 카운트
       final response = await Supabase.instance.client
           .from('order_bids')
           .select('listing_id')
@@ -242,8 +231,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           .eq('status', 'pending')
           .count(CountOption.exact);
 
-      print('   ✅ pending 상태 입찰: ${response.count}개');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       return response.count;
     } catch (e) {
       print('❌ [_getMyBidsCount] 에러: $e');
@@ -280,13 +267,13 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             : (user?.name ?? "사업자");
 
         return PopScope(
-          canPop: true,
+          canPop: BusinessTabScope.maybeOf(context) == null,
           child: Theme(
             data: BusinessTheme.theme(Theme.of(context)),
             child: Scaffold(
               backgroundColor: BusinessTokens.canvas,
               appBar: _buildAppBar(context, user),
-              body: FutureBuilder<Map<String, int>>(
+              body: FutureBuilder<Map<String, dynamic>>(
                 future: _dashboardDataFuture,
                 builder: (context, snapshot) {
                   final loading =
@@ -304,27 +291,15 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                                   physics:
                                       const AlwaysScrollableScrollPhysics(),
                                   padding:
-                                      const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                                      const EdgeInsets.fromLTRB(16, 16, 16, 32),
                                   children: [
                                     _buildSummaryCard(businessName, data),
                                     const SizedBox(height: 24),
-                                    const BusinessSectionHeader(
-                                      title: '핵심 업무',
-                                      subtitle: '오더와 공사를 한곳에서 관리하세요',
-                                    ),
-                                    const SizedBox(height: 12),
-                                    _buildCoreWorkCard(
-                                      icon: Icons.search_rounded,
-                                      title: '새 오더',
-                                      description: '내 지역의 신규 견적 요청을 확인하세요',
-                                      meta:
-                                          '신규 요청 ${data['estimateRequests'] ?? 0}건',
-                                      actionLabel: '새 오더 보기',
-                                      color: BusinessTokens.blueLight,
-                                      borderColor: BusinessTokens.blue
-                                          .withValues(alpha: 0.35),
-                                      iconColor: BusinessTokens.blue,
-                                      onTap: () => Navigator.push(
+                                    BusinessSectionHeader(
+                                      title: '신규 오더',
+                                      subtitle: '입찰을 기다리는 최신 요청',
+                                      actionLabel: '전체 보기',
+                                      onAction: () => Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) =>
@@ -332,14 +307,29 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                                         ),
                                       ),
                                     ),
+                                    const SizedBox(height: 12),
+                                    _buildNewOrderPreview(data),
                                     const SizedBox(height: 24),
                                     const BusinessSectionHeader(
-                                      title: '진행 중인 업무',
+                                      title: '오더 진행 현황',
                                     ),
                                     const SizedBox(height: 12),
                                     _buildWorkQueue(data),
                                     const SizedBox(height: 24),
                                     _buildAdBanner(context),
+                                    if (FeatureFlags.adsEnabled)
+                                      const SizedBox(height: 24),
+                                    BusinessPrimaryButton(
+                                      label: '내 매출 보기',
+                                      icon: Icons.trending_up_rounded,
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const MyRevenueScreen(),
+                                        ),
+                                      ),
+                                    ),
                                   ],
                                 ),
                         ),
@@ -357,8 +347,8 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
 
   PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user) {
     return BusinessAppBar(
-      title: '오늘의 업무',
-      showBackButton: true,
+      title: '오더',
+      showBackButton: BusinessTabScope.maybeOf(context) == null,
       actions: [
         FutureBuilder<int>(
           future: _notifCountFuture,
@@ -368,7 +358,11 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
               clipBehavior: Clip.none,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
+                  tooltip: '알림',
+                  icon: const Icon(
+                    Icons.notifications_outlined,
+                    color: BusinessTokens.text,
+                  ),
                   onPressed: () async {
                     await Navigator.push(
                       context,
@@ -408,7 +402,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     );
   }
 
-  Widget _buildSummaryCard(String businessName, Map<String, int> data) {
+  Widget _buildSummaryCard(String businessName, Map<String, dynamic> data) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BusinessTokens.hero(),
@@ -427,7 +421,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           ),
           const SizedBox(height: 4),
           const Text(
-            '오늘 처리할 일감을 한눈에 확인하세요',
+            '오늘 확인할 오더와 진행 현황을 한눈에 보세요',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 13,
@@ -524,92 +518,51 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     );
   }
 
-  Widget _buildCoreWorkCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required String meta,
-    required String actionLabel,
-    required Color color,
-    required Color borderColor,
-    required Color iconColor,
-    required VoidCallback onTap,
-    Color? iconBackground,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(BusinessTokens.cardRadius),
-        child: Ink(
-          padding: const EdgeInsets.all(18),
-          decoration: BusinessTokens.card(
-            color: color,
-            borderColor: borderColor,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: iconBackground ??
-                      BusinessTokens.surface.withValues(alpha: 0.85),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(icon, color: iconColor, size: 24),
+  Widget _buildNewOrderPreview(Map<String, dynamic> data) {
+    final rawItems = data['newOrderItems'];
+    final orders = rawItems is List
+        ? rawItems.whereType<app_models.Order>().toList()
+        : const <app_models.Order>[];
+    if (orders.isEmpty) {
+      return BusinessEmptyState(
+        icon: Icons.inbox_outlined,
+        title: '입찰 가능한 신규 오더가 없습니다',
+        subtitle: '새 요청이 등록되면 이곳에 바로 표시됩니다.',
+        actionLabel: '새로고침',
+        onAction: _refreshData,
+      );
+    }
+
+    return Column(
+      children: [
+        for (int index = 0; index < orders.length; index++) ...[
+          BusinessLeadCard(
+            title: orders[index].title,
+            category: orders[index].equipmentType,
+            region: BusinessTheme.regionFromAddress(orders[index].address),
+            timeLabel: BusinessTheme.relativeTime(orders[index].createdAt),
+            symptom: orders[index].description,
+            amountLabel: orders[index].estimatedPrice > 0
+                ? '예상 ${BusinessTheme.formatWon(orders[index].estimatedPrice)}'
+                : null,
+            hasPhoto: orders[index].images.isNotEmpty,
+            isNew: BusinessTheme.isNewLead(orders[index].createdAt),
+            isUrgent: BusinessTheme.isVisitSoon(orders[index].visitDate),
+            canBid: true,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const EstimateRequestsScreen(),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: BusinessTokens.sectionTitle),
-                    const SizedBox(height: 5),
-                    Text(
-                      description,
-                      style: BusinessTokens.caption,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            meta,
-                            style: const TextStyle(
-                              color: BusinessTokens.text,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          actionLabel,
-                          style: const TextStyle(
-                            color: BusinessTokens.blue,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          color: BusinessTokens.blue,
-                          size: 19,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+          if (index != orders.length - 1) const SizedBox(height: 12),
+        ],
+      ],
     );
   }
 
-  Widget _buildWorkQueue(Map<String, int> data) {
+  Widget _buildWorkQueue(Map<String, dynamic> data) {
     return Container(
       decoration: BusinessTokens.card(),
       child: Column(

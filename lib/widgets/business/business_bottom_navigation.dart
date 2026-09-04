@@ -29,9 +29,9 @@ class BusinessBottomNavigation extends StatelessWidget {
             children: [
               _item(
                 index: 0,
-                icon: Icons.bar_chart_outlined,
-                selectedIcon: Icons.bar_chart_rounded,
-                label: '내 매출',
+                icon: Icons.home_outlined,
+                selectedIcon: Icons.home_rounded,
+                label: '홈',
               ),
               _item(
                 index: 1,

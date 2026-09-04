@@ -71,6 +71,7 @@ export const handler = async (event: any) => {
       listingId,
       businessId,
       bidAmount: body.bidAmount,
+      bidId: body.bidId ? String(body.bidId) : null,
     })
     console.log(`[market-after-bid-background] done listing=${listingId}`)
     return { statusCode: 200, body: 'ok' }

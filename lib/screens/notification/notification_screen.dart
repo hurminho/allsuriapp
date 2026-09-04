@@ -12,6 +12,7 @@ import '../business/order_marketplace_screen.dart';
 import '../business/order_bidders_screen.dart';
 import '../community/post_detail_screen.dart';
 import '../chat_screen.dart';
+import 'package:allsuriapp/utils/app_logger.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({Key? key}) : super(key: key);
@@ -48,11 +49,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
       if (user != null) {
         print('   사용자 ID로 알림 조회: ${user.id}');
         final notifications = await _notificationService.getNotifications(user.id);
-        print('✅ [NotificationScreen] ${notifications.length}개 알림 조회 완료');
-        
-        if (notifications.isNotEmpty) {
-          print('   첫 번째 알림: ${notifications.first}');
-        }
+        // 알림 본문에 주소·연락처가 들어올 수 있어 건수만 남깁니다.
+        AppLog.debug(
+            'NotificationScreen', '${notifications.length}개 알림 조회 완료');
         
         setState(() {
           _notifications = notifications;
@@ -832,4 +831,4 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
     );
   }
-} 
+}

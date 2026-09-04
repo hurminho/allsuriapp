@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
 import '../../theme/business_theme.dart';
 import '../../widgets/business/business_app_bar.dart';
+import '../../widgets/business/business_tab_scope.dart';
 import '../chat_screen.dart';
 
 class ChatListPage extends StatefulWidget {
@@ -87,7 +88,7 @@ class _ChatListPageState extends State<ChatListPage> {
           ),
           const SizedBox(height: 32),
           CupertinoButton.filled(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => BusinessTabScope.popIfPushedRoute(context),
             child: const Text('로그인', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ),
         ],

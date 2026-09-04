@@ -4,6 +4,7 @@
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
 
 import crypto from 'crypto'
+import { normalizeBidBreakdown } from '../lib/bid_breakdown'
 import { afterBidInserted } from '../lib/market_after_bid'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
@@ -205,10 +206,33 @@ async function runWithTimeout(work: Promise<unknown>, ms: number): Promise<void>
   }
 }
 
+/** order_bids 에 새 원가 컬럼이 아직 없을 때(마이그레이션 미실행) 나는 오류인지. */
+function isUnknownColumnError(data: any): boolean {
+  const payload = Array.isArray(data) ? data[0] : data
+  const code = String(payload?.code || '')
+  if (code === 'PGRST204' || code === '42703') return true
+  return /column .* does not exist|Could not find the '.*' column/i.test(String(payload?.message || ''))
+}
+
+async function insertBid(row: Record<string, unknown>) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/order_bids`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify(row),
+  })
+  const data = await res.json().catch(() => ({}))
+  return { res, data }
+}
+
 async function handleBidListing(event: any, path: string) {
   const id = listingIdFromPath(path)
   const body = JSON.parse(event.body || '{}')
-  const { businessId, message, bid_amount, estimated_days } = body
+  const { businessId, message, estimated_days } = body
 
   if (!id) {
     return jsonRes(400, { message: 'listing id는 필수입니다' })
@@ -216,6 +240,10 @@ async function handleBidListing(event: any, path: string) {
   if (!businessId) {
     return jsonRes(400, { message: 'businessId는 필수입니다' })
   }
+
+  // 세부 원가는 전부 선택 입력입니다. 총액만 보내도 기존과 동일하게 동작합니다.
+  const breakdown = normalizeBidBreakdown(body)
+  const bid_amount = breakdown.totalAmount
 
   try {
     // 중복 입찰 확인 (같은 사업자가 같은 오더에 이미 입찰했는지)
@@ -235,27 +263,25 @@ async function handleBidListing(event: any, path: string) {
 
     // 직접 INSERT (RPC 대신 - 여러 사업자가 동시 입찰 가능하도록)
     const now = new Date().toISOString()
-    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/order_bids`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation',
-      },
-      body: JSON.stringify({
-        listing_id: id,
-        bidder_id: businessId,
-        message: message || null,
-        bid_amount: bid_amount ?? null,
-        estimated_days: estimated_days ?? null,
-        status: 'pending',
-        created_at: now,
-        updated_at: now,
-      })
-    })
+    const baseRow: Record<string, unknown> = {
+      listing_id: id,
+      bidder_id: businessId,
+      message: message || null,
+      bid_amount: bid_amount ?? null,
+      estimated_days: estimated_days ?? null,
+      status: 'pending',
+      created_at: now,
+      updated_at: now,
+    }
 
-    const data = await insertRes.json()
+    let { res: insertRes, data } = await insertBid({ ...baseRow, ...breakdown.columns })
+    if (!insertRes.ok && isUnknownColumnError(data)) {
+      // database/price_engine_v1.sql 미실행 환경. 입찰이 실패하면 안 되므로 기본 컬럼으로 재시도합니다.
+      console.warn('[market] order_bids 원가 컬럼 없음 — 기본 컬럼으로 재시도 (price_engine_v1.sql 실행 필요)')
+      const retry = await insertBid(baseRow)
+      insertRes = retry.res
+      data = retry.data
+    }
 
     if (!insertRes.ok) {
       const code = data?.code || data?.[0]?.code
@@ -272,9 +298,14 @@ async function handleBidListing(event: any, path: string) {
 
     // 입찰 저장이 끝난 뒤 문자/알림은 응답을 막지 않습니다.
     // (이전에는 afterBidInserted를 최대 7.5s 기다려 앱의 지원하기 UI가 멈췄습니다)
-    await enqueueAfterBid({ listingId: id, businessId, bidAmount: bid_amount })
+    await enqueueAfterBid({ listingId: id, businessId, bidAmount: bid_amount, bidId })
 
-    return jsonRes(200, { success: true, bidId })
+    return jsonRes(200, {
+      success: true,
+      bidId,
+      breakdownProvided: breakdown.breakdownProvided,
+      warnings: breakdown.warnings,
+    })
   } catch (error: any) {
     console.error('[market] bid error:', error.message)
     return jsonRes(500, { message: '입찰 처리 실패', error: error.message })
@@ -285,6 +316,7 @@ async function enqueueAfterBid(opts: {
   listingId: string
   businessId: string
   bidAmount: unknown
+  bidId?: string | null
 }) {
   const site = String(
     process.env.URL || process.env.DEPLOY_PRIME_URL || 'https://api.allsuri.app',
@@ -302,7 +334,6 @@ async function enqueueAfterBid(opts: {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'x-allsuri-internal': SUPABASE_SERVICE_ROLE_KEY,
       },
       body: JSON.stringify({ ...opts, t: hmac }),
       signal: ac.signal,

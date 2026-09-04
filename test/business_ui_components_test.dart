@@ -1,6 +1,10 @@
+import 'package:allsuriapp/theme/business_theme.dart';
+import 'package:allsuriapp/widgets/business/business_app_bar.dart';
 import 'package:allsuriapp/widgets/business/business_bottom_navigation.dart';
+import 'package:allsuriapp/widgets/business/business_filter_chip.dart';
 import 'package:allsuriapp/widgets/business/business_lead_card.dart';
 import 'package:allsuriapp/widgets/business/business_status_chip.dart';
+import 'package:allsuriapp/widgets/business/business_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,7 +30,7 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('내 매출'), findsOneWidget);
+    expect(find.text('홈'), findsOneWidget);
     expect(find.text('공사 관리'), findsOneWidget);
     expect(find.text('오더 만들기'), findsOneWidget);
     expect(find.text('채팅'), findsOneWidget);
@@ -76,6 +80,8 @@ void main() {
             children: [
               BusinessStatusChip.forJob('assigned'),
               BusinessStatusChip.forEstimate('pending'),
+              BusinessStatusChip.forOrderOrigin('consumer'),
+              BusinessStatusChip.forOrderOrigin('business'),
             ],
           ),
         ),
@@ -84,5 +90,54 @@ void main() {
 
     expect(find.text('배정 완료'), findsOneWidget);
     expect(find.text('입찰 대기'), findsOneWidget);
+    expect(find.text('소비자 견적'), findsOneWidget);
+    expect(find.text('사업자 견적'), findsOneWidget);
+  });
+
+  testWidgets('밝은 앱바의 알림 아이콘이 배경과 같은 색으로 사라지지 않는다', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: BusinessTheme.theme(ThemeData(useMaterial3: true)),
+        home: Scaffold(
+          appBar: BusinessAppBar(
+            title: '오더',
+            actions: [
+              IconButton(
+                tooltip: '알림',
+                onPressed: () {},
+                icon: const Icon(Icons.notifications_outlined),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final iconContext =
+        tester.element(find.byIcon(Icons.notifications_outlined));
+    expect(IconTheme.of(iconContext).color, BusinessTokens.text);
+  });
+
+  test('사업자 테마가 공통 색상과 한글 폰트를 사용한다', () {
+    final theme = BusinessTheme.theme(ThemeData(useMaterial3: true));
+
+    expect(theme.colorScheme.primary, BusinessTokens.blue);
+    expect(theme.textTheme.bodyMedium?.fontFamily, 'NotoSansKR');
+  });
+
+  testWidgets('선택된 필터는 색상 외에 체크 표시로 구분된다', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BusinessFilterChip(
+            label: '전체',
+            selected: true,
+            onTap: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
   });
 }

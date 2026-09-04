@@ -10,7 +10,11 @@ import '../services/estimate_service.dart';
 import '../services/auth_service.dart';
 import '../services/marketplace_service.dart';
 import '../services/media_service.dart';
+import '../utils/api_failure.dart';
+import '../utils/app_logger.dart';
 import '../utils/business_verify_guard.dart';
+import '../utils/input_parsers.dart';
+import '../widgets/business/bid_cost_fields.dart';
 import '../widgets/business/business_app_shell.dart';
 import '../widgets/business/business_primary_button.dart';
 import '../widgets/business/business_section_header.dart';
@@ -42,12 +46,14 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
   final _imagePicker = ImagePicker();
   final _mediaService = MediaService();
   final _market = MarketplaceService();
+  final _costController = BidCostFormController();
 
   @override
   void dispose() {
     _amountController.dispose();
     _descriptionController.dispose();
     _estimatedDaysController.dispose();
+    _costController.dispose();
     super.dispose();
   }
 
@@ -259,16 +265,22 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
   }
 
   Future<void> _submitEstimate() async {
-    if (_amountController.text.trim().isEmpty) {
-      _showError('견적 금액을 입력해주세요');
+    // 이중 제출 방지. 확인 시트를 거치더라도 진입 시점에서 한 번 더 막습니다.
+    if (_isSubmitting) return;
+
+    final amountError = InputParsers.validateBidAmount(_amountController.text);
+    if (amountError != null) {
+      _showError(amountError);
       return;
     }
     if (_descriptionController.text.trim().isEmpty) {
       _showError('견적 설명을 입력해주세요');
       return;
     }
-    if (_estimatedDaysController.text.trim().isEmpty) {
-      _showError('예상 소요일을 입력해주세요');
+    final daysError =
+        InputParsers.validateEstimatedDays(_estimatedDaysController.text);
+    if (daysError != null) {
+      _showError(daysError);
       return;
     }
 
@@ -293,9 +305,10 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
         throw Exception('사용자 정보를 찾을 수 없습니다.');
       }
 
-      final parsedAmount =
-          double.parse(_amountController.text.trim().replaceAll(',', ''));
-      final estimatedDays = int.parse(_estimatedDaysController.text.trim());
+      // 위 검증을 통과했으므로 null 이 아닙니다.
+      final parsedAmount = InputParsers.money(_amountController.text)!;
+      final estimatedDays =
+          InputParsers.count(_estimatedDaysController.text)!;
       final description = _descriptionController.text.trim();
 
       // 웹에서 들어온 고객 오더는 marketplace_listings 미러가 있어 입찰을
@@ -305,12 +318,14 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
       final listingId =
           await _market.findListingIdForWebOrder(widget.order.id ?? '');
       if (listingId != null) {
+        // 세부 원가는 order_bids 에만 저장됩니다. estimates 스키마는 그대로 둡니다.
         await _market.claimListing(
           listingId,
           businessId: user.id,
           bidAmount: parsedAmount,
           estimatedDays: estimatedDays,
           message: description,
+          breakdown: _costController.build(),
         );
         if (mounted) _showSubmitted();
         return;
@@ -338,9 +353,10 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
       await estimateService.createEstimate(estimate);
 
       if (mounted) _showSubmitted();
-    } catch (e) {
+    } catch (e, stack) {
+      AppLog.error('CreateEstimate', e, stack: stack, message: '견적 제출');
       if (mounted) {
-        _showError('견적 제출 중 오류가 발생했습니다: $e');
+        _showError('견적을 제출하지 못했습니다. ${ApiFailure.from(e).message}');
       }
     } finally {
       if (mounted) {
@@ -626,6 +642,8 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
                       suffixText: '일',
                     ),
                   ),
+                  const SizedBox(height: BusinessTokens.space12),
+                  BidCostFields(controller: _costController),
                 ],
               ),
               _sectionCard(

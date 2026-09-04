@@ -75,6 +75,13 @@
   force = true
 
 [[redirects]]
+  # 가격 엔진 (공정 카탈로그·예상 범위·표준 단가·완료 금액)
+  from = "/api/price/*"
+  to = "/.netlify/functions/price/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -13,9 +14,12 @@ import 'order_marketplace_screen.dart';
 import '../../widgets/business/business_app_shell.dart';
 import '../../widgets/business/business_primary_button.dart';
 import '../../widgets/business/business_section_header.dart';
+import '../../widgets/business/business_tab_scope.dart';
 import '../../widgets/business/business_tokens.dart';
 import 'package:flutter/services.dart';
 import '../../utils/business_verify_guard.dart';
+import '../../utils/api_failure.dart';
+import '../../utils/app_logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CreateJobScreen extends StatefulWidget {
@@ -73,40 +77,28 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
   /// 🔒 사업자 승인 상태 확인
   void _checkBusinessApproval() {
+    if (!mounted) return;
     final authService = Provider.of<AuthService>(context, listen: false);
     final user = authService.currentUser;
+    void leaveAfterMessage(String message) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.orange),
+      );
+      BusinessTabScope.popIfPushedRoute(context);
+    }
 
     if (user == null) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('로그인이 필요합니다.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      leaveAfterMessage('로그인이 필요합니다.');
       return;
     }
 
     if (user.role != 'business') {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('사업자 계정만 접근 가능합니다.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      leaveAfterMessage('사업자 계정만 접근 가능합니다.');
       return;
     }
 
     if (user.businessStatus != 'approved') {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('사업자 승인이 필요합니다. 관리자 승인 후 이용 가능합니다.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 4),
-        ),
-      );
+      leaveAfterMessage('사업자 승인이 필요합니다. 관리자 승인 후 이용 가능합니다.');
       return;
     }
   }
@@ -293,6 +285,21 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     });
   }
 
+  void _resetForm() {
+    _titleController.clear();
+    _descController.clear();
+    _budgetController.clear();
+    _feeRateController.text = '5';
+    _feeAmountController.clear();
+    _locationController.clear();
+    _selectedCategory = '일반';
+    _selectedImages.clear();
+    _uploadedImageUrls.clear();
+    _jobCreated = false;
+    _creatingOrder = false;
+    _formKey.currentState?.reset();
+  }
+
   Future<void> _submitJob() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -302,10 +309,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       return;
     }
 
+    final inTab = BusinessTabScope.find(context) != null;
+
     // 사업자 진위확인 가드
     final canProceed =
         await BusinessVerifyGuard.ensure(context, action: '오더 등록');
-    if (!canProceed) return;
+    if (!canProceed || !mounted) return;
 
     setState(() => _submitting = true);
 
@@ -362,10 +371,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           region: _locationController.text.trim(),
           category: _selectedCategory);
 
-      // 바텀시트가 닫혔는데 아직 이 화면에 있다면 (옵션 선택 안 함)
-      // 뒤로 이동하여 중복 등록 방지
-      if (mounted) {
-        Navigator.of(context).pop();
+      // 탭으로 열린 화면에서 pop 하면 홈 셸이 닫혀 앱이 종료됩니다.
+      if (!mounted) return;
+      if (inTab) {
+        setState(_resetForm);
+      } else {
+        BusinessTabScope.popIfPushedRoute(context);
       }
     } catch (e) {
       print('❌ [_submitJob] 실패: $e');
@@ -589,183 +600,187 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BusinessAppShell(
-      title: '오더 등록',
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          decoration: const BoxDecoration(
-            color: BusinessTokens.surface,
-            border: Border(
-              top: BorderSide(color: BusinessTokens.border),
+    return PopScope(
+      canPop: BusinessTabScope.find(context) == null,
+      child: BusinessAppShell(
+        title: '오더 등록',
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: const BoxDecoration(
+              color: BusinessTokens.surface,
+              border: Border(
+                top: BorderSide(color: BusinessTokens.border),
+              ),
+            ),
+            child: BusinessPrimaryButton(
+              label: '오더 등록',
+              icon: Icons.group_add_outlined,
+              loading: _submitting,
+              onPressed: _submitting ? null : _submitJob,
             ),
           ),
-          child: BusinessPrimaryButton(
-            label: '오더 등록',
-            icon: Icons.group_add_outlined,
-            loading: _submitting,
-            onPressed: _submitting ? null : _submitJob,
-          ),
         ),
-      ),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(BusinessTokens.pagePadding),
-            children: [
-              _buildStepIndicator(),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BusinessTokens.card(
-                  color: BusinessTokens.blueLight,
-                  borderColor: BusinessTokens.blueLight,
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      size: 20,
-                      color: BusinessTokens.blue,
-                    ),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '동료 사업자에게 일감을 공유합니다',
-                        style: TextStyle(
-                          color: BusinessTokens.text,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(BusinessTokens.pagePadding),
+              children: [
+                _buildStepIndicator(),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BusinessTokens.card(
+                    color: BusinessTokens.blueLight,
+                    borderColor: BusinessTokens.blueLight,
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 20,
+                        color: BusinessTokens.blue,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '동료 사업자에게 일감을 공유합니다',
+                          style: TextStyle(
+                            color: BusinessTokens.text,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _formSection(
+                  title: '공사 정보',
+                  subtitle: '동료 사업자가 판단하는 데 필요한 실제 정보',
+                  children: [
+                    TextFormField(
+                      controller: _titleController,
+                      decoration: _fieldDecoration(
+                        label: '일감 제목 *',
+                        hint: '예: 아파트 누수 공사',
+                        icon: Icons.work_outline_rounded,
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? '제목을 입력하세요' : null,
+                    ),
+                    DropdownButtonFormField<String>(
+                      value: _selectedCategory,
+                      decoration: _fieldDecoration(
+                        label: '카테고리 *',
+                        icon: Icons.category_outlined,
+                      ),
+                      items: _categories
+                          .map(
+                            (category) => DropdownMenuItem(
+                              value: category,
+                              child: Text(category),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() => _selectedCategory = value!);
+                      },
+                    ),
+                    TextFormField(
+                      controller: _locationController,
+                      decoration: _fieldDecoration(
+                        label: '지역 *',
+                        hint: '공사 진행 장소',
+                        icon: Icons.location_on_outlined,
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? '위치를 입력하세요' : null,
+                    ),
+                    TextFormField(
+                      controller: _descController,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: _fieldDecoration(
+                        label: '상세 설명 *',
+                        hint: '공사 범위와 현장 상황을 자세히 입력해주세요',
+                        icon: Icons.subject_rounded,
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? '설명을 입력하세요' : null,
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 20),
-              _formSection(
-                title: '공사 정보',
-                subtitle: '동료 사업자가 판단하는 데 필요한 실제 정보',
-                children: [
-                  TextFormField(
-                    controller: _titleController,
-                    decoration: _fieldDecoration(
-                      label: '일감 제목 *',
-                      hint: '예: 아파트 누수 공사',
-                      icon: Icons.work_outline_rounded,
-                    ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? '제목을 입력하세요' : null,
-                  ),
-                  DropdownButtonFormField<String>(
-                    value: _selectedCategory,
-                    decoration: _fieldDecoration(
-                      label: '카테고리 *',
-                      icon: Icons.category_outlined,
-                    ),
-                    items: _categories
-                        .map(
-                          (category) => DropdownMenuItem(
-                            value: category,
-                            child: Text(category),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() => _selectedCategory = value!);
-                    },
-                  ),
-                  TextFormField(
-                    controller: _locationController,
-                    decoration: _fieldDecoration(
-                      label: '지역 *',
-                      hint: '공사 진행 장소',
-                      icon: Icons.location_on_outlined,
-                    ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? '위치를 입력하세요' : null,
-                  ),
-                  TextFormField(
-                    controller: _descController,
-                    minLines: 3,
-                    maxLines: 5,
-                    decoration: _fieldDecoration(
-                      label: '상세 설명 *',
-                      hint: '공사 범위와 현장 상황을 자세히 입력해주세요',
-                      icon: Icons.subject_rounded,
-                    ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? '설명을 입력하세요' : null,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildPhotoSection(),
-              const SizedBox(height: 16),
-              _formSection(
-                title: '모집 조건',
-                subtitle: '기존 예산과 협업 수수료를 입력하세요',
-                children: [
-                  TextFormField(
-                    controller: _budgetController,
-                    keyboardType: TextInputType.number,
-                    decoration: _fieldDecoration(
-                      label: '기존 공사 예산 *',
-                      hint: '예상 공사 비용',
-                      suffixText: '원',
-                      icon: Icons.payments_outlined,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9,]')),
-                      _ThousandsFormatter(),
-                    ],
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? '공사 금액을 입력하세요' : null,
-                    onChanged: (_) => _recalcFee(),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _feeRateController,
-                          keyboardType: TextInputType.number,
-                          decoration: _fieldDecoration(
-                            label: '수수료율 *',
-                            suffixText: '%',
-                            icon: Icons.percent_rounded,
-                          ),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? '수수료율을 입력하세요'
-                              : null,
-                          onChanged: (_) => _recalcFee(),
-                        ),
+                const SizedBox(height: 16),
+                _buildPhotoSection(),
+                const SizedBox(height: 16),
+                _formSection(
+                  title: '모집 조건',
+                  subtitle: '기존 예산과 협업 수수료를 입력하세요',
+                  children: [
+                    TextFormField(
+                      controller: _budgetController,
+                      keyboardType: TextInputType.number,
+                      decoration: _fieldDecoration(
+                        label: '기존 공사 예산 *',
+                        hint: '예상 공사 비용',
+                        suffixText: '원',
+                        icon: Icons.payments_outlined,
                       ),
-                      const SizedBox(
-                        height: 48,
-                        child: VerticalDivider(
-                          width: 16,
-                          color: BusinessTokens.border,
-                        ),
-                      ),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _feeAmountController,
-                          readOnly: true,
-                          decoration: _fieldDecoration(
-                            label: '예상 수수료',
-                            suffixText: '원',
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9,]')),
+                        _ThousandsFormatter(),
+                      ],
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? '공사 금액을 입력하세요'
+                          : null,
+                      onChanged: (_) => _recalcFee(),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _feeRateController,
+                            keyboardType: TextInputType.number,
+                            decoration: _fieldDecoration(
+                              label: '수수료율 *',
+                              suffixText: '%',
+                              icon: Icons.percent_rounded,
+                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? '수수료율을 입력하세요'
+                                : null,
+                            onChanged: (_) => _recalcFee(),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-            ],
+                        const SizedBox(
+                          height: 48,
+                          child: VerticalDivider(
+                            width: 16,
+                            color: BusinessTokens.border,
+                          ),
+                        ),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _feeAmountController,
+                            readOnly: true,
+                            decoration: _fieldDecoration(
+                              label: '예상 수수료',
+                              suffixText: '원',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
         ),
       ),
@@ -890,12 +905,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     required String category,
   }) async {
     if (!mounted) return;
-    // 부모 컨텍스트를 저장하여, 바텀시트가 닫힌 뒤에도 안전하게 네비게이션/스낵바를 사용할 수 있도록 함
-    final parentContext = context;
-    await showModalBottomSheet(
+    final action = await showModalBottomSheet<_PostCreateAction>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(BusinessTokens.cardRadius),
+        ),
       ),
       builder: (sheetContext) {
         return SafeArea(
@@ -921,207 +936,24 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
-
-                // 오더 버튼 (메인 - 크고 눈에 띄게)
-                Container(
-                  height: 70,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF4A90E2).withOpacity(0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: FilledButton.icon(
-                    onPressed: () async {
-                      // 중복 클릭 방지
-                      if (_creatingOrder) {
-                        print('⚠️ [오더 등록] 이미 오더 생성 중, 무시');
-                        return;
-                      }
-
-                      // 사업자 진위확인 가드
-                      final canProceed = await BusinessVerifyGuard.ensure(
-                        context,
-                        action: '오더 등록',
-                      );
-                      if (!canProceed) return;
-
-                      setState(() => _creatingOrder = true);
-                      Navigator.pop(sheetContext);
-
-                      try {
-                        print('오더 등록 시작: jobId=$jobId, title=$title');
-
-                        // 현재 사용자 ID 가져오기
-                        final auth = context.read<AuthService>();
-                        final currentUserId = auth.currentUser?.id;
-                        print('   현재 사용자 ID: $currentUserId');
-
-                        final result = await _marketplaceService.createListing(
-                          jobId: jobId,
-                          title: title,
-                          description: description,
-                          region: (region ?? '').isEmpty ? null : region,
-                          category: category,
-                          budgetAmount: budget,
-                          postedBy: currentUserId, // 사용자 ID 명시적 전달
-                        );
-
-                        print('오더 등록 결과: $result');
-
-                        if (!mounted) return;
-
-                        if (result != null) {
-                          print('OrderMarketplaceScreen으로 네비게이션 시작');
-
-                          // 1. 다른 사업자들에게 알림 전송 (서버 일괄 발송 - API 1회 호출)
-                          try {
-                            final notificationService = NotificationService();
-
-                            // 승인된 사업자(자신 제외) 조회
-                            final businessUsers = await Supabase.instance.client
-                                .from('users')
-                                .select('id, businessname')
-                                .eq('role', 'business')
-                                .eq('businessstatus', 'approved')
-                                .neq('id', currentUserId ?? '');
-
-                            final userIds = businessUsers
-                                .map((u) => u['id'] as String)
-                                .where((id) => id.isNotEmpty)
-                                .toList();
-
-                            if (userIds.isNotEmpty) {
-                              debugPrint(
-                                  '🔔 ${userIds.length}명의 사업자에게 알림 일괄 전송 중...');
-                              final bulkResult = await notificationService
-                                  .sendBulkNotification(
-                                userIds: userIds,
-                                title: '새로운 오더',
-                                body: '$title 오더이 등록되었습니다.',
-                                type: 'new_order',
-                                orderId: result['id']?.toString(),
-                                jobTitle: title,
-                                region: region,
-                              );
-                              debugPrint(
-                                  '✅ 알림 전송 완료: sent=${bulkResult['sent']}, failed=${bulkResult['failed']}');
-                            }
-                          } catch (e) {
-                            debugPrint('⚠️ 알림 전송 중 오류 (무시됨): $e');
-                          }
-
-                          if (!mounted) return;
-
-                          final orderId = result['id']?.toString() ?? '';
-                          final shareCommissionRate =
-                              double.tryParse(_feeRateController.text) ?? 5.0;
-                          final shareImageUrl = _uploadedImageUrls.isNotEmpty
-                              ? _uploadedImageUrls.first
-                              : null;
-
-                          // 2. 카카오톡 공유 다이얼로그 표시 (다이얼로그 닫힐 때까지 대기)
-                          await _showKakaoShareDialog(
-                            orderId: orderId,
-                            title: title,
-                            region: region ?? '',
-                            category: category,
-                            budget: budget,
-                            commissionRate: shareCommissionRate,
-                            imageUrl: shareImageUrl,
-                            description: description,
-                          );
-
-                          if (!mounted) return;
-
-                          // 3. 다이얼로그 닫힌 후 오더 리스트로 이동
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => OrderMarketplaceScreen(
-                                showSuccessMessage: true,
-                                createdByUserId: currentUserId,
-                              ),
-                            ),
-                            (route) => route.isFirst,
-                          );
-                        } else {
-                          ScaffoldMessenger.of(parentContext).showSnackBar(
-                            const SnackBar(
-                                content: Text('오더 등록에 실패했습니다. 다시 시도해주세요.')),
-                          );
-                        }
-                      } catch (e) {
-                        print('오더 등록 에러: $e');
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(parentContext).showSnackBar(
-                          SnackBar(content: Text('오더 등록 실패: $e')),
-                        );
-                      } finally {
-                        if (mounted) {
-                          setState(() => _creatingOrder = false);
-                        }
-                      }
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    icon: const Icon(Icons.campaign, size: 28),
-                    label: const Text(
-                      '오더으로 모집하기',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                BusinessPrimaryButton(
+                  label: '오더로 모집하기',
+                  icon: Icons.campaign_outlined,
+                  onPressed: () => Navigator.pop(
+                    sheetContext,
+                    _PostCreateAction.marketplace,
                   ),
                 ),
-
                 const SizedBox(height: 16),
-
-                // 이관하기 버튼 (서브 - 작고 부드럽게)
-                TextButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(sheetContext);
-                    Navigator.push(
-                      parentContext,
-                      MaterialPageRoute(
-                        builder: (_) => TransferJobScreen(jobId: jobId),
-                      ),
-                    );
-                  },
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.grey[300]!),
-                    ),
-                  ),
-                  icon:
-                      Icon(Icons.swap_horiz, size: 20, color: Colors.grey[700]),
-                  label: Text(
-                    '다른 사업자에게 이관하기',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey[700],
-                    ),
+                BusinessPrimaryButton(
+                  label: '다른 사업자에게 이관하기',
+                  icon: Icons.swap_horiz_rounded,
+                  secondary: true,
+                  onPressed: () => Navigator.pop(
+                    sheetContext,
+                    _PostCreateAction.transfer,
                   ),
                 ),
-
                 const SizedBox(height: 8),
               ],
             ),
@@ -1129,8 +961,154 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         );
       },
     );
+
+    if (!mounted || action == null) return;
+    if (action == _PostCreateAction.transfer) {
+      unawaited(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TransferJobScreen(jobId: jobId),
+          ),
+        ),
+      );
+      return;
+    }
+
+    await _publishOrder(
+      jobId: jobId,
+      title: title,
+      description: description,
+      budget: budget,
+      region: region,
+      category: category,
+    );
+  }
+
+  Future<void> _publishOrder({
+    required String jobId,
+    required String title,
+    required String description,
+    double? budget,
+    String? region,
+    required String category,
+  }) async {
+    if (_creatingOrder || !mounted) return;
+    setState(() => _creatingOrder = true);
+
+    try {
+      final currentUserId = context.read<AuthService>().currentUser?.id;
+      if (currentUserId == null) {
+        throw StateError('로그인이 필요합니다.');
+      }
+
+      final result = await _marketplaceService.createListing(
+        jobId: jobId,
+        title: title,
+        description: description,
+        region: (region ?? '').isEmpty ? null : region,
+        category: category,
+        budgetAmount: budget,
+        postedBy: currentUserId,
+      );
+      if (result == null) {
+        throw StateError('오더 등록 결과가 비어 있습니다.');
+      }
+
+      final orderId = result['id']?.toString() ?? '';
+      unawaited(
+        _sendNewOrderNotifications(
+          currentUserId: currentUserId,
+          orderId: orderId,
+          title: title,
+          region: region,
+        ),
+      );
+
+      if (!mounted) return;
+      unawaited(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OrderMarketplaceScreen(
+              showSuccessMessage: true,
+              createdByUserId: currentUserId,
+              initialListing: result,
+            ),
+          ),
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+      await _showKakaoShareDialog(
+        orderId: orderId,
+        title: title,
+        region: region ?? '',
+        category: category,
+        budget: budget,
+        commissionRate: double.tryParse(_feeRateController.text) ?? 5.0,
+        imageUrl:
+            _uploadedImageUrls.isNotEmpty ? _uploadedImageUrls.first : null,
+        description: description,
+      );
+    } catch (error, stack) {
+      AppLog.error(
+        'CreateJobScreen',
+        error,
+        stack: stack,
+        message: '오더 게시 실패',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiFailure.from(error).message)),
+      );
+    } finally {
+      if (mounted) setState(() => _creatingOrder = false);
+    }
+  }
+
+  Future<void> _sendNewOrderNotifications({
+    required String currentUserId,
+    required String orderId,
+    required String title,
+    String? region,
+  }) async {
+    try {
+      final businessUsers = await Supabase.instance.client
+          .from('users')
+          .select('id')
+          .eq('role', 'business')
+          .eq('businessstatus', 'approved')
+          .neq('id', currentUserId);
+      final userIds = businessUsers
+          .map((user) => user['id']?.toString())
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (userIds.isEmpty) return;
+
+      await NotificationService().sendBulkNotification(
+        userIds: userIds,
+        title: '새로운 오더',
+        body: '$title 오더가 등록되었습니다.',
+        type: 'new_order',
+        orderId: orderId,
+        jobTitle: title,
+        region: region,
+      );
+    } catch (error, stack) {
+      AppLog.error(
+        'CreateJobScreen',
+        error,
+        stack: stack,
+        message: '신규 오더 알림 발송 실패',
+      );
+    }
   }
 }
+
+enum _PostCreateAction { marketplace, transfer }
 
 class _ThousandsFormatter extends TextInputFormatter {
   @override

@@ -12,6 +12,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 // Call(마켓) 분리는 홈의 별도 버튼로 이동
 import '../../widgets/business/business_app_shell.dart';
 import '../../widgets/business/business_empty_state.dart';
+import '../../utils/api_failure.dart';
+import '../../utils/app_logger.dart';
+import '../../utils/input_parsers.dart';
 import '../../widgets/business/business_filter_chip.dart';
 import '../../widgets/business/business_primary_button.dart';
 import '../../widgets/business/business_section_header.dart';
@@ -1404,62 +1407,109 @@ class _EstimateManagementScreenState extends State<EstimateManagementScreen> {
     final daysController =
         TextEditingController(text: estimate.estimatedDays.toString());
 
+    // 저장 중 중복 탭을 막기 위해 다이얼로그 안에서 상태를 관리합니다.
+    bool saving = false;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('견적 수정'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: priceController,
-              decoration: const InputDecoration(labelText: '견적 금액'),
-              keyboardType: TextInputType.number,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('견적 수정'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: priceController,
+                decoration: const InputDecoration(labelText: '견적 금액'),
+                keyboardType: TextInputType.number,
+                enabled: !saving,
+              ),
+              TextField(
+                controller: daysController,
+                decoration: const InputDecoration(labelText: '예상 작업 기간 (일)'),
+                keyboardType: TextInputType.number,
+                enabled: !saving,
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(labelText: '견적 설명'),
+                maxLines: 3,
+                enabled: !saving,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  saving ? null : () => Navigator.of(dialogContext).pop(),
+              child: const Text('취소'),
             ),
-            TextField(
-              controller: daysController,
-              decoration: const InputDecoration(labelText: '예상 작업 기간 (일)'),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: descriptionController,
-              decoration: const InputDecoration(labelText: '견적 설명'),
-              maxLines: 3,
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      // 숫자가 아닌 입력에 parse 를 걸면 FormatException 문구가
+                      // 그대로 노출됩니다. 검증으로 먼저 걸러냅니다.
+                      final amountError = InputParsers.validateBidAmount(
+                          priceController.text);
+                      if (amountError != null) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text(amountError)),
+                        );
+                        return;
+                      }
+                      final daysError = InputParsers.validateEstimatedDays(
+                          daysController.text);
+                      if (daysError != null) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text(daysError)),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => saving = true);
+                      final navigator = Navigator.of(dialogContext);
+                      try {
+                        final updatedEstimate = estimate.copyWith(
+                          amount: InputParsers.money(priceController.text)!,
+                          description: descriptionController.text,
+                          estimatedDays:
+                              InputParsers.count(daysController.text)!,
+                        );
+                        await _estimateService.updateEstimate(updatedEstimate);
+                        await _loadEstimates();
+                        navigator.pop();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('견적이 수정되었습니다.')),
+                          );
+                        }
+                      } catch (e, stack) {
+                        AppLog.error('EstimateManagement', e,
+                            stack: stack, message: '견적 수정');
+                        if (navigator.mounted) {
+                          setDialogState(() => saving = false);
+                        }
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  '견적을 수정하지 못했습니다. ${ApiFailure.from(e).message}'),
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('수정'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                final updatedEstimate = estimate.copyWith(
-                  amount: double.parse(priceController.text),
-                  description: descriptionController.text,
-                  estimatedDays: int.parse(daysController.text),
-                );
-                await _estimateService.updateEstimate(updatedEstimate);
-                await _loadEstimates();
-                Navigator.of(context).pop();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('견적이 수정되었습니다.')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('견적 수정 중 오류가 발생했습니다: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('수정'),
-          ),
-        ],
       ),
     );
   }

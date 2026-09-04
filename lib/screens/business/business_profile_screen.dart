@@ -10,7 +10,6 @@ import '../../widgets/business/business_primary_button.dart';
 import '../../widgets/business/business_section_header.dart';
 import '../../widgets/business/business_status_chip.dart';
 import '../../widgets/business/business_tokens.dart';
-import 'package:go_router/go_router.dart';
 import '../../utils/navigation_utils.dart';
 import '../../widgets/star_rating.dart';
 import '../../services/review_service.dart';
@@ -229,8 +228,12 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // 다이얼로그 닫기
-                context.pop(); // 프로필 화면 닫기
+                // 다이얼로그와 프로필 화면을 차례로 닫습니다.
+                // 이 앱은 GoRouter 를 설정하지 않으므로 context.pop() 을 쓰면
+                // 라우터를 찾지 못해 예외가 나고 프로필 화면이 닫히지 않습니다.
+                final navigator = Navigator.of(context);
+                navigator.pop(); // 다이얼로그
+                if (navigator.canPop()) navigator.pop(); // 프로필 화면
               },
               child: const Text('시작하기', style: TextStyle(fontSize: 16)),
             ),

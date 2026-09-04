@@ -29,6 +29,33 @@ def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+def requiredSigningKeys = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']
+def hasPropertySigning = requiredSigningKeys.every {
+    keystoreProperties[it]?.toString()?.trim()
+}
+def hasEnvironmentSigning = [
+    'KEYSTORE_FILE',
+    'KEYSTORE_PASSWORD',
+    'KEY_ALIAS',
+    'KEY_PASSWORD'
+].every { System.getenv(it)?.trim() }
+def releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase().contains('release')
+}
+def configuredStoreFile = hasPropertySigning
+        ? file(keystoreProperties['storeFile'])
+        : (hasEnvironmentSigning ? file(System.getenv('KEYSTORE_FILE')) : null)
+
+if (releaseTaskRequested && !hasPropertySigning && !hasEnvironmentSigning) {
+    throw new GradleException(
+        'Release signing is not configured. Add android/key.properties or the CI signing environment variables.'
+    )
+}
+if (releaseTaskRequested && (configuredStoreFile == null || !configuredStoreFile.exists())) {
+    throw new GradleException(
+        'The configured release keystore file does not exist. Check storeFile or KEYSTORE_FILE.'
+    )
+}
 
 android {
     namespace "com.ononcompany.allsuri"
@@ -80,34 +107,24 @@ android {
 
     signingConfigs {
         release {
-            // Try to load from key.properties file first
-            if (keystoreProperties['keyAlias']) {
+            if (hasPropertySigning) {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
-                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                storeFile configuredStoreFile
                 storePassword keystoreProperties['storePassword']
-            }
-            // Fall back to environment variables if key.properties is not available
-            else {
-                def ksFile = System.getenv("KEYSTORE_FILE")
-                def ksPass = System.getenv("KEYSTORE_PASSWORD")
-                def keyAliasEnv = System.getenv("KEY_ALIAS")
-                def keyPass = System.getenv("KEY_PASSWORD")
-                if (ksFile && ksPass && keyAliasEnv && keyPass) {
-                    storeFile file(ksFile)
-                    storePassword ksPass
-                    keyAlias keyAliasEnv
-                    keyPassword keyPass
-                }
+            } else if (hasEnvironmentSigning) {
+                storeFile configuredStoreFile
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
             }
         }
     }
 
     buildTypes {
         release {
-            // Use release signing config if key.properties or env vars are available
-            signingConfig keystoreProperties['keyAlias'] ? signingConfigs.release : 
-                          (System.getenv("KEYSTORE_FILE") ? signingConfigs.release : signingConfigs.debug)
+            // 릴리즈에서 debug 키로 조용히 폴백하지 않는다.
+            signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

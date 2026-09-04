@@ -3,11 +3,18 @@
     "private": true,
     "version": "1.0.0",
     "license": "UNLICENSED",
+    "scripts": {
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc -p netlify/functions/tsconfig.json"
+    },
     "dependencies": {
         "@netlify/functions": "^2.6.0",
         "jsonwebtoken": "^9.0.3"
     },
     "devDependencies": {
-        "@types/node": "^24.10.1"
+        "@types/node": "^24.10.1",
+        "typescript": "^5.6.3",
+        "vitest": "^2.1.8"
     }
 }
