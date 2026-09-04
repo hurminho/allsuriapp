@@ -1,6 +1,6 @@
 # Copy this file to android/key.properties and replace every placeholder.
 # Never commit key.properties or the keystore itself.
-storeFile=app/upload-keystore.jks
+storeFile=../upload-keystore.jks
 storePassword=CHANGE_ME
 keyAlias=upload
 keyPassword=CHANGE_ME

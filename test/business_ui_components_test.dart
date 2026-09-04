@@ -31,7 +31,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('홈'), findsOneWidget);
-    expect(find.text('공사 관리'), findsOneWidget);
+    expect(find.text('오더'), findsOneWidget);
     expect(find.text('오더 만들기'), findsOneWidget);
     expect(find.text('채팅'), findsOneWidget);
     expect(find.text('내 정보'), findsOneWidget);

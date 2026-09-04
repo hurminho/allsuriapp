@@ -367,7 +367,7 @@ flutter build ipa --release
 
 | 항목 | 현황 | 선택지 | 영향 |
 |---|---|---|---|
-| **1. Android 서명 키 관리** | debug 키 폴백 제거 완료. 로컬 설정·keystore 존재 확인 완료 | `docs/android-signing.md`에 따라 keystore와 비밀번호를 별도 백업하고 CI secret 등록 | 키 분실 시 업데이트 불가 위험 |
+| **1. Android 서명 키 관리** | debug 키 폴백과 추적 문서의 평문 비밀번호 제거 완료 | `docs/android-signing.md`에 따라 store/key 비밀번호를 교체하고 백업·CI secret 갱신 | 과거 Git 이력에 남은 인증정보 재사용 위험 |
 | **2. iOS/Android Bundle ID 불일치** | iOS `com.allsuri.app` ≠ Android `com.ononcompany.allsuri` (P2-8) | (A) 의도된 것이면 문서화<br>(B) 통일 필요하면 변경 계획 수립 (리뷰 재신청 대상) | 마케팅·딥링크 정책 |
 
 ### 🟡 권장 결정 (3건)
@@ -462,12 +462,13 @@ flutter build ipa --release
 
 - ✅ 코드 안정성: 90% (P0 전수·P1 대부분 해결)
 - ✅ 테스트 커버리지: 85% (자동화 완료, 수동 항목 남음)
-- ⚠️ 배포 설정: 90% (서명 완료, 딥링크 게시 확인 필요)
+- ⚠️ 배포 설정: 85% (서명 비밀번호 교체·딥링크 게시 확인 필요)
 
 **목표 100% 도달 조건:**
 1. 수동 점검 15개 완료
-2. 딥링크 AASA/assetlinks.json 게시 확인
-3. P1-3 조사 완료
+2. Android 서명 store/key 비밀번호 교체
+3. 딥링크 AASA/assetlinks.json 게시 확인
+4. P1-3 조사 완료
 
 ---
 

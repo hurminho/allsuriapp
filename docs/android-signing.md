@@ -12,7 +12,7 @@ Play Console에 이미 출시한 앱이라면 새 키를 만들기 전에 기존
 
 ```bash
 keytool -genkeypair -v \
-  -keystore android/app/upload-keystore.jks \
+  -keystore android/upload-keystore.jks \
   -keyalg RSA -keysize 2048 -validity 10000 \
   -alias upload
 
@@ -22,7 +22,7 @@ cp android/key.properties.example android/key.properties
 그다음 `android/key.properties`의 네 값을 실제 값으로 바꿉니다.
 
 ```properties
-storeFile=app/upload-keystore.jks
+storeFile=../upload-keystore.jks
 storePassword=실제_저장소_비밀번호
 keyAlias=upload
 keyPassword=실제_키_비밀번호
@@ -37,6 +37,21 @@ keyPassword=실제_키_비밀번호
 
 keystore와 비밀번호는 서로 다른 비밀 저장소에 보관합니다. Git, 메신저,
 공유 드라이브, 저장소의 `.env` 파일에는 올리지 않습니다.
+
+## 기존 비밀번호 교체
+
+과거 추적 문서에 서명 비밀번호가 평문으로 기록된 이력이 있으므로 현재 keystore의
+인증정보를 교체해야 합니다. 비밀번호를 명령행 인자로 전달하지 말고 아래 명령의
+대화형 입력을 사용합니다.
+
+```bash
+keytool -storepasswd -keystore android/upload-keystore.jks
+keytool -keypasswd -keystore android/upload-keystore.jks -alias YOUR_ALIAS
+```
+
+교체 후 로컬 `android/key.properties`와 CI Secret을 함께 갱신합니다. 비밀번호
+교체는 인증서 자체를 바꾸지 않으므로 기존 Play 앱의 업로드 키 인증서는 유지됩니다.
+이미 원격 저장소에 과거 커밋이 올라갔다면 문서 삭제만으로 노출이 해소되지 않습니다.
 
 ## 로컬 검증
 

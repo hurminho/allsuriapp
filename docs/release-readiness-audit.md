@@ -218,7 +218,7 @@ dart-define 이 빠지는 Xcode Archive 를 대비해 프로덕션 기본값이 
 | applicationId | `com.ononcompany.allsuri` | — |
 | 앱 이름 | `올수리` | 정상 |
 | minSdk / targetSdk | `flutter.minSdkVersion` / `flutter.targetSdkVersion` | Flutter 기본값 위임 |
-| release 서명 | 로컬 `key.properties` 또는 CI 비밀 환경변수 사용. 설정·keystore 누락 시 릴리즈 빌드 즉시 실패 | 정상 (`build.gradle`). 관리 절차는 `docs/android-signing.md` |
+| release 서명 | 로컬 `key.properties` 또는 CI 비밀 환경변수 사용. 설정·keystore 누락 시 릴리즈 빌드 즉시 실패 | 코드 정상. 과거 추적 문서에 있던 비밀번호는 제거했으며 배포 전 교체 필요 (`docs/android-signing.md`) |
 | `minifyEnabled` / `shrinkResources` | `true` / `true` | 정상 — 실제 사용되는 `build.gradle` 기준 |
 | 권한 | INTERNET, ACCESS_NETWORK_STATE, CAMERA, READ_EXTERNAL_STORAGE, READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, POST_NOTIFICATIONS, VIBRATE, WAKE_LOCK | 과다 권한 없음. 정상 |
 | 딥링크 | `allsuri://order`, `https://api.allsuri.app/order` (`autoVerify="true"`) | **assetlinks.json 확인 필요** (P2) |

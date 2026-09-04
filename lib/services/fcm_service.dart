@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../firebase_options.dart';
 import '../screens/chat_screen.dart';
 import '../screens/business/job_management_screen.dart';
 import 'version_service.dart';
@@ -22,11 +21,11 @@ class FCMService {
   /// Firebase 초기화 전 접근 시 크래시 방지 - 필요할 때만 접근
   FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   final SupabaseClient _sb = Supabase.instance.client;
-  
+
   // 로컬 알림 플러그인 (포그라운드 알림용)
-  final FlutterLocalNotificationsPlugin _localNotifications = 
+  final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
-  
+
   String? _fcmToken;
   String? get fcmToken => _fcmToken;
 
@@ -38,11 +37,10 @@ class FCMService {
       // Firebase 초기화 확인 (iOS: 네이티브 자동 초기화 시 duplicate-app 무시)
       if (Firebase.apps.isEmpty) {
         try {
-          await Firebase.initializeApp(
-            options: DefaultFirebaseOptions.currentPlatform,
-          );
+          await Firebase.initializeApp();
         } catch (e) {
-          if (!e.toString().contains('duplicate-app') && !e.toString().contains('already exists')) {
+          if (!e.toString().contains('duplicate-app') &&
+              !e.toString().contains('already exists')) {
             rethrow;
           }
           // duplicate-app = 이미 초기화됨, 계속 진행
@@ -62,7 +60,8 @@ class FCMService {
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         print('✅ FCM 권한 승인됨');
-      } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
+      } else if (settings.authorizationStatus ==
+          AuthorizationStatus.provisional) {
         print('⚠️ FCM 임시 권한 승인됨');
       } else {
         print('❌ FCM 권한 거부됨');
@@ -72,8 +71,8 @@ class FCMService {
       // FCM 토큰 가져오기
       _fcmToken = await _messaging.getToken();
       // 토큰 전문은 남기지 않습니다. 발급 여부만 확인합니다.
-      AppLog.debug('FCMService',
-          'FCM 토큰 ${_fcmToken == null ? '발급 실패' : '발급됨'}');
+      AppLog.debug(
+          'FCMService', 'FCM 토큰 ${_fcmToken == null ? '발급 실패' : '발급됨'}');
 
       // 로컬 알림 초기화
       await _initializeLocalNotifications();
@@ -109,7 +108,8 @@ class FCMService {
 
   /// 로컬 알림 초기화 + Android 알림 채널 생성
   Future<void> _initializeLocalNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/launcher_icon');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -129,8 +129,8 @@ class FCMService {
     );
 
     // iOS: 로컬 알림 표시를 위해 권한 명시적 요청
-    final iosPlugin = _localNotifications
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+    final iosPlugin = _localNotifications.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
     if (iosPlugin != null) {
       await iosPlugin.requestPermissions(alert: true, badge: true, sound: true);
       print('✅ iOS 로컬 알림 권한 요청 완료');
@@ -138,8 +138,9 @@ class FCMService {
 
     // Android 8.0+ 필수: 알림 채널 생성
     // 채널이 없으면 시스템 알림이 전혀 표시되지 않음
-    final androidPlugin = _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin =
+        _localNotifications.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       await androidPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
@@ -187,7 +188,8 @@ class FCMService {
       // 주의: setForegroundNotificationPresentationOptions(alert:true)를 여기서
       // 호출하면 이후 포그라운드 알림이 시스템+로컬로 2회 표시됨. 호출 금지.
       await _localNotifications
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(badge: true);
     } catch (e) {
       print('뱃지 클리어 실패 (무시): $e');
@@ -236,13 +238,13 @@ class FCMService {
   /// 알림 탭 처리
   void _handleNotificationTap(String? payload) {
     if (payload == null) return;
-    
+
     try {
       final data = jsonDecode(payload) as Map<String, dynamic>;
       final type = data['type'] as String?;
-      
+
       print('🔔 알림 타입: $type, 데이터: $data');
-      
+
       // main.dart의 전역 navigatorKey 사용
       // ignore: avoid_dynamic_calls
       final navigatorKey = _getNavigatorKey();
@@ -299,13 +301,15 @@ class FCMService {
   Future<void> _openAppStoreForUpdate() async {
     try {
       final info = await VersionService().fetchLatestVersionInfo();
-      final storeUrl = Platform.isIOS ? info?.iosStoreUrl : info?.androidStoreUrl;
+      final storeUrl =
+          Platform.isIOS ? info?.iosStoreUrl : info?.androidStoreUrl;
       if (storeUrl == null || storeUrl.isEmpty) {
         print('⚠️ [FCMService] 스토어 URL이 설정되어 있지 않습니다.');
         return;
       }
       final uri = Uri.parse(storeUrl);
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!launched) {
         print('⚠️ [FCMService] 스토어 링크를 열지 못했습니다: $storeUrl');
       }
@@ -341,11 +345,8 @@ class FCMService {
 
     try {
       print('💾 FCM 토큰 저장 중: $userId');
-      
-      await _sb
-          .from('users')
-          .update({'fcm_token': _fcmToken})
-          .eq('id', userId);
+
+      await _sb.from('users').update({'fcm_token': _fcmToken}).eq('id', userId);
 
       print('✅ FCM 토큰 저장 완료');
     } catch (e) {
@@ -357,11 +358,8 @@ class FCMService {
   Future<void> deleteFCMToken(String userId) async {
     try {
       print('🗑️ FCM 토큰 삭제 중: $userId');
-      
-      await _sb
-          .from('users')
-          .update({'fcm_token': null})
-          .eq('id', userId);
+
+      await _sb.from('users').update({'fcm_token': null}).eq('id', userId);
 
       print('✅ FCM 토큰 삭제 완료');
     } catch (e) {
@@ -381,8 +379,7 @@ class FCMService {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp();
   }
   await FCMService.backgroundMessageHandler(message);
 }
-

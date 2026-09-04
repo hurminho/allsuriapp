@@ -17,7 +17,7 @@ class WorkHubScreen extends StatelessWidget {
       length: 3,
       initialIndex: initialTab.clamp(0, 2),
       child: BusinessAppShell(
-        title: '공사 관리',
+        title: '오더',
         appBarBottom: const TabBar(
           labelColor: BusinessTokens.blue,
           unselectedLabelColor: BusinessTokens.mutedText,

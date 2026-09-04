@@ -37,7 +37,7 @@ class BusinessBottomNavigation extends StatelessWidget {
                 index: 1,
                 icon: Icons.handyman_outlined,
                 selectedIcon: Icons.handyman_rounded,
-                label: '공사 관리',
+                label: '오더',
               ),
               Expanded(
                 child: Semantics(

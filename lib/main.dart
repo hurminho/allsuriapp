@@ -25,7 +25,6 @@ import 'services/community_service.dart';
 import 'services/fcm_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'firebase_options.dart';
 import 'providers/user_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -56,7 +55,8 @@ void main() async {
   };
   // Kakao SDK 초기화 (dart-define, 없으면 프로덕션 기본값)
   final kakaoKey = AppConfig.kakaoNativeAppKey;
-  print('🔍 [Main] KAKAO_NATIVE_APP_KEY: ${kakaoKey.isNotEmpty ? "로드됨(***)" : "❌ 비어있음"}');
+  print(
+      '🔍 [Main] KAKAO_NATIVE_APP_KEY: ${kakaoKey.isNotEmpty ? "로드됨(***)" : "❌ 비어있음"}');
 
   if (kakaoKey.isNotEmpty) {
     kakao.KakaoSdk.init(nativeAppKey: kakaoKey);
@@ -67,16 +67,20 @@ void main() async {
   // Supabase 초기화 (Auth 포함)
   // ⚠️ SUPABASE_URL / SUPABASE_ANON_KEY 는 빌드 시 --dart-define-from-file 로 넣어야 함.
   //    비어 있으면 "No host specified in URI /auth/v1/token" 등 오류가 난다 (Apple 로그인 포함).
-  print('🔍 Supabase URL: ${SupabaseConfig.url.isNotEmpty ? "${SupabaseConfig.url.length > 40 ? "${SupabaseConfig.url.substring(0, 40)}..." : SupabaseConfig.url}" : "❌ 비어 있음"}');
-  print('🔍 Supabase Key: ${SupabaseConfig.anonKey.isNotEmpty ? "✅ 로드됨" : "❌ 비어있음"}');
+  print(
+      '🔍 Supabase URL: ${SupabaseConfig.url.isNotEmpty ? "${SupabaseConfig.url.length > 40 ? "${SupabaseConfig.url.substring(0, 40)}..." : SupabaseConfig.url}" : "❌ 비어 있음"}');
+  print(
+      '🔍 Supabase Key: ${SupabaseConfig.anonKey.isNotEmpty ? "✅ 로드됨" : "❌ 비어있음"}');
 
   if (SupabaseConfig.url.isEmpty || SupabaseConfig.anonKey.isEmpty) {
     print('');
     print('❌ [Main] SUPABASE_URL 또는 SUPABASE_ANON_KEY가 주입되지 않았습니다.');
     print('   → 프로젝트 루트에 dart_defines.json 을 만들고 Supabase 값을 넣은 뒤:');
-    print('   → flutter run --release --dart-define-from-file=dart_defines.json');
+    print(
+        '   → flutter run --release --dart-define-from-file=dart_defines.json');
     print('   → 또는 ./run_release.sh / ./run_app.sh 사용');
-    print('   → 템플릿: example_dart_defines.json 참고 (복사 후 dart_defines.json 으로 저장)');
+    print(
+        '   → 템플릿: example_dart_defines.json 참고 (복사 후 dart_defines.json 으로 저장)');
     print('');
   }
 
@@ -84,7 +88,7 @@ void main() async {
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
   );
-  
+
   // 알림 서비스 초기화 (서로 독립적이므로 병렬 실행)
   await Future.wait([
     NotificationService().initialize(),
@@ -95,7 +99,7 @@ void main() async {
       },
     ),
   ]);
-  
+
   // iOS/Android: 앱 포그라운드 진입 시 앱 아이콘 배지 제거
   if (!kIsWeb) {
     WidgetsBinding.instance.addObserver(_BadgeLifecycleObserver());
@@ -124,9 +128,9 @@ Future<void> _initFirebaseMessaging() async {
   bool firebaseReady = false;
   try {
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      ).timeout(
+      // 모바일은 각 플랫폼의 google-services.json /
+      // GoogleService-Info.plist를 단일 진실 공급원으로 사용한다.
+      await Firebase.initializeApp().timeout(
         const Duration(seconds: 5),
         onTimeout: () {
           debugPrint('⚠️ Firebase 초기화 타임아웃');
@@ -138,7 +142,8 @@ Future<void> _initFirebaseMessaging() async {
     }
     firebaseReady = true;
   } catch (e) {
-    if (e.toString().contains('duplicate-app') || e.toString().contains('already exists')) {
+    if (e.toString().contains('duplicate-app') ||
+        e.toString().contains('already exists')) {
       debugPrint('ℹ️ [Main] Firebase 네이티브 초기화됨 - FCM 계속 진행');
       firebaseReady = true;
     } else {
@@ -181,10 +186,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => CommunityService()),
         // UserProvider는 AuthService에 의존하므로 마지막에 생성
         ChangeNotifierProxyProvider<AuthService, UserProvider>(
-          create: (context) => UserProvider(Provider.of<AuthService>(context, listen: false)),
+          create: (context) =>
+              UserProvider(Provider.of<AuthService>(context, listen: false)),
           // AuthService는 싱글톤이므로 매번 새 UserProvider를 만들지 않고 재사용한다.
           // (auth notify마다 새 인스턴스 생성 + 리스너 재등록으로 인한 광역 rebuild/누수 방지)
-          update: (context, authService, previous) => previous ?? UserProvider(authService),
+          update: (context, authService, previous) =>
+              previous ?? UserProvider(authService),
         ),
       ],
       child: DynamicColorBuilder(

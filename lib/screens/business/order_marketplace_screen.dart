@@ -264,6 +264,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
           postedBy: widget.createdByUserId,
           limit: _pageSize,
           offset: 0,
+          enrichOwners: widget.createdByUserId == null,
         ),
       ]);
 
@@ -342,6 +343,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
         postedBy: widget.createdByUserId,
         limit: _pageSize,
         offset: _serverOffset,
+        enrichOwners: widget.createdByUserId == null,
       );
       if (!mounted) return;
       final filtered = _filterListings(next, currentUserId);

@@ -15,6 +15,7 @@ class MarketplaceService extends ChangeNotifier {
     String? claimedBy,
     int? limit,
     int? offset,
+    bool enrichOwners = true,
   }) async {
     try {
       var query =
@@ -54,7 +55,7 @@ class MarketplaceService extends ChangeNotifier {
           .cast<String>()
           .toList();
 
-      if (postedByIds.isNotEmpty) {
+      if (enrichOwners && postedByIds.isNotEmpty) {
         // 한 번의 쿼리로 모든 사업자 정보 조회
         final usersData = await _sb
             .from('users')

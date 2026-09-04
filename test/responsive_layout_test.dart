@@ -131,7 +131,8 @@ void main() {
         )));
 
         expect(tester.takeException(), isNull);
-        final button = tester.getSize(find.byWidgetPredicate((w) => w is FilledButton));
+        final button =
+            tester.getSize(find.byWidgetPredicate((w) => w is FilledButton));
         expect(button.height, greaterThanOrEqualTo(44));
       });
     });
@@ -160,7 +161,7 @@ void main() {
       ));
 
       expect(tester.takeException(), isNull);
-      for (final label in ['홈', '공사 관리', '오더 만들기', '채팅', '내 정보']) {
+      for (final label in ['홈', '오더', '오더 만들기', '채팅', '내 정보']) {
         expect(find.text(label), findsOneWidget);
       }
     });
