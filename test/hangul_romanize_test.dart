@@ -34,4 +34,35 @@ void main() {
       }
     });
   });
+
+  group('slug 본문 생성', () {
+    // 이전 구현은 잘라낸 문자열에 원본 상호명 길이로 substring 을 호출해
+    // 공백·특수문자가 든 상호명마다 RangeError 로 링크 생성이 실패했습니다.
+    test('공백·특수문자가 있어도 예외 없이 만든다', () {
+      const names = [
+        '김 배관 설비',
+        '우리집 수리센터',
+        '(주)대성설비',
+        'A/S 전문 수리점',
+        '서문페인트',
+      ];
+
+      for (final name in names) {
+        expect(() => buildSlugBase(name), returnsNormally, reason: name);
+        expect(RegExp(r'^[a-z0-9-]+$').hasMatch(buildSlugBase(name)), isTrue,
+            reason: name);
+      }
+    });
+
+    test('아주 긴 상호명도 최대 길이로 자른다', () {
+      final base = buildSlugBase('서울강남종합설비인테리어리모델링전문업체');
+      expect(base.length, lessThanOrEqualTo(20));
+      expect(base.endsWith('-'), isFalse);
+    });
+
+    test('변환할 글자가 없으면 기본값을 쓴다', () {
+      expect(buildSlugBase('!!! @@@'), 'allsuri');
+      expect(buildSlugBase(''), 'allsuri');
+    });
+  });
 }

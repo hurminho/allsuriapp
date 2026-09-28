@@ -54,3 +54,17 @@ String slugifyBusinessName(String input) {
       .replaceAll(RegExp(r'-{2,}'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
 }
+
+/// 개인 오더 링크 slug 의 본문을 만듭니다(임의 숫자 접미사 제외).
+///
+/// 길이는 반드시 변환된 문자열 자신을 기준으로 자릅니다.
+/// 원본 상호명 길이로 자르면 공백·특수문자가 빠진 만큼 짧아져 RangeError 가 납니다.
+String buildSlugBase(String businessName, {int maxLength = 20}) {
+  var base = slugifyBusinessName(businessName);
+
+  if (base.length > maxLength) {
+    base = base.substring(0, maxLength).replaceAll(RegExp(r'-+$'), '');
+  }
+
+  return base.isEmpty ? 'allsuri' : base;
+}
