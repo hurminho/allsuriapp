@@ -11,6 +11,7 @@ import '../../widgets/business/business_section_header.dart';
 import '../../widgets/business/business_status_chip.dart';
 import '../../widgets/business/business_tokens.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/personal_order_link_nav.dart';
 import '../../widgets/star_rating.dart';
 import '../../services/review_service.dart';
 import '../../services/media_service.dart';
@@ -579,6 +580,22 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                     ),
                   ],
                   subtitle: '고객이 전문가를 찾을 때 공개되는 정보입니다.',
+                ),
+                const SizedBox(height: BusinessTokens.space16),
+                _buildSection(
+                  '영업 도구',
+                  [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.link),
+                      title: const Text('개인 오더 링크'),
+                      subtitle: const Text(
+                        '단골 고객과 지인에게 공유하세요. 링크를 통한 견적 요청은 사장님에게만 바로 전달됩니다.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => openPersonalOrderLinkManagement(context),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: BusinessTokens.space16),
                 _buildSection(

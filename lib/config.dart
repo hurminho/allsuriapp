@@ -21,6 +21,12 @@ class AppConfig {
     defaultValue: '9462c73fdeaba67181aadcc46af6d293',
   );
 
+  /// 개인 오더 링크 공개 페이지 기준 URL. 끝에 슬래시를 넣지 않습니다.
+  static const String publicWebBaseUrl = String.fromEnvironment(
+    'PUBLIC_WEB_BASE_URL',
+    defaultValue: 'https://allsuricommerce.netlify.app',
+  );
+
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 

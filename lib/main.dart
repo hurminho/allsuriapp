@@ -22,6 +22,7 @@ import 'services/chat_service.dart';
 import 'services/notification_service.dart';
 import 'services/local_notification_service.dart';
 import 'services/community_service.dart';
+import 'services/personal_order_link_service.dart';
 import 'services/fcm_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -184,6 +185,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => PaymentService()),
         ChangeNotifierProvider(create: (context) => ChatService()),
         ChangeNotifierProvider(create: (context) => CommunityService()),
+        ChangeNotifierProvider(create: (context) => PersonalOrderLinkService()),
         // UserProvider는 AuthService에 의존하므로 마지막에 생성
         ChangeNotifierProxyProvider<AuthService, UserProvider>(
           create: (context) =>

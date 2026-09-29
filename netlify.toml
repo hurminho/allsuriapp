@@ -88,6 +88,12 @@
   force = true
 
 [[redirects]]
+  from = "/allsuri/*"
+  to = "/allsuri.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/order/*"
   to = "/order.html"
   status = 200

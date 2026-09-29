@@ -159,4 +159,53 @@ class OrderService extends ChangeNotifier {
       _notifyListenersSafely();
     }
   }
+
+  /// 개인 링크를 통한 오더 생성
+  /// 개인 링크 정보를 자동으로 설정하고 직접 배정합니다.
+  Future<app_models.Order> createPersonalLinkOrder({
+    required app_models.Order order,
+    required String personalOrderLinkId,
+    required String contractorId,
+    String? utmSource,
+    String? utmMedium,
+    String? utmCampaign,
+    String? referrerDomain,
+  }) async {
+    _isLoading = true;
+    _notifyListenersSafely();
+
+    try {
+      // 개인 링크 필드 설정
+      final personalLinkOrder = order.copyWith(
+        routingType: 'personal_link',
+        personalOrderLinkId: personalOrderLinkId,
+        sourceContractorId: contractorId,
+        assignedContractorId: contractorId,
+        assignmentLockedAt: DateTime.now(),
+        attributionSource: 'personal_link',
+        utmSource: utmSource,
+        utmMedium: utmMedium,
+        utmCampaign: utmCampaign,
+        referrerDomain: referrerDomain,
+      );
+
+      final inserted = await _sb
+          .from('orders')
+          .insert(personalLinkOrder.toMap())
+          .select()
+          .single();
+
+      final created = app_models.Order.fromMap(Map<String, dynamic>.from(inserted));
+      _orders.add(created);
+
+      AppLog.debug('OrderService', '개인 링크 오더 생성 완료');
+      return created;
+    } catch (e, stack) {
+      AppLog.error('OrderService', e, stack: stack, message: '개인 링크 오더 생성 실패');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      _notifyListenersSafely();
+    }
+  }
 }

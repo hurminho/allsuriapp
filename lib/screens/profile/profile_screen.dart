@@ -7,6 +7,7 @@ import '../../widgets/business/business_tab_scope.dart';
 import '../../widgets/business/business_tokens.dart';
 import '../../models/user.dart';
 import '../../services/auth_service.dart';
+import '../../utils/personal_order_link_nav.dart';
 import '../business/business_profile_screen.dart';
 import '../business/rate_card_screen.dart';
 import '../admin/ad_management_screen.dart';
@@ -250,6 +251,14 @@ class ProfileScreen extends StatelessWidget {
               );
             },
           ),
+        if (_canManagePersonalOrderLink(user))
+          _buildActionTile(
+            context,
+            Icons.link,
+            '개인 오더 링크',
+            () => openPersonalOrderLinkManagement(context),
+            subtitle: '단골 고객과 지인에게 공유하세요',
+          ),
         // 표준 단가 (등록하면 가격 기준 협력업체로 노출됩니다)
         if (user.role == 'business')
           _buildActionTile(
@@ -307,12 +316,18 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  bool _canManagePersonalOrderLink(User user) {
+    final status = (user.businessStatus ?? '').toLowerCase();
+    return user.role == 'business' || status == 'approved';
+  }
+
   Widget _buildActionTile(
     BuildContext context,
     IconData icon,
     String title,
     VoidCallback onTap, {
     bool isDestructive = false,
+    String? subtitle,
   }) {
     return Card(
       child: InkWell(
@@ -344,13 +359,29 @@ class ProfileScreen extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF102A43),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF102A43),
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const Icon(

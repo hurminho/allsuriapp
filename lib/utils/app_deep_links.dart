@@ -2,6 +2,8 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:allsuriapp/app_navigator_key.dart';
 import 'package:allsuriapp/screens/business/order_marketplace_screen.dart';
+import 'package:allsuriapp/screens/web/personal_order_link_public_page.dart';
+import 'package:allsuriapp/utils/personal_order_link_nav.dart';
 
 bool _appDeepLinksInitialized = false;
 
@@ -35,6 +37,21 @@ void _handleDeepLink(Uri uri) {
   }
 
   debugPrint('🔗 [DeepLink] 처리 시작: ${uri.toString()}');
+
+  final personalSlug = personalOrderLinkSlugFromUri(uri);
+  if (personalSlug != null) {
+    debugPrint('✅ [DeepLink] 개인 오더 링크: $personalSlug');
+    Future.delayed(const Duration(milliseconds: 400), () {
+      final navigator = navigatorKey.currentState;
+      if (navigator == null) return;
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => PersonalOrderLinkPublicPage(slug: personalSlug),
+        ),
+      );
+    });
+    return;
+  }
 
   if ((uri.scheme == 'allsuri' || uri.scheme == 'https') &&
       (uri.host == 'order' || uri.path.startsWith('/order'))) {

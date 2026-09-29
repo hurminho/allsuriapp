@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,9 +6,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/version_service.dart';
 import '../utils/app_deep_links.dart';
+import '../utils/personal_order_link_nav.dart';
 import '../widgets/update_dialog.dart';
 import '../theme/business_theme.dart';
 import 'home/home_screen.dart';
+import 'web/personal_order_link_public_page.dart';
+import 'business/personal_order_link_management_screen.dart';
+
+/// 디버그 모드에서 로그인 우회하여 특정 화면으로 바로 이동
+/// true로 설정하면 개인 링크 관리 화면으로 바로 이동 (테스트 완료 후 false로 유지)
+const bool _debugBypassLogin = false;
 
 /// 앱 시작 화면.
 ///
@@ -32,6 +40,27 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _init() async {
     await Future.delayed(const Duration(milliseconds: 150)); // 최소 스플래시 시간(깜빡임 방지)
     if (!mounted) return;
+
+    // 디버그 모드에서 로그인 우회 - 개인 링크 관리 화면으로 바로 이동
+    if (_debugBypassLogin) {
+      debugPrint('🔧 [DEBUG] 로그인 우회 - 개인 링크 관리 화면으로 이동');
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => const PersonalOrderLinkManagementScreen(),
+        ),
+      );
+      return;
+    }
+
+    final publicSlug = kIsWeb ? personalOrderLinkSlugFromUri(Uri.base) : null;
+    if (publicSlug != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PersonalOrderLinkPublicPage(slug: publicSlug),
+        ),
+      );
+      return;
+    }
 
     // 강제 업데이트 대상이면 아래 await가 다이얼로그가 닫히기 전까지 완료되지 않으므로
     // 자연스럽게 앱 사용(자동 로그인/홈 진입)을 막게 됩니다.

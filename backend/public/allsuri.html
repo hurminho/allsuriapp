@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>올수리 개인 오더 링크</title>
+  <meta name="description" content="이 페이지에서 접수한 수리 요청은 해당 사업자에게만 직접 전달됩니다.">
+  <meta property="og:title" content="올수리 개인 오더 링크">
+  <meta property="og:description" content="로그인 없이 이 사장님에게만 견적 요청을 보낼 수 있습니다.">
+  <meta property="og:type" content="website">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --blue: #2563EB;
+      --blue-dark: #1D4ED8;
+      --navy: #0B2545;
+      --canvas: #F9FAFB;
+      --text: #111827;
+      --muted: #6B7280;
+      --border: #E5E7EB;
+      --danger: #C9403A;
+      --success: #1F8A70;
+    }
+    body {
+      font-family: 'Noto Sans KR', -apple-system, sans-serif;
+      background: var(--canvas);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 16px 16px 48px; }
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #2563EB, #1E40AF);
+      color: #fff;
+      border: 0;
+    }
+    .avatar {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: rgba(255,255,255,.2); overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 800;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    h1 { font-size: 22px; margin: 12px 0 6px; }
+    .muted { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .chip {
+      display: inline-block; padding: 6px 10px; border-radius: 999px;
+      background: #EFF6FF; color: var(--blue); font-size: 12px; font-weight: 700;
+      margin: 0 6px 6px 0;
+    }
+    .banner {
+      background: #EFF6FF; border: 1px solid #BFDBFE; color: var(--navy);
+      border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.5;
+      font-weight: 600; margin: 16px 0;
+    }
+    label { display: block; font-size: 13px; font-weight: 700; margin: 0 0 6px; }
+    input, textarea, select {
+      width: 100%; padding: 12px 14px; border: 1.5px solid var(--border);
+      border-radius: 12px; font: inherit; margin-bottom: 12px; outline: none;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--blue); }
+    textarea { min-height: 96px; resize: vertical; }
+    .btn {
+      width: 100%; border: 0; border-radius: 14px; padding: 16px;
+      background: var(--blue); color: #fff; font: inherit; font-weight: 800;
+      cursor: pointer;
+    }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn.secondary { background: #fff; color: var(--blue); border: 2px solid var(--blue); }
+    .error { color: var(--danger); text-align: center; padding: 48px 16px; }
+    .hidden { display: none !important; }
+    .consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); margin: 8px 0 16px; }
+    .consent input { width: auto; margin: 3px 0 0; }
+    .done { text-align: center; padding: 32px 8px; }
+    .done h2 { margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="loading" class="card">페이지를 불러오는 중입니다...</div>
+    <div id="error" class="error hidden"></div>
+
+    <div id="paused" class="hidden">
+      <div class="card">
+        <h1>지금은 새 요청을 받지 않습니다</h1>
+        <p class="muted" id="pausedName"></p>
+        <p class="muted" style="margin-top:8px;">이 사장님은 현재 개인 링크 접수를 잠시 멈춰 두었습니다.</p>
+      </div>
+    </div>
+
+    <div id="page" class="hidden">
+      <div class="card hero">
+        <div class="avatar" id="avatar">올</div>
+        <h1 id="displayName">사장님</h1>
+        <p id="headline"></p>
+        <div id="meta" style="margin-top:12px;"></div>
+      </div>
+      <div class="banner" id="directBanner"></div>
+      <div class="card hidden" id="introCard"></div>
+      <button class="btn" id="startBtn">무료 견적 요청하기</button>
+    </div>
+
+    <div id="form" class="hidden">
+      <div class="card">
+        <h1>견적 요청</h1>
+        <p class="muted" id="formHint" style="margin-bottom:16px;"></p>
+        <label>수리 종류</label>
+        <select id="category">
+          <option value="">선택하세요</option>
+          <option>누수</option>
+          <option>화장실</option>
+          <option>배관</option>
+          <option>난방</option>
+          <option>주방</option>
+          <option>리모델링</option>
+          <option>기타</option>
+        </select>
+        <label>증상</label>
+        <textarea id="symptoms" placeholder="어디가 어떻게 불편한지 알려주세요"></textarea>
+        <label>주소</label>
+        <input id="address" placeholder="방문할 주소">
+        <label>연락처</label>
+        <input id="phone" type="tel" placeholder="010-0000-0000" inputmode="tel">
+        <label>이름 (선택)</label>
+        <input id="name" placeholder="고객 이름">
+        <label class="consent">
+          <input type="checkbox" id="agree">
+          <span>수리 진행을 위해 이름, 연락처, 주소, 증상 정보를 이 페이지의 사업자에게 제공하는 데 동의합니다. 이 요청은 해당 사업자에게만 전달됩니다.</span>
+        </label>
+        <div id="formError" class="muted" style="color:var(--danger);margin-bottom:12px;"></div>
+        <button class="btn" id="submitBtn">이 사장님에게만 보내기</button>
+        <button class="btn secondary" id="backBtn" style="margin-top:8px;">소개로 돌아가기</button>
+      </div>
+    </div>
+
+    <div id="done" class="hidden">
+      <div class="card done">
+        <div style="font-size:40px;">✅</div>
+        <h2>요청이 전달되었습니다</h2>
+        <p class="muted" id="doneHint"></p>
+        <a class="btn" href="/my-order" style="display:block;text-decoration:none;margin-top:20px;">요청 현황 확인</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://iiunvogtqssxaxdnhqaj.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlpdW52b2d0cXNzeGF4ZG5ocWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTUzMTksImV4cCI6MjA3MDUzMTMxOX0.PjA01VwTmJwEGEYTc-g1UOR7FkeGTeN7smIQXyusKP8';
+    const headers = {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    const parts = location.pathname.split('/').filter(Boolean);
+    const slugIndex = parts.indexOf('allsuri');
+    const slug = (slugIndex >= 0 ? parts[slugIndex + 1] : '').toLowerCase();
+    const params = new URLSearchParams(location.search);
+    let link = null;
+
+    function show(id) {
+      ['loading', 'error', 'paused', 'page', 'form', 'done'].forEach((key) => {
+        document.getElementById(key).classList.toggle('hidden', key !== id);
+      });
+    }
+
+    function setError(message) {
+      document.getElementById('error').textContent = message;
+      show('error');
+    }
+
+    async function rest(path, options) {
+      const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+        ...options,
+        headers: { ...headers, ...(options && options.headers) },
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || ('요청 실패 ' + res.status));
+      return text ? JSON.parse(text) : null;
+    }
+
+    async function track(eventType) {
+      if (!link) return;
+      try {
+        await rest('personal_order_link_events', {
+          method: 'POST',
+          body: JSON.stringify({
+            personal_order_link_id: link.id,
+            event_type: eventType,
+            utm_source: params.get('utm_source'),
+            utm_medium: params.get('utm_medium'),
+            utm_campaign: params.get('utm_campaign'),
+            referrer_domain: document.referrer ? new URL(document.referrer).hostname : null,
+          }),
+        });
+      } catch (_) {}
+    }
+
+    async function load() {
+      if (!slug || slug.length < 3) {
+        setError('유효하지 않은 링크입니다.');
+        return;
+      }
+      try {
+        const rows = await rest(
+          'personal_order_links?slug_normalized=eq.' + encodeURIComponent(slug) + '&select=*'
+        );
+        link = Array.isArray(rows) ? rows[0] : null;
+        if (!link) {
+          setError('링크를 찾을 수 없습니다.');
+          return;
+        }
+
+        const name = link.display_name || '사장님';
+        document.title = name + ' | 올수리';
+        document.querySelector('meta[property="og:title"]').setAttribute('content', name + ' | 올수리');
+
+        if (link.status !== 'active' || link.accepts_direct_orders === false) {
+          document.getElementById('pausedName').textContent = name;
+          show('paused');
+          return;
+        }
+
+        document.getElementById('displayName').textContent = name;
+        document.getElementById('headline').textContent = link.headline || '수리 요청을 바로 보내세요';
+        document.getElementById('directBanner').textContent =
+          '이 페이지에서 접수한 요청은 ' + name + '에게만 직접 전달됩니다. 다른 사업자에게 공개되지 않습니다.';
+        document.getElementById('formHint').textContent = name + '에게만 견적 요청이 전달됩니다.';
+        document.getElementById('doneHint').textContent = name + '이 확인하면 연락드립니다. 앱 설치는 필요하지 않습니다.';
+
+        const avatar = document.getElementById('avatar');
+        if (link.profile_image_url) {
+          avatar.innerHTML = '<img alt="" src="' + link.profile_image_url + '">';
+        } else {
+          avatar.textContent = name.charAt(0);
+        }
+
+        const chips = []
+          .concat(link.supported_categories || [])
+          .concat(link.service_regions || []);
+        document.getElementById('meta').innerHTML = chips
+          .map((item) => '<span class="chip">' + item + '</span>')
+          .join('');
+
+        const introCard = document.getElementById('introCard');
+        if (link.introduction) {
+          introCard.classList.remove('hidden');
+          introCard.textContent = link.introduction;
+        } else {
+          introCard.classList.add('hidden');
+        }
+
+        show('page');
+        await track('page_view');
+      } catch (e) {
+        setError('페이지를 불러오지 못했습니다.');
+      }
+    }
+
+    document.getElementById('startBtn').onclick = async () => {
+      show('form');
+      await track('quote_start');
+    };
+    document.getElementById('backBtn').onclick = () => show('page');
+    document.getElementById('submitBtn').onclick = async () => {
+      const category = document.getElementById('category').value.trim();
+      const symptoms = document.getElementById('symptoms').value.trim();
+      const address = document.getElementById('address').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const name = document.getElementById('name').value.trim() || '고객';
+      const agree = document.getElementById('agree').checked;
+      const formError = document.getElementById('formError');
+      formError.textContent = '';
+
+      if (!category || !symptoms || !address || !phone) {
+        formError.textContent = '필수 정보를 모두 입력해 주세요.';
+        return;
+      }
+      if (!agree) {
+        formError.textContent = '개인정보 제공에 동의해 주세요.';
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      try {
+        const visitDate = new Date();
+        visitDate.setDate(visitDate.getDate() + 1);
+        await rest('orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: category + ' 수리 요청',
+            description: symptoms,
+            address: address,
+            visitDate: visitDate.toISOString(),
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            images: [],
+            category: category,
+            customerName: name,
+            customerPhone: phone,
+            isAnonymous: true,
+            routing_type: 'personal_link',
+            personal_order_link_id: link.id,
+            source_contractor_id: link.contractor_id,
+            assigned_contractor_id: link.contractor_id,
+            assignment_locked_at: new Date().toISOString(),
+            attribution_source: 'personal_link',
+            utm_source: params.get('utm_source'),
+            utm_medium: params.get('utm_medium'),
+            utm_campaign: params.get('utm_campaign'),
+          }),
+        });
+        await track('quote_submitted');
+        show('done');
+      } catch (e) {
+        formError.textContent = '요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        submitBtn.disabled = false;
+      }
+    };
+
+    load();
+  </script>
+</body>
+</html>
