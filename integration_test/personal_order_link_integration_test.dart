@@ -34,7 +34,7 @@ void main() {
   late OrderService orderService;
   late String testContractorId;
   late String testSlug;
-  late String? createdLinkId;
+  String? createdLinkId;
 
   setUpAll(() async {
     await initSupabase();
