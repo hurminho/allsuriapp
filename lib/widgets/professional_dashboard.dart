@@ -13,10 +13,8 @@ import '../theme/business_theme.dart';
 import '../screens/business/estimate_requests_screen.dart';
 import '../screens/business/work_hub_screen.dart';
 import '../screens/notification/notification_screen.dart';
-import '../screens/business/order_marketplace_screen.dart';
 import '../screens/business/my_order_management_screen.dart';
 import '../screens/business/pending_approval_screen.dart';
-import '../screens/profile/my_revenue_screen.dart';
 import 'business/business_tab_scope.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -25,7 +23,6 @@ import '../services/order_service.dart';
 import '../services/push_permission_service.dart';
 import 'business/business_app_bar.dart';
 import 'business/business_empty_state.dart';
-import 'business/business_lead_card.dart';
 import 'business/business_primary_button.dart';
 import 'business/business_section_header.dart';
 import 'business/business_tokens.dart';
@@ -148,7 +145,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         'myBids': results[3],
         'myOrders': results[4],
         'estimateRequests': estimateRequests.length,
-        'newOrderItems': estimateRequests.take(3).toList(),
+        'newOrderItems': estimateRequests.take(10).toList(),
       };
     } catch (e) {
       debugPrint('❌ [_loadDashboardData] 에러: $e');
@@ -320,13 +317,13 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                                     if (FeatureFlags.adsEnabled)
                                       const SizedBox(height: 24),
                                     BusinessPrimaryButton(
-                                      label: '내 매출 보기',
-                                      icon: Icons.trending_up_rounded,
+                                      label: '내 입찰 목록',
+                                      icon: Icons.description_outlined,
                                       onPressed: () => Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) =>
-                                              const MyRevenueScreen(),
+                                              const WorkHubScreen(initialTab: 0),
                                         ),
                                       ),
                                     ),
@@ -434,7 +431,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             children: [
               Expanded(
                 child: _summaryMetric(
-                  '신규 요청',
+                  '신규 오더',
                   data['estimateRequests'] ?? 0,
                   () => Navigator.push(
                     context,
@@ -460,7 +457,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
               _summaryDivider(),
               Expanded(
                 child: _summaryMetric(
-                  '공사 진행',
+                  '진행 중인 오더',
                   data['inProgress'] ?? 0,
                   () => Navigator.push(
                     context,
@@ -523,42 +520,50 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     final orders = rawItems is List
         ? rawItems.whereType<app_models.Order>().toList()
         : const <app_models.Order>[];
-    if (orders.isEmpty) {
-      return BusinessEmptyState(
-        icon: Icons.inbox_outlined,
-        title: '입찰 가능한 신규 오더가 없습니다',
-        subtitle: '새 요청이 등록되면 이곳에 바로 표시됩니다.',
-        actionLabel: '새로고침',
-        onAction: _refreshData,
-      );
-    }
 
-    return Column(
-      children: [
-        for (int index = 0; index < orders.length; index++) ...[
-          BusinessLeadCard(
-            title: orders[index].title,
-            category: orders[index].equipmentType,
-            region: BusinessTheme.regionFromAddress(orders[index].address),
-            timeLabel: BusinessTheme.relativeTime(orders[index].createdAt),
-            symptom: orders[index].description,
-            amountLabel: orders[index].estimatedPrice > 0
-                ? '예상 ${BusinessTheme.formatWon(orders[index].estimatedPrice)}'
-                : null,
-            hasPhoto: orders[index].images.isNotEmpty,
-            isNew: BusinessTheme.isNewLead(orders[index].createdAt),
-            isUrgent: BusinessTheme.isVisitSoon(orders[index].visitDate),
-            canBid: true,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const EstimateRequestsScreen(),
+    // 컴팩트 카드 높이: 약 72px, 항상 4개 영역 확보
+    const double compactCardHeight = 72.0;
+    const double cardSpacing = 8.0;
+    const int fixedSlotCount = 4;
+    const double containerHeight = 
+        (compactCardHeight * fixedSlotCount) + (cardSpacing * (fixedSlotCount - 1));
+
+    // 5개 이상이면 스크롤, 아니면 고정
+    final bool hasMoreThanFive = orders.length > fixedSlotCount;
+    final int displayCount = hasMoreThanFive ? orders.length : fixedSlotCount;
+
+    return SizedBox(
+      height: containerHeight,
+      child: ListView.separated(
+        physics: hasMoreThanFive 
+            ? const AlwaysScrollableScrollPhysics() 
+            : const NeverScrollableScrollPhysics(),
+        itemCount: displayCount,
+        separatorBuilder: (_, __) => const SizedBox(height: cardSpacing),
+        itemBuilder: (context, index) {
+          // 오더가 있으면 카드 표시, 없으면 빈 슬롯 표시
+          if (index < orders.length) {
+            final order = orders[index];
+            return _CompactOrderCard(
+              title: order.title,
+              category: order.equipmentType,
+              region: BusinessTheme.regionFromAddress(order.address),
+              timeLabel: BusinessTheme.relativeTime(order.createdAt),
+              isNew: BusinessTheme.isNewLead(order.createdAt),
+              isUrgent: BusinessTheme.isVisitSoon(order.visitDate),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const EstimateRequestsScreen(),
+                ),
               ),
-            ),
-          ),
-          if (index != orders.length - 1) const SizedBox(height: 12),
-        ],
-      ],
+            );
+          } else {
+            // 빈 슬롯 - 오더를 기다리는 상태
+            return _EmptyOrderSlot();
+          }
+        },
+      ),
     );
   }
 
@@ -568,20 +573,8 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       child: Column(
         children: [
           _workQueueItem(
-            icon: Icons.description_outlined,
-            label: '내 입찰',
-            value: '${data['myBids'] ?? 0}건 대기',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const WorkHubScreen(initialTab: 0),
-              ),
-            ),
-          ),
-          const Divider(height: 1, color: BusinessTokens.border),
-          _workQueueItem(
             icon: Icons.handyman_outlined,
-            label: '공사 관리',
+            label: '오더 관리',
             value: '${data['inProgress'] ?? 0}건 진행',
             onTap: () => Navigator.push(
               context,
@@ -592,21 +585,8 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           ),
           const Divider(height: 1, color: BusinessTokens.border),
           _workQueueItem(
-            icon: Icons.travel_explore_outlined,
-            label: '오더 찾기',
-            value: '${data['newOrders'] ?? 0}건 모집',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    const OrderMarketplaceScreen(showSuccessMessage: false),
-              ),
-            ),
-          ),
-          const Divider(height: 1, color: BusinessTokens.border),
-          _workQueueItem(
             icon: Icons.hub_outlined,
-            label: '내 오더',
+            label: '내가 낸 오더',
             value: '${data['myOrders'] ?? 0}건',
             onTap: () => Navigator.push(
               context,
@@ -834,6 +814,244 @@ class _DashboardAdCarouselState extends State<_DashboardAdCarousel> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// 신규 오더용 컴팩트 카드 - 높이 축소, 입찰 가능/견적 작성 우측 배치
+class _CompactOrderCard extends StatelessWidget {
+  final String title;
+  final String? category;
+  final String? region;
+  final String? timeLabel;
+  final bool isNew;
+  final bool isUrgent;
+  final VoidCallback? onTap;
+
+  const _CompactOrderCard({
+    required this.title,
+    this.category,
+    this.region,
+    this.timeLabel,
+    this.isNew = false,
+    this.isUrgent = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: BusinessTokens.border),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              // 좌측: 제목 및 메타 정보
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        if (category != null && category!.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: BusinessTokens.blueLight,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              category!,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: BusinessTokens.blue,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        if (isNew)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: BusinessTokens.blue,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '신규',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        if (isUrgent) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: BusinessTokens.danger,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '긴급',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: BusinessTokens.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (region != null) ...[
+                          Icon(Icons.place_outlined,
+                              size: 12, color: BusinessTokens.mutedText),
+                          const SizedBox(width: 2),
+                          Text(
+                            region!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: BusinessTokens.mutedText,
+                            ),
+                          ),
+                        ],
+                        if (region != null && timeLabel != null)
+                          const SizedBox(width: 8),
+                        if (timeLabel != null) ...[
+                          Icon(Icons.schedule_outlined,
+                              size: 12, color: BusinessTokens.mutedText),
+                          const SizedBox(width: 2),
+                          Text(
+                            timeLabel!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: BusinessTokens.mutedText,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // 우측: 입찰 가능 + 견적 작성
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline_rounded,
+                        size: 14,
+                        color: BusinessTokens.success,
+                      ),
+                      SizedBox(width: 3),
+                      Text(
+                        '입찰 가능',
+                        style: TextStyle(
+                          color: BusinessTokens.success,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '견적 작성',
+                        style: TextStyle(
+                          color: BusinessTokens.blue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: BusinessTokens.blue,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 빈 오더 슬롯 - 오더가 없는 자리 표시
+class _EmptyOrderSlot extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 72,
+      decoration: BoxDecoration(
+        color: BusinessTokens.canvas,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: BusinessTokens.border,
+          style: BorderStyle.solid,
+        ),
+      ),
+      child: Center(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.hourglass_empty_rounded,
+              size: 18,
+              color: BusinessTokens.mutedText.withValues(alpha: 0.6),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '오더를 기다리고 있어요..',
+              style: TextStyle(
+                fontSize: 13,
+                color: BusinessTokens.mutedText.withValues(alpha: 0.7),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
