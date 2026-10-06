@@ -360,6 +360,40 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       };
     }
 
+    // DELETE /listings — 오더 일괄 삭제
+    if (event.httpMethod === 'DELETE' && path === '/listings') {
+      const body = JSON.parse(event.body || '{}')
+      const rawIds: string[] = Array.isArray(body.ids) ? body.ids.map((id: unknown) => String(id)) : []
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      const ids = [...new Set(rawIds.filter((id) => uuidRe.test(id)))]
+      if (!ids.length) {
+        return { statusCode: 400, body: JSON.stringify({ success: false, message: '삭제할 오더를 선택해 주세요' }), headers: { 'Content-Type': 'application/json' } }
+      }
+      if (ids.length > 100) {
+        return { statusCode: 400, body: JSON.stringify({ success: false, message: '한 번에 100건까지만 삭제할 수 있습니다' }), headers: { 'Content-Type': 'application/json' } }
+      }
+      const idList = ids.join(',')
+      const sbHeaders = {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      }
+      await fetch(`${SUPABASE_URL}/rest/v1/order_bids?listing_id=in.(${idList})`, { method: 'DELETE', headers: sbHeaders })
+      const listed = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=in.(${idList})&select=jobid`, { headers: sbHeaders })
+      const listingRows = await listed.json()
+      const jobIds = Array.isArray(listingRows)
+        ? [...new Set(listingRows.map((row: { jobid?: string }) => row.jobid).filter((id): id is string => !!id && uuidRe.test(id)))]
+        : []
+      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=in.(${idList})`, { method: 'DELETE', headers: sbHeaders })
+      if (!delRes.ok) {
+        const errText = await delRes.text()
+        return { statusCode: 500, body: JSON.stringify({ success: false, message: '오더 삭제 실패', error: errText }), headers: { 'Content-Type': 'application/json' } }
+      }
+      if (jobIds.length) {
+        await fetch(`${SUPABASE_URL}/rest/v1/jobs?id=in.(${jobIds.join(',')})`, { method: 'DELETE', headers: sbHeaders })
+      }
+      return { statusCode: 200, body: JSON.stringify({ success: true, message: `${ids.length}건 삭제되었습니다`, deleted: ids.length }), headers: { 'Content-Type': 'application/json' } }
+    }
+
     // DELETE listing (오더 삭제)
     if (event.httpMethod === 'DELETE' && path.startsWith('/listings/')) {
       const listingId = path.split('/')[2]

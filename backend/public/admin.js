@@ -16,6 +16,7 @@ const callsPerPage = 15;
 let callsSortColumn = null;
 let callsSortDirection = 'asc';
 let allCalls = [];
+const selectedCallIds = new Set();
 
 // 관리자 토큰 (.env 파일의 ADMIN_TOKEN과 일치해야 함)
 const ADMIN_TOKEN = 'allsuri-admin-2024';
@@ -1493,6 +1494,7 @@ async function loadCalls() {
         allCalls = await apiCall('/calls');
         console.log('[LOAD ORDERS] Received:', allCalls.length, 'orders');
         callsPage = 1; // Reset to first page
+        selectedCallIds.clear();
         displayCalls();
     } catch (e) {
         console.error('오더 로드 오류:', e);
@@ -1506,6 +1508,7 @@ function displayCalls() {
     if (!container) return;
     if (!allCalls || allCalls.length === 0) {
         container.innerHTML = '<div class="loading">등록된 오더가 없습니다.</div>';
+        syncOrderSelectionUi();
         return;
     }
     
@@ -1594,6 +1597,9 @@ function displayCalls() {
         <table class="table">
             <thead>
                 <tr>
+                    <th onclick="event.stopPropagation()">
+                        <input type="checkbox" id="orderChkAll" onchange="toggleAllCalls(this.checked)" style="width:16px;height:16px;cursor:pointer;" aria-label="현재 페이지 전체 선택">
+                    </th>
                     <th class="sortable" data-column="title">제목</th>
                     <th class="sortable" data-column="location">위치</th>
                     <th class="sortable" data-column="category">카테고리</th>
@@ -1613,8 +1619,12 @@ function displayCalls() {
                     const bidCell = isUnawarded
                         ? `<span style="font-weight: 600; color: ${bidCount > 0 ? 'var(--primary)' : '#9ca3af'};" title="클릭하여 입찰 목록 확인">${bidCount}건</span>`
                         : (bidCount > 0 ? `${bidCount}건` : '-');
+                    const checked = selectedCallIds.has(String(item.id)) ? 'checked' : '';
                     return `
                     <tr style="cursor: pointer;" onclick="showCallDetail('${item.id}')">
+                        <td onclick="event.stopPropagation()">
+                            <input type="checkbox" class="order-chk" data-id="${item.id}" ${checked} onchange="toggleCallSelection(this)" style="width:16px;height:16px;cursor:pointer;" aria-label="오더 선택">
+                        </td>
                         <td><strong>${item.title || '-'}</strong></td>
                         <td>${item.location || item.region || '-'}</td>
                         <td>${item.category || '-'}</td>
@@ -1667,6 +1677,66 @@ function displayCalls() {
             displayCalls();
         });
     });
+    syncOrderSelectionUi();
+}
+
+function toggleCallSelection(checkbox) {
+    const id = checkbox.dataset.id;
+    if (!id) return;
+    if (checkbox.checked) selectedCallIds.add(id);
+    else selectedCallIds.delete(id);
+    syncOrderSelectionUi();
+}
+
+function toggleAllCalls(checked) {
+    document.querySelectorAll('.order-chk').forEach((checkbox) => {
+        checkbox.checked = checked;
+        const id = checkbox.dataset.id;
+        if (!id) return;
+        if (checked) selectedCallIds.add(id);
+        else selectedCallIds.delete(id);
+    });
+    syncOrderSelectionUi();
+}
+
+function syncOrderSelectionUi() {
+    const boxes = Array.from(document.querySelectorAll('.order-chk'));
+    const allBox = document.getElementById('orderChkAll');
+    if (allBox) {
+        allBox.checked = boxes.length > 0 && boxes.every((box) => box.checked);
+        allBox.indeterminate = !allBox.checked && boxes.some((box) => box.checked);
+    }
+    const button = document.getElementById('orderBulkDeleteBtn');
+    if (!button) return;
+    const count = selectedCallIds.size;
+    button.disabled = count === 0;
+    button.textContent = count > 0 ? `선택 삭제 (${count})` : '선택 삭제';
+}
+
+async function bulkDeleteCalls() {
+    const ids = Array.from(selectedCallIds);
+    if (!ids.length) return;
+    if (!confirm(`선택한 오더 ${ids.length}건을 삭제하시겠습니까?\n\n관련된 입찰과 공사 정보도 함께 삭제됩니다.`)) {
+        return;
+    }
+    const button = document.getElementById('orderBulkDeleteBtn');
+    if (button) button.disabled = true;
+    try {
+        const response = await apiCall('/listings', {
+            method: 'DELETE',
+            body: JSON.stringify({ ids }),
+        });
+        if (!response.success) {
+            throw new Error(response.message || '삭제 실패');
+        }
+        selectedCallIds.clear();
+        alert(`${ids.length}건이 삭제되었습니다.`);
+        await loadCalls();
+        loadDashboard();
+    } catch (error) {
+        alert('오더 삭제에 실패했습니다: ' + error.message);
+        syncOrderSelectionUi();
+    }
 }
 
 // 오더 페이지 변경
