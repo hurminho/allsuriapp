@@ -6,8 +6,8 @@
 
 | 프로젝트 | 경로 | Git remote |
 |---|---|---|
-| allsuriapp (앱 + Netlify Functions + DB) | `/Users/hurmin-ho/Documents/dev/allsuriapp` | `onondeveloper/allsuriapp` |
-| allsuri-web (공개 웹 + 관리자) | `/Users/hurmin-ho/Documents/dev/allsuri-web` | `onondeveloper/allsuri-web` |
+| allsuriapp (앱 + Netlify Functions + DB) | `/Users/hurmin-ho/Documents/dev/allsuriapp` | `hurminho/allsuriapp` |
+| allsuri-web (공개 웹 + 관리자) | `/Users/hurmin-ho/Documents/dev/allsuri-web` | `hurminho/allsuri-web` |
 
 현재 워크스페이스에서는 `allsuriapp/allsuri-web` 심볼릭 링크로 웹 저장소에 접근합니다.
 
