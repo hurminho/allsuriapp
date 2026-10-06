@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/order.dart' as app_models;
+import '../../services/auth_service.dart';
+import '../../services/marketplace_service.dart';
 import '../../services/order_service.dart';
 import '../../theme/business_theme.dart';
+import '../../utils/new_order_feed.dart';
 import '../../widgets/business/business_app_shell.dart';
 import '../../widgets/business/business_empty_state.dart';
 import '../../widgets/business/business_filter_chip.dart';
@@ -10,6 +13,7 @@ import '../../widgets/business/business_lead_card.dart';
 import '../../widgets/business/business_primary_button.dart';
 import '../../widgets/business/business_tokens.dart';
 import '../create_estimate_screen.dart';
+import 'order_marketplace_screen.dart';
 
 class EstimateRequestsScreen extends StatefulWidget {
   const EstimateRequestsScreen({super.key});
@@ -20,8 +24,9 @@ class EstimateRequestsScreen extends StatefulWidget {
 
 class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
   late OrderService _orderService;
-  List<app_models.Order> _requests = [];
-  List<app_models.Order> _filteredRequests = [];
+  final MarketplaceService _market = MarketplaceService();
+  List<NewOrderItem> _requests = [];
+  List<NewOrderItem> _filteredRequests = [];
   bool _isLoading = true;
   String? _loadError;
   String _selectedCategory = 'all';
@@ -49,11 +54,17 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
         _isLoading = true;
         _loadError = null;
       });
-      final allOrders = await _orderService.getOrders();
-      final availableOrders = allOrders
-          .where((order) => order.status == 'pending' && !order.isAwarded)
-          .toList();
-      availableOrders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.currentUser?.id ?? '';
+      final results = await Future.wait([
+        _market.listListings(status: 'all', enrichOwners: false),
+        _orderService.getOrders(),
+      ]);
+      final availableOrders = mergeNewOrderFeed(
+        listings: results[0] as List<Map<String, dynamic>>,
+        orders: results[1] as List<app_models.Order>,
+        contractorId: userId,
+      );
       setState(() {
         _requests = availableOrders;
         _filteredRequests = _applyFilters(availableOrders);
@@ -86,8 +97,9 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
     return parts.isEmpty ? '기타' : parts.first;
   }
 
-  List<app_models.Order> _applyFilters(List<app_models.Order> requests) {
-    return requests.where((request) {
+  List<NewOrderItem> _applyFilters(List<NewOrderItem> requests) {
+    return requests.where((item) {
+      final request = item.order;
       if (_selectedCategory != 'all' &&
           _mapCategory(request.equipmentType) != _selectedCategory) {
         return false;
@@ -122,7 +134,7 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
   List<String> get _regions {
     final set = <String>{};
     for (final r in _requests) {
-      set.add(_regionKey(r.address));
+      set.add(_regionKey(r.order.address));
     }
     final list = set.where((e) => e.isNotEmpty).toList()..sort();
     return list;
@@ -291,7 +303,7 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return BusinessAppShell(
-      title: '새 오더',
+      title: '신규 오더',
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh_rounded),
@@ -417,12 +429,15 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
                               separatorBuilder: (_, __) =>
                                   const SizedBox(height: 12),
                               itemBuilder: (context, index) {
-                                final request = _filteredRequests[index];
+                                final item = _filteredRequests[index];
+                                final request = item.order;
                                 return BusinessLeadCard(
                                   title: request.title,
                                   category: request.equipmentType,
-                                  region: BusinessTheme.regionFromAddress(
-                                      request.address),
+                                  region: request.address.isNotEmpty
+                                      ? BusinessTheme.regionFromAddress(
+                                          request.address)
+                                      : request.address,
                                   timeLabel: BusinessTheme.relativeTime(
                                       request.createdAt),
                                   symptom: request.description,
@@ -435,7 +450,7 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
                                   isUrgent: BusinessTheme.isVisitSoon(
                                       request.visitDate),
                                   canBid: true,
-                                  onTap: () => _showRequestDetail(request),
+                                  onTap: () => _showRequestDetail(item),
                                 );
                               },
                             ),
@@ -446,7 +461,8 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
     );
   }
 
-  void _showRequestDetail(app_models.Order request) {
+  void _showRequestDetail(NewOrderItem item) {
+    final request = item.order;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -497,7 +513,7 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
                 icon: Icons.send_rounded,
                 onPressed: () {
                   Navigator.pop(context);
-                  _goToBidding(request);
+                  _goToBidding(item);
                 },
               ),
             ],
@@ -507,11 +523,21 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
     );
   }
 
-  void _goToBidding(app_models.Order request) {
+  void _goToBidding(NewOrderItem item) {
+    if (item.listing != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              OrderMarketplaceScreen(initialListing: item.listing),
+        ),
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CreateEstimateScreen(order: request),
+        builder: (context) => CreateEstimateScreen(order: item.order),
       ),
     );
   }

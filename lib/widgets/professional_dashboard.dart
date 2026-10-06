@@ -11,7 +11,9 @@ import '../models/order.dart' as app_models;
 import 'announcement_banner.dart';
 import '../theme/business_theme.dart';
 import '../screens/business/estimate_requests_screen.dart';
+import '../screens/business/order_marketplace_screen.dart';
 import '../screens/business/work_hub_screen.dart';
+import '../screens/create_estimate_screen.dart';
 import '../screens/notification/notification_screen.dart';
 import '../screens/business/my_order_management_screen.dart';
 import '../screens/business/pending_approval_screen.dart';
@@ -21,6 +23,7 @@ import '../services/notification_service.dart';
 import '../services/marketplace_service.dart';
 import '../services/order_service.dart';
 import '../services/push_permission_service.dart';
+import '../utils/new_order_feed.dart';
 import 'business/business_app_bar.dart';
 import 'business/business_empty_state.dart';
 import 'business/business_primary_button.dart';
@@ -131,21 +134,20 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       final results = await Future.wait([
         _getCompletedJobsCount(currentUserId),
         _getInProgressJobsCount(currentUserId),
-        _getNewOrdersCount(currentUserId),
         _getMyBidsCount(currentUserId),
         _getMyOrdersCount(currentUserId),
-        _getEstimateRequests(),
+        _getNewOrderFeed(currentUserId),
       ]);
 
-      final estimateRequests = results[5] as List<app_models.Order>;
+      final newOrderItems = results[4] as List<NewOrderItem>;
       return {
         'completed': results[0],
         'inProgress': results[1],
-        'newOrders': results[2],
-        'myBids': results[3],
-        'myOrders': results[4],
-        'estimateRequests': estimateRequests.length,
-        'newOrderItems': estimateRequests.take(10).toList(),
+        'newOrders': newOrderItems.length,
+        'myBids': results[2],
+        'myOrders': results[3],
+        'estimateRequests': newOrderItems.length,
+        'newOrderItems': newOrderItems,
       };
     } catch (e) {
       debugPrint('❌ [_loadDashboardData] 에러: $e');
@@ -153,18 +155,41 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     }
   }
 
-  Future<List<app_models.Order>> _getEstimateRequests() async {
+  Future<List<NewOrderItem>> _getNewOrderFeed(String userId) async {
     try {
       final orderService = Provider.of<OrderService>(context, listen: false);
-      final all = await orderService.getOrders();
-      final available = all
-          .where((o) => o.status == 'pending' && !o.isAwarded)
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return available;
-    } catch (_) {
+      final results = await Future.wait([
+        _market.listListings(status: 'all', enrichOwners: false),
+        orderService.getOrders(),
+      ]);
+      return mergeNewOrderFeed(
+        listings: results[0] as List<Map<String, dynamic>>,
+        orders: results[1] as List<app_models.Order>,
+        contractorId: userId,
+      );
+    } catch (e) {
+      debugPrint('❌ [_getNewOrderFeed] 에러: $e');
       return [];
     }
+  }
+
+  void _openNewOrderItem(NewOrderItem item) {
+    if (item.listing != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              OrderMarketplaceScreen(initialListing: item.listing),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateEstimateScreen(order: item.order),
+      ),
+    );
   }
 
   Future<int> _getCompletedJobsCount(String userId) async {
@@ -197,23 +222,6 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       return response.count;
     } catch (e) {
       print('❌ [_getInProgressJobsCount] 에러: $e');
-      return 0;
-    }
-  }
-
-  // ⚡ 성능 개선: 서버사이드 필터링 및 count 쿼리 최적화
-  Future<int> _getNewOrdersCount(String userId) async {
-    try {
-      final response = await Supabase.instance.client
-          .from('marketplace_listings')
-          .select('id')
-          .inFilter('status', ['open', 'created'])
-          .neq('posted_by', userId)
-          .count(CountOption.exact);
-
-      return response.count;
-    } catch (e) {
-      print('❌ [_getNewOrdersCount] 에러: $e');
       return 0;
     }
   }
@@ -269,7 +277,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
             data: BusinessTheme.theme(Theme.of(context)),
             child: Scaffold(
               backgroundColor: BusinessTokens.canvas,
-              appBar: _buildAppBar(context, user),
+              appBar: _buildAppBar(context, '$businessName 사장님'),
               body: FutureBuilder<Map<String, dynamic>>(
                 future: _dashboardDataFuture,
                 builder: (context, snapshot) {
@@ -290,11 +298,10 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                                   padding:
                                       const EdgeInsets.fromLTRB(16, 16, 16, 32),
                                   children: [
-                                    _buildSummaryCard(businessName, data),
+                                    _buildSummaryCard(data),
                                     const SizedBox(height: 24),
                                     BusinessSectionHeader(
                                       title: '신규 오더',
-                                      subtitle: '입찰을 기다리는 최신 요청',
                                       actionLabel: '전체 보기',
                                       onAction: () => Navigator.push(
                                         context,
@@ -342,9 +349,9 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, String title) {
     return BusinessAppBar(
-      title: '오더',
+      title: title,
       showBackButton: BusinessTabScope.maybeOf(context) == null,
       actions: [
         FutureBuilder<int>(
@@ -399,33 +406,13 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     );
   }
 
-  Widget _buildSummaryCard(String businessName, Map<String, dynamic> data) {
+  Widget _buildSummaryCard(Map<String, dynamic> data) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BusinessTokens.hero(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            businessName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '오늘 확인할 오더와 진행 현황을 한눈에 보세요',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -518,45 +505,43 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
   Widget _buildNewOrderPreview(Map<String, dynamic> data) {
     final rawItems = data['newOrderItems'];
     final orders = rawItems is List
-        ? rawItems.whereType<app_models.Order>().toList()
-        : const <app_models.Order>[];
+        ? rawItems.whereType<NewOrderItem>().toList()
+        : const <NewOrderItem>[];
 
-    // 컴팩트 카드 높이: 약 72px, 항상 4개 영역 확보
+    // 컴팩트 카드 높이: 약 72px, 항상 5개 영역 확보
     const double compactCardHeight = 72.0;
     const double cardSpacing = 8.0;
-    const int fixedSlotCount = 4;
+    const int fixedSlotCount = 5;
     const double containerHeight = 
         (compactCardHeight * fixedSlotCount) + (cardSpacing * (fixedSlotCount - 1));
 
-    // 5개 이상이면 스크롤, 아니면 고정
-    final bool hasMoreThanFive = orders.length > fixedSlotCount;
-    final int displayCount = hasMoreThanFive ? orders.length : fixedSlotCount;
+    // 5개를 넘으면 스크롤, 아니면 빈 슬롯으로 5칸 고정
+    final bool hasMoreThanSlots = orders.length > fixedSlotCount;
+    final int displayCount = hasMoreThanSlots ? orders.length : fixedSlotCount;
 
     return SizedBox(
       height: containerHeight,
       child: ListView.separated(
-        physics: hasMoreThanFive 
-            ? const AlwaysScrollableScrollPhysics() 
+        physics: hasMoreThanSlots
+            ? const AlwaysScrollableScrollPhysics()
             : const NeverScrollableScrollPhysics(),
         itemCount: displayCount,
         separatorBuilder: (_, __) => const SizedBox(height: cardSpacing),
         itemBuilder: (context, index) {
           // 오더가 있으면 카드 표시, 없으면 빈 슬롯 표시
           if (index < orders.length) {
-            final order = orders[index];
+            final item = orders[index];
+            final order = item.order;
             return _CompactOrderCard(
               title: order.title,
               category: order.equipmentType,
-              region: BusinessTheme.regionFromAddress(order.address),
+              region: order.address.isNotEmpty
+                  ? BusinessTheme.regionFromAddress(order.address)
+                  : order.address,
               timeLabel: BusinessTheme.relativeTime(order.createdAt),
               isNew: BusinessTheme.isNewLead(order.createdAt),
               isUrgent: BusinessTheme.isVisitSoon(order.visitDate),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const EstimateRequestsScreen(),
-                ),
-              ),
+              onTap: () => _openNewOrderItem(item),
             );
           } else {
             // 빈 슬롯 - 오더를 기다리는 상태

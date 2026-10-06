@@ -95,6 +95,39 @@ class Order {
     return '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}';
   }
 
+  static DateTime _parseDate(dynamic value, {DateTime? fallback}) {
+    if (value is DateTime) return value;
+    if (value != null) {
+      final parsed = DateTime.tryParse(value.toString());
+      if (parsed != null) return parsed;
+    }
+    return fallback ?? DateTime.now();
+  }
+
+  /// 오더 찾기(marketplace_listings) 행을 신규 오더 카드용 Order 로 변환합니다.
+  factory Order.fromMarketplaceListing(Map<String, dynamic> listing) {
+    final region = (listing['region'] ?? '').toString();
+    return Order(
+      id: listing['id']?.toString(),
+      title: (listing['title'] ?? '오더').toString(),
+      description: (listing['description'] ?? '').toString(),
+      address: region,
+      visitDate: _parseDate(listing['visit_date'] ?? listing['visitDate']),
+      status: STATUS_PENDING,
+      createdAt: _parseDate(
+        listing['createdat'] ?? listing['created_at'] ?? listing['createdAt'],
+      ),
+      category: (listing['category'] ?? '기타').toString(),
+      customerName: '',
+      customerPhone: '',
+      estimatedPrice:
+          (listing['budget_amount'] as num?)?.toDouble() ??
+          (listing['budgetAmount'] as num?)?.toDouble() ??
+          0,
+      routingType: 'marketplace',
+    );
+  }
+
   factory Order.fromMap(Map<String, dynamic> map) {
     return Order(
       id: map['id'],
