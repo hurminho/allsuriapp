@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import { SMS_TEMPLATE_ENV_KEYS, SMS_TEMPLATES, type SmsTemplateId } from './sms_templates'
 
-const DEFAULT_WEB_ORIGIN = 'https://allsuricommerce.netlify.app'
+const DEFAULT_WEB_ORIGIN = 'https://allsuri.app'
 
 /** esbuild가 빌드 시점에 빈 문자열로 치환하지 않도록 동적 키로 읽습니다. */
 function runtimeEnv(name: string): string {
@@ -157,7 +157,7 @@ export async function sendSms(to: string, text: string, subject = '올수리'): 
 }
 
 /**
- * 입찰 문자: 이 사이트(api.allsuri.app) Solapi → 실패/미설정이면 웹(allsuricommerce)으로 위임.
+ * 입찰 문자: 이 사이트(api.allsuri.app) Solapi → 실패/미설정이면 웹(allsuri.app)으로 위임.
  * Solapi 키가 웹 Netlify에만 있는 경우를 커버합니다.
  */
 export async function sendBidReceivedSms(opts: {

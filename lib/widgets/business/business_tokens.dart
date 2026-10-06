@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-// 웹(allsuricommerce.netlify.app)과 톤을 맞춘 값. 웹은 Tailwind 기본
+// 웹(allsuri.app)과 톤을 맞춘 값. 웹은 Tailwind 기본
 // 팔레트를 쓰므로 blue-600/blue-800/yellow-400/gray-50 을 그대로 가져온다.
 const businessNavy = Color(0xFF0B2545);
 const businessBlue = Color(0xFF2563EB); // blue-600

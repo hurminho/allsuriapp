@@ -24,7 +24,7 @@ class AppConfig {
   /// 개인 오더 링크 공개 페이지 기준 URL. 끝에 슬래시를 넣지 않습니다.
   static const String publicWebBaseUrl = String.fromEnvironment(
     'PUBLIC_WEB_BASE_URL',
-    defaultValue: 'https://allsuricommerce.netlify.app',
+    defaultValue: 'https://allsuri.app',
   );
 
   static bool get hasSupabase =>

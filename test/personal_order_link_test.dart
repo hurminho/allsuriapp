@@ -277,6 +277,12 @@ void main() {
         ),
         'kim-plumbing',
       );
+      expect(
+        personalOrderLinkSlugFromUri(
+          Uri.parse('https://allsuri.app/allsuri/kim-plumbing'),
+        ),
+        'kim-plumbing',
+      );
     });
 
     test('앱 커스텀 스킴에서 slug를 읽는다', () {

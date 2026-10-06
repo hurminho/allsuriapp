@@ -42,7 +42,7 @@ git push origin main
 
 ### 2.3 배포 완료 확인
 배포가 완료되면 다음 URL로 확인:
-- Production: https://allsuri.app/admin.html
+- Production: https://api.allsuri.app/admin.html
 - Preview: (PR 번호에 따라 다름)
 
 ---
@@ -50,7 +50,7 @@ git push origin main
 ## ✅ 3단계: 기능 테스트
 
 ### 3.1 관리자 지정 기능
-1. 관리자 페이지(https://allsuri.app/admin.html) 접속
+1. 관리자 페이지(https://api.allsuri.app/admin.html) 접속
 2. "사용자 관리" 섹션으로 이동
 3. 테스트 사용자의 "상세 보기" 클릭
 4. 모달 하단의 **"관리자 지정"** 버튼 클릭

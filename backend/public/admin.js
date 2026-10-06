@@ -2470,7 +2470,7 @@ async function shareOrderToKakao(orderId) {
                 description: `📍 지역: ${order.location || order.region || '지역 미지정'}\n🏷️ 카테고리: ${order.category || '일반'}${budgetText}\n\n${order.description || '상세 설명이 없습니다.'}`,
                 imageUrl: order.media_urls && order.media_urls.length > 0 
                     ? order.media_urls[0]
-                    : 'https://allsuri.app/assets/images/logo.png',
+                    : 'https://allsuri.app/app-icon.png',
                 link: {
                     mobileWebUrl: 'https://play.google.com/store/apps/details?id=com.ononcompany.allsuri',
                     webUrl: 'https://play.google.com/store/apps/details?id=com.ononcompany.allsuri',
