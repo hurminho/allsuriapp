@@ -22,10 +22,22 @@ const selectedCallIds = new Set();
 // 처음 열 때 입력받아 이 탭에서만 기억합니다(sessionStorage). Netlify 환경변수 ADMIN_TOKEN 과 같아야 합니다.
 const ADMIN_TOKEN_KEY = 'allsuri_admin_token';
 let ADMIN_ROLE = 'developer';
+let ADMIN_LOGIN_DENIED = false;
+
+// HTTP 헤더에는 영문·숫자·기호(ASCII)만 넣을 수 있습니다. 한글 입력 상태로 친 토큰은
+// 서버에 가기도 전에 fetch 가 실패해(401 도 안 와서) 다시 입력할 기회가 없었습니다.
+function isValidAdminToken(token) {
+    return /^[\x21-\x7E]+$/.test(token || '');
+}
 
 function getAdminToken() {
     try {
-        return sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
+        const token = sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
+        if (token && !isValidAdminToken(token)) {
+            sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+            return '';
+        }
+        return token;
     } catch (e) {
         return '';
     }
@@ -51,15 +63,23 @@ let bizSearchTimer = null;
 
 // 로그인 체크: 토큰이 없으면 입력받습니다. 맞는지는 첫 API 호출(401 여부)로 서버가 판단합니다.
 function checkLogin() {
+    if (ADMIN_LOGIN_DENIED) return false;
     try { localStorage.removeItem('admin_password'); } catch (e) { /* 예전 방식 흔적 정리 */ }
     if (getAdminToken()) return true;
-    const input = (prompt('관리자 토큰을 입력하세요:') || '').trim();
-    if (!input) {
-        document.body.innerHTML = '<h1 style="text-align:center;margin-top:50px;">접근이 거부되었습니다.</h1>';
-        return false;
+    let message = '관리자 토큰을 입력하세요:';
+    for (;;) {
+        const input = (prompt(message) || '').trim();
+        if (!input) {
+            ADMIN_LOGIN_DENIED = true;
+            document.body.innerHTML = '<h1 style="text-align:center;margin-top:50px;">접근이 거부되었습니다.</h1>';
+            return false;
+        }
+        if (isValidAdminToken(input)) {
+            try { sessionStorage.setItem(ADMIN_TOKEN_KEY, input); } catch (e) { /* ignore */ }
+            return true;
+        }
+        message = '토큰은 영문·숫자·기호로만 입력해 주세요. 한/영 키가 한글로 되어 있는지 확인해 주세요.\n\n관리자 토큰을 입력하세요:';
     }
-    try { sessionStorage.setItem(ADMIN_TOKEN_KEY, input); } catch (e) { /* ignore */ }
-    return true;
 }
 
 // API 호출 헬퍼 함수 테스트
@@ -724,105 +744,16 @@ async function toggleVerifyBypassFromModal() {
     await toggleVerifyBypass(currentUserId);
 }
 
-        // 검색 기능 및 이벤트 리스너 설정
+        // 버튼·입력 이벤트 연결. 화면 구성이 바뀌며 없어진 요소(예전 견적 검색·필터·모달)를 그대로
+        // 찾다가 오류가 나 아래쪽 연결(새 광고·새 공지 버튼 등)이 모두 빠져 있었습니다.
+        // 있는 요소만 연결합니다. 데이터는 맨 아래 초기화(loadAll)와 메뉴 이동(showSection) 때 불러옵니다.
         document.addEventListener('DOMContentLoaded', () => {
-            // 로그인 체크
-            if (!checkLogin()) {
-                return;
-            }
-            
-            // 검색 기능 이벤트 리스너
-            document.getElementById('userSearch')?.addEventListener('input', debounce(async (e) => {
-                const query = e.target.value;
-                if (query.length > 0) {
-                    try {
-                        const users = await apiCall(`/users/search?q=${encodeURIComponent(query)}`);
-                        displayUsers(users);
-                    } catch (error) {
-                        console.error('사용자 검색 오류:', error);
-                    }
-                } else {
-                    loadUsers();
-                }
-            }, 300));
-
-            document.getElementById('estimateSearch').addEventListener('input', debounce(async (e) => {
-                const query = e.target.value;
-                if (query.length > 0) {
-                    try {
-                        const base = `/estimates/search?q=${encodeURIComponent(query)}`;
-                        const params = buildEstimateQueryParams({ includeText:false });
-                        const qs = params ? `&${params}` : '';
-                        const estimates = await apiCall(`${base}${qs}`);
-                        displayEstimates(estimates);
-                    } catch (error) {
-                        console.error('견적 검색 오류:', error);
-                    }
-                } else {
-                        loadEstimates();
-                }
-            }, 300));
-
-            // 필터 버튼
-            document.getElementById('applyEstimateFilters').addEventListener('click', loadEstimates);
-            document.getElementById('resetEstimateFilters').addEventListener('click', () => {
-                document.getElementById('statusFilter').value = 'all';
-                document.getElementById('startDateFilter').value = '';
-                document.getElementById('endDateFilter').value = '';
-                document.getElementById('phoneFilter').value = '';
-                document.getElementById('estimateSearch').value = '';
-                loadEstimates();
+            const on = (id, type, handler) => document.getElementById(id)?.addEventListener(type, handler);
+            on('btnNewAd', 'click', () => showAdModal());
+            on('btnNewAnnouncement', 'click', () => showAnnouncementModal());
+            ['announcementMessage', 'announcementBgColor', 'announcementTextColor'].forEach((id) => {
+                on(id, 'input', updateAnnouncementPreview);
             });
-
-            // 모달 닫기 버튼 이벤트 리스너
-            document.getElementById('closeEstimateModal').addEventListener('click', closeEstimateModal);
-            document.getElementById('closeEstimateModalBtn').addEventListener('click', closeEstimateModal);
-            document.getElementById('closeUserModal').addEventListener('click', closeUserModal);
-            document.getElementById('closeUserModalBtn').addEventListener('click', closeUserModal);
-            document.getElementById('closeStatsModalBtn').addEventListener('click', closeStatsModal);
-
-            // 견적 모달 버튼 이벤트 리스너
-            document.getElementById('updateEstimateStatus').addEventListener('click', updateEstimateStatus);
-
-            // 사용자 모달 버튼 이벤트 리스너
-            document.getElementById('approveUserFromModal').addEventListener('click', approveUserFromModal);
-            document.getElementById('rejectUserFromModal').addEventListener('click', rejectUserFromModal);
-
-            // 통계 숫자 클릭 이벤트 리스너
-            setupStatsClickListeners();
-
-            // 페이지 로드 시 데이터 로드
-            console.log('[PAGE LOAD] DOM이 로드되었습니다. 데이터를 불러오기 시작합니다.');
-            loadDashboard();
-            loadUsers();
-            loadEstimates();
-            // Call 현황 초기 로드 및 필터 바인딩
-            const applyCallFiltersBtn = document.getElementById('applyCallFilters');
-            if (applyCallFiltersBtn) {
-                applyCallFiltersBtn.addEventListener('click', loadCalls);
-            }
-            if (typeof loadCalls === 'function') {
-                loadCalls();
-            }
-            // 광고 로드 및 버튼 바인딩
-            if (typeof loadAds === 'function') {
-                loadAds();
-            }
-            const reloadAdsBtn = document.getElementById('btnReloadAds');
-            if (reloadAdsBtn) reloadAdsBtn.addEventListener('click', loadAds);
-            const newAdBtn = document.getElementById('btnNewAd');
-            if (newAdBtn) newAdBtn.addEventListener('click', showAdModal);
-
-            // 공지 배너
-            const newAnnBtn = document.getElementById('btnNewAnnouncement');
-            if (newAnnBtn) newAnnBtn.addEventListener('click', showAnnouncementModal);
-            // 공지 미리보기 실시간 업데이트
-            ['announcementMessage', 'announcementBgColor', 'announcementTextColor'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.addEventListener('input', updateAnnouncementPreview);
-            });
-            const statsAdBtn = document.getElementById('btnAdsStats');
-            if (statsAdBtn) statsAdBtn.addEventListener('click', showAdsStats);
         });
 
         // 쿼리 파라미터 구성
