@@ -16,7 +16,7 @@
 --   Timeout: 15000 (5초면 FCM 지연 시 Supabase가 재시도 → 푸시 2회)
 --   Headers (둘 다 필수):
 --     Content-Type: application/json
---     Authorization: Bearer <ADMIN_TOKEN>   ← Content-Type만 있으면 401로 FCM 미발송
+--     Authorization: Bearer <PUSH_WEBHOOK_SECRET>   ← Netlify 환경변수 PUSH_WEBHOOK_SECRET 과 같은 값 (미설정 시 ADMIN_TOKEN). 없으면 401로 FCM 미발송
 --
 -- Payload (자동으로 Supabase가 보내는 형식):
 -- {

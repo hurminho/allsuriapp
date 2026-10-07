@@ -155,6 +155,45 @@ async function sendFCMToUser(
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+const UUID_RE = /^[0-9a-f-]{36}$/i
+
+async function isApprovedBusiness(userId: string): Promise<boolean> {
+  if (!UUID_RE.test(userId)) return false
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&role=eq.business&businessstatus=eq.approved&select=id&limit=1`,
+    { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } },
+  )
+  if (!res.ok) return false
+  const rows = await res.json()
+  return Array.isArray(rows) && rows.length > 0
+}
+
+/** 한 번에 보낼 수 있는 수신자 수. 사업자 전원(현재 800명대)을 담을 수 있게 넉넉히 둡니다. */
+const MAX_RECIPIENTS = 3000
+/** id=in.(...) 조회·INSERT 를 나누는 크기. UUID 100개 ≈ 3.7KB 라 URL 길이 제한에 걸리지 않습니다. */
+const CHUNK = 100
+
+function chunks<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+async function filterApprovedBusinesses(ids: string[]): Promise<string[]> {
+  const valid = Array.from(new Set(ids.filter((id) => UUID_RE.test(id))))
+  const allowed = new Set<string>()
+  for (const part of chunks(valid, CHUNK)) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/users?id=in.(${part.join(',')})&role=eq.business&businessstatus=eq.approved&select=id`,
+      { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } },
+    )
+    if (!res.ok) continue
+    const rows = (await res.json()) as { id: string }[]
+    if (Array.isArray(rows)) rows.forEach((r) => allowed.add(r.id))
+  }
+  return valid.filter((id) => allowed.has(id))
+}
+
 export const handler = async (event: any) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -195,6 +234,9 @@ export const handler = async (event: any) => {
     // allsuri-web 등 서버 간 호출: Supabase service_role 키도 허용
     const isServiceRole = SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY
 
+    // 사용자 토큰으로 부를 때는 승인된 사업자만, 승인된 사업자에게만 보낼 수 있습니다
+    // (앱의 '새 오더 알림' 용도). 고객·미승인 계정이 임의 사용자에게 문구를 보내지 못하게 합니다.
+    let userCaller = false
     if (!isAdminToken && !isServiceRole) {
       const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
         headers: {
@@ -209,6 +251,15 @@ export const handler = async (event: any) => {
           headers: JSON_HEADERS,
         }
       }
+      const caller = (await verifyRes.json()) as { id?: string }
+      if (!caller?.id || !(await isApprovedBusiness(caller.id))) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({ error: 'Forbidden' }),
+          headers: JSON_HEADERS,
+        }
+      }
+      userCaller = true
     }
 
     // ── 2. 요청 파싱 ─────────────────────────────────────────────────
@@ -230,8 +281,25 @@ export const handler = async (event: any) => {
       }
     }
 
-    // 최대 500명 제한
-    const ids = userIds.slice(0, 500)
+    if (userCaller && (String(title).length > 100 || String(msgBody).length > 500)) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'title/body too long' }),
+        headers: JSON_HEADERS,
+      }
+    }
+
+    // 예전에는 500명에서 잘려 나머지 사업자가 새 오더 알림을 못 받았습니다.
+    // 사용자 호출이면 승인된 사업자만 남깁니다.
+    let ids: string[] = userIds.slice(0, MAX_RECIPIENTS).map((u: unknown) => String(u))
+    if (userCaller) ids = await filterApprovedBusinesses(ids)
+    if (ids.length === 0) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ total: 0, sent: 0, failed: 0, delivery: 'webhook' }),
+        headers: JSON_HEADERS,
+      }
+    }
     const now = new Date().toISOString()
 
     // ── 3. DB 일괄 저장 (skipDbInsert=true 이면 호출자가 이미 저장한 것) ──
@@ -248,19 +316,23 @@ export const handler = async (event: any) => {
       ...(safeData.region && { region: safeData.region }),
     }))
 
-    if (!skipDbInsert) {
+    if (!skipDbInsert || userCaller) {
       try {
-        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: SUPABASE_SERVICE_ROLE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            Prefer: 'return=minimal',
-          },
-          body: JSON.stringify(rows),
-        })
-        if (!insertRes.ok) {
+        let insertRes: Response | null = null
+        for (const part of chunks(rows, 500)) {
+          insertRes = await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              Prefer: 'return=minimal',
+            },
+            body: JSON.stringify(part),
+          })
+          if (!insertRes.ok) break
+        }
+        if (insertRes && !insertRes.ok) {
           const err = await insertRes.text()
           console.error('[FCM Bulk] DB insert 실패:', err)
           return {

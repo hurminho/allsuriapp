@@ -2,6 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notification_service.dart';
 
+/// 채팅 목록의 마지막 메시지 미리보기. 글이 없으면 사진/동영상으로 표시합니다.
+String _lastMessagePreview(Map<String, dynamic> msg) {
+  final content = msg['content']?.toString() ?? '';
+  if (content.isNotEmpty) return content;
+  if ((msg['image_url']?.toString() ?? '').isNotEmpty) return '사진';
+  if ((msg['video_url']?.toString() ?? '').isNotEmpty) return '동영상';
+  return '';
+}
+
 class ChatService extends ChangeNotifier {
   final SupabaseClient _sb = Supabase.instance.client;
   final NotificationService _notificationService = NotificationService();
@@ -25,7 +34,11 @@ class ChatService extends ChangeNotifier {
       
       // 0) If caller passed a deterministic key (e.g., 'call_<listingId>'),
       // try to reuse a room whose title equals it, or id if it's a UUID.
-      if (title != null && title.isNotEmpty) {
+      // 오더(listingId) 채팅방은 제목이 오더 제목이라 다른 오더와 겹칠 수 있습니다.
+      // 같은 제목의 다른 방으로 들어가지 않도록 그때는 참여자·listingId 로만 찾습니다.
+      if (title != null &&
+          title.isNotEmpty &&
+          (listingId == null || listingId.isEmpty)) {
         try {
           final uuidPattern = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
           if (uuidPattern.hasMatch(title)) {
@@ -397,7 +410,7 @@ class ChatService extends ChangeNotifier {
         final roomIds = roomMap.keys.toList();
         final messages = await _sb
             .from('chat_messages')
-            .select('room_id, content, text, createdat, sender_id')
+            .select('room_id, content, image_url, video_url, createdat, sender_id')
             .inFilter('room_id', roomIds)
             .order('createdat', ascending: false);
 
@@ -409,7 +422,7 @@ class ChatService extends ChangeNotifier {
 
           // 내림차순이므로 첫 등장이 가장 최근 메시지
           if (room['lastMessageAt'] == null) {
-            room['lastMessage'] = (msg['content']?.toString() ?? msg['text']?.toString() ?? '');
+            room['lastMessage'] = _lastMessagePreview(msg);
             room['lastMessageAt'] = msg['createdat']?.toString();
           }
 
@@ -559,22 +572,8 @@ class ChatService extends ChangeNotifier {
           .eq('id', userId)
           .maybeSingle();
       
-      if (customerProfile != null) {
-        return customerProfile;
-      }
-
-      // 사업자 프로필 확인
-      final businessProfile = await _sb
-          .from('businesses')
-          .select('businessname')
-          .eq('id', userId)
-          .maybeSingle();
-      
-      if (businessProfile != null) {
-        return businessProfile;
-      }
-
-      return null;
+      // 사업자도 users 테이블에 있습니다(별도 businesses 테이블은 없음).
+      return customerProfile;
     } catch (e) {
       debugPrint('사용자 프로필 가져오기 실패: $e');
       return null;

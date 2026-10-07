@@ -510,44 +510,8 @@ class _OrderBiddersScreenState extends State<OrderBiddersScreen> {
       print('✅ [OrderBiddersScreen] API 응답: $response');
 
       if (response['success'] == true) {
-        // 🔧 awarded_amount 업데이트 (오더 예산을 공사 금액으로 저장)
-        try {
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          print('💰 [OrderBiddersScreen] awarded_amount 업데이트 시작');
-
-          // 1. marketplace_listings의 budget_amount와 jobid 조회
-          //    (select-bidder 응답에는 jobId가 없어서 예전에는 이 블록이 항상 스킵됐음)
-          final listingData = await Supabase.instance.client
-              .from('marketplace_listings')
-              .select('budget_amount, jobid')
-              .eq('id', widget.listingId)
-              .single();
-
-          final budgetAmount = listingData['budget_amount'];
-          final jobId = listingData['jobid']?.toString();
-          print('   오더 예산 금액: $budgetAmount');
-
-          // 2. jobs 테이블의 awarded_amount 업데이트
-          if (budgetAmount != null && jobId != null && jobId.isNotEmpty) {
-            print('   Job ID: $jobId');
-
-            final updated = await Supabase.instance.client
-                .from('jobs')
-                .update({'awarded_amount': budgetAmount})
-                .eq('id', jobId)
-                .select();
-
-            print(
-                '✅ [OrderBiddersScreen] awarded_amount 업데이트 ${updated.length}행: $budgetAmount원');
-          } else {
-            print('⚠️ [OrderBiddersScreen] budgetAmount 또는 jobId가 없음');
-          }
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        } catch (amountErr) {
-          print(
-              '❌ [OrderBiddersScreen] awarded_amount 업데이트 실패 (무시됨): $amountErr');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        }
+        // 공사 금액(awarded_amount)은 서버(select-bidder)가 낙찰된 입찰가로 저장합니다.
+        // 예전에는 여기서 오더 예산으로 덮어써 수수료가 입찰가가 아닌 예산 기준이 됐습니다.
 
         // 채팅방 생성 및 이동
         if (!mounted) return;

@@ -404,6 +404,16 @@ export async function marketReport(tradeId: string, regionLevel1?: string | null
 }
 
 /** 리스팅 → 공정 추정에 필요한 최소 정보. */
+/** 낙찰된 입찰(공정 trade_id 포함). 사업자 간 오더는 고객 주문이 없어 공정을 여기서 이어받습니다. */
+export async function selectedBidForListing(
+  listingId: string,
+): Promise<{ id: string; trade_id: string | null } | null> {
+  const rows = await sbSelect(
+    `order_bids?listing_id=eq.${encodeURIComponent(listingId)}&status=eq.selected&select=id,trade_id&limit=1`,
+  )
+  return rows[0] ?? null
+}
+
 export async function listingContext(listingId: string): Promise<{
   listing: any | null
   order: any | null

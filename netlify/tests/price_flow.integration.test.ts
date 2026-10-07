@@ -27,6 +27,9 @@ const existingTables = new Set([
   'orders',
   'users',
   'notifications',
+  'jobs',
+  'chat_rooms',
+  'chat_messages',
 ])
 
 function table(name: string): Row[] {
@@ -61,7 +64,7 @@ function matches(row: Row, column: string, expr: string): boolean {
 function runSelect(name: string, params: URLSearchParams): Row[] {
   let rows = table(name).slice()
   for (const [key, expr] of params.entries()) {
-    if (['select', 'order', 'limit', 'offset', 'on_conflict'].includes(key)) continue
+    if (['select', 'order', 'limit', 'offset', 'on_conflict', 'or'].includes(key)) continue
     rows = rows.filter((r) => matches(r, key, expr))
   }
   const order = params.get('order')
@@ -87,11 +90,30 @@ function findConflict(name: string, keys: string[], row: Row): Row | undefined {
 
 const requestLog: { method: string; table: string; body?: any }[] = []
 
+/** 이 코드가 부르는 RPC 만 흉내냅니다. fn_business_can_act 는 없을 때(404)의 대체 판정을 검증합니다. */
+function rpcHandler(fn: string, body: any): Response {
+  if (fn === 'select_bidder') {
+    const bid = table('order_bids').find((b) => b.listing_id === body.p_listing_id && b.bidder_id === body.p_bidder_id)
+    if (!bid) return new Response(JSON.stringify({ code: 'P0001', message: 'bid not found' }), { status: 400 })
+    bid.status = 'selected'
+    return new Response('true', { status: 200 })
+  }
+  if (fn === 'claim_listing') {
+    const listing = table('marketplace_listings').find((l) => l.id === body.p_listing_id && !l.claimed_by)
+    if (!listing) return new Response('false', { status: 200 })
+    listing.claimed_by = body.p_business_id
+    listing.status = 'assigned'
+    return new Response('true', { status: 200 })
+  }
+  return new Response(JSON.stringify({ code: 'PGRST202', message: `Could not find the function public.${fn}` }), { status: 404 })
+}
+
 function postgrestHandler(url: URL, init: RequestInit | undefined): Response {
   const name = url.pathname.replace('/rest/v1/', '')
   const method = String(init?.method || 'GET').toUpperCase()
   const body = init?.body ? JSON.parse(String(init.body)) : undefined
   requestLog.push({ method, table: name, body })
+  if (name.startsWith('rpc/')) return rpcHandler(name.slice(4), body)
 
   if (!existingTables.has(name)) {
     return new Response(JSON.stringify({ code: '42P01', message: `relation "${name}" does not exist` }), {
@@ -180,6 +202,19 @@ function seedListing() {
     web_order_id: 'order-1',
     status: 'open',
     posted_by: 'web',
+  })
+}
+
+/** 입찰 가능한 사업자(승인 + 사업자등록번호). fn_business_can_act 와 같은 기준입니다. */
+function seedContractor(id: string = CONTRACTOR, overrides: Row = {}) {
+  table('users').push({
+    id,
+    name: '올수리설비',
+    role: 'business',
+    businessstatus: 'approved',
+    businessnumber: '123-45-67890',
+    business_verify_bypass: false,
+    ...overrides,
   })
 }
 
@@ -783,7 +818,7 @@ describe('통합 흐름', () => {
     return {
       path: `/api/market${path}`,
       httpMethod: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CONTRACTOR}` },
       queryStringParameters: {},
       body: JSON.stringify(body),
     }
@@ -791,7 +826,7 @@ describe('통합 흐름', () => {
 
   it('견적 요청 → 입찰(세부 원가) → 완료 금액 저장까지 이어집니다', async () => {
     seedListing()
-    table('users').push({ id: CONTRACTOR, name: '올수리설비', phone: '01000000000', role: 'business' })
+    seedContractor()
 
     // 1) 요청 시점: 표본이 없으니 금액을 만들지 않습니다.
     const first = await callPrice('/estimate', { method: 'POST', body: { listingId: 'listing-1' } })
@@ -873,6 +908,7 @@ describe('통합 흐름', () => {
 
   it('세부 원가 컬럼이 없는 환경에서도 입찰이 실패하지 않습니다', async () => {
     seedListing()
+    seedContractor()
     const originalPost = postgrestHandler
     // order_bids 에 세부 원가 컬럼이 없는 상태를 흉내냅니다.
     const spy = vi.spyOn(globalThis, 'fetch' as any).mockImplementation(((input: any, init?: RequestInit) => {
@@ -911,5 +947,141 @@ describe('통합 흐름', () => {
       globalThis.fetch = fakeFetch as any
       void originalPost
     }
+  })
+})
+
+// -----------------------------------------------------------------------------
+// market 인증: 로그인 없이, 또는 다른 사업자 이름으로 처리할 수 없습니다.
+// -----------------------------------------------------------------------------
+
+describe('market 인증', () => {
+  function event(path: string, method: string, opts: { token?: string; body?: any; query?: any } = {}) {
+    return {
+      path: `/api/market${path}`,
+      httpMethod: method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      },
+      queryStringParameters: opts.query || {},
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    }
+  }
+
+  it('토큰이 없으면 401', async () => {
+    const res = await market.handler(event('/listings', 'GET'))
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('다른 사업자 이름으로 입찰·취소하면 403', async () => {
+    seedListing()
+    const bid = await market.handler(
+      event('/listings/listing-1/bid', 'POST', { token: 'contractor-9999', body: { businessId: CONTRACTOR, bidAmount: 1000 } }),
+    )
+    expect(bid.statusCode).toBe(403)
+    const del = await market.handler(
+      event('/bids/listing-1', 'DELETE', { token: 'contractor-9999', query: { bidderId: CONTRACTOR } }),
+    )
+    expect(del.statusCode).toBe(403)
+  })
+
+  it('다른 사업자의 입찰 목록은 요청해도 본인 것만 받습니다', async () => {
+    const res = await market.handler(
+      event('/bids', 'GET', { token: 'contractor-9999', query: { bidderId: CONTRACTOR } }),
+    )
+    expect(res.statusCode).toBe(403)
+  })
+
+  it('오더 등록자가 아니면 낙찰자를 고를 수 없습니다', async () => {
+    seedListing()
+    const res = await market.handler(
+      event('/listings/listing-1/select-bidder', 'POST', {
+        token: 'contractor-9999',
+        body: { bidderId: CONTRACTOR, ownerId: 'someone-else' },
+      }),
+    )
+    expect(res.statusCode).toBe(403)
+  })
+})
+
+// -----------------------------------------------------------------------------
+// 입찰 자격·공사 금액(수수료 기준)
+// -----------------------------------------------------------------------------
+
+describe('입찰 자격과 공사 금액', () => {
+  function event(path: string, token: string, body: any) {
+    return {
+      path: `/api/market${path}`,
+      httpMethod: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      queryStringParameters: {},
+      body: JSON.stringify(body),
+    }
+  }
+
+  function seedB2B() {
+    table('jobs').push({ id: 'job-b2b', title: '배관 교체', owner_business_id: 'owner-1', budget_amount: 500000, commission_rate: 10 })
+    table('marketplace_listings').push({
+      id: 'listing-b2b', title: '배관 교체', posted_by: 'owner-1', budget_amount: 500000, jobid: 'job-b2b', status: 'open',
+    })
+  }
+
+  it('승인 대기 사업자는 입찰할 수 없습니다', async () => {
+    seedListing()
+    seedContractor(CONTRACTOR, { businessstatus: 'pending' })
+    const res = await market.handler(event('/listings/listing-1/bid', CONTRACTOR, { businessId: CONTRACTOR, bidAmount: 100000 }))
+    expect(res.statusCode).toBe(403)
+    expect(JSON.parse(res.body).code).toBe('BUSINESS_NOT_ELIGIBLE')
+    expect(table('order_bids')).toHaveLength(0)
+  })
+
+  it('사업자등록번호가 없으면 입찰할 수 없고, 관리자 우회면 됩니다', async () => {
+    seedListing()
+    seedContractor(CONTRACTOR, { businessnumber: null })
+    const blocked = await market.handler(event('/listings/listing-1/bid', CONTRACTOR, { businessId: CONTRACTOR, bidAmount: 100000 }))
+    expect(blocked.statusCode).toBe(403)
+    table('users')[0].business_verify_bypass = true
+    const ok = await market.handler(event('/listings/listing-1/bid', CONTRACTOR, { businessId: CONTRACTOR, bidAmount: 100000 }))
+    expect(ok.statusCode).toBe(200)
+  })
+
+  it('고객 웹 오더는 금액 없이 입찰할 수 없습니다', async () => {
+    seedListing()
+    seedContractor()
+    const res = await market.handler(event('/listings/listing-1/bid', CONTRACTOR, { businessId: CONTRACTOR }))
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body).code).toBe('BID_AMOUNT_REQUIRED')
+  })
+
+  it('낙찰하면 낙찰된 입찰가를 공사 금액으로 저장합니다(예산 아님)', async () => {
+    seedB2B()
+    seedContractor()
+    table('users').push({ id: 'owner-1', role: 'business', businessstatus: 'approved', businessnumber: '2234567890' })
+    await market.handler(event('/listings/listing-b2b/bid', CONTRACTOR, { businessId: CONTRACTOR, bidAmount: 480000 }))
+    const res = await market.handler(event('/listings/listing-b2b/select-bidder', 'owner-1', { bidderId: CONTRACTOR, ownerId: 'owner-1' }))
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body).awardedAmount).toBe(480000)
+    expect(table('jobs')[0].awarded_amount).toBe(480000)
+    expect(table('order_bids')[0].job_id).toBe('job-b2b')
+  })
+
+  it('금액 없이 바로 지원한 입찰은 올라온 금액(예산)을 입찰가로 봅니다', async () => {
+    seedB2B()
+    seedContractor()
+    await market.handler(event('/listings/listing-b2b/bid', CONTRACTOR, { businessId: CONTRACTOR }))
+    const res = await market.handler(event('/listings/listing-b2b/select-bidder', 'owner-1', { bidderId: CONTRACTOR, ownerId: 'owner-1' }))
+    expect(JSON.parse(res.body).awardedAmount).toBe(500000)
+    expect(table('jobs')[0].awarded_amount).toBe(500000)
+  })
+
+  it('가져가기는 올라온 금액을 공사 금액으로 저장하고, 웹 오더는 가져가기 대신 입찰을 안내합니다', async () => {
+    seedB2B()
+    seedListing()
+    seedContractor()
+    const res = await market.handler(event('/listings/listing-b2b/claim', CONTRACTOR, { businessId: CONTRACTOR }))
+    expect(JSON.parse(res.body).success).toBe(true)
+    expect(table('jobs')[0].awarded_amount).toBe(500000)
+    const web = await market.handler(event('/listings/listing-1/claim', CONTRACTOR, { businessId: CONTRACTOR }))
+    expect(JSON.parse(web.body).code).toBe('WEB_ORDER_NEEDS_BID')
   })
 })

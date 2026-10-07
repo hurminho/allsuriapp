@@ -63,6 +63,7 @@ class _BusinessMyEstimatesScreenState extends State<BusinessMyEstimatesScreen> {
         return;
       }
       final bids = await _market.listMyBids(userId);
+      if (!mounted) return;
       final estimateService = Provider.of<EstimateService>(context, listen: false);
       List<Estimate> estimates = const [];
       try {

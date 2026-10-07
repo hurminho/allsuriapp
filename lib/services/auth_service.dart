@@ -328,7 +328,7 @@ class AuthService extends ChangeNotifier {
               final uid = user['id'] as String;
               
               // Supabase 세션 설정 (FCM 푸시 발송에 필요)
-              if (supabaseAccessToken != null && supabaseAccessToken.isNotEmpty) {
+              if (supabaseAccessToken.isNotEmpty) {
                 try {
                   if (supabaseRefreshToken != null && supabaseRefreshToken.isNotEmpty) {
                     // access token + refresh token 모두 전달

@@ -308,9 +308,10 @@ class PersonalOrderLinkService extends ChangeNotifier {
       // 직접 오더 통계
       final orders = await _sb
           .from('orders')
-          .select('status, created_at')
+          // orders 는 camelCase 컬럼("createdAt")입니다. created_at 으로 쓰면 쿼리가 실패해 통계가 전부 0이 됩니다.
+          .select('status, createdAt')
           .eq('personal_order_link_id', personalOrderLinkId)
-          .gte('created_at', since.toIso8601String());
+          .gte('createdAt', since.toIso8601String());
 
       int pendingOrders = 0;
       int completedOrders = 0;
@@ -351,7 +352,7 @@ class PersonalOrderLinkService extends ChangeNotifier {
           .select()
           .eq('routing_type', 'personal_link')
           .eq('assigned_contractor_id', contractorId)
-          .order('created_at', ascending: false)
+          .order('createdAt', ascending: false)
           .range(offset, offset + limit - 1);
 
       return response.map((e) => Map<String, dynamic>.from(e)).toList();

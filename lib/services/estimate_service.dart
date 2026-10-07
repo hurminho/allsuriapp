@@ -29,16 +29,17 @@ class EstimateService extends ChangeNotifier {
 
     try {
       var query = _sb.from('estimates').select();
+      // estimates 컬럼은 orderId·updatedAt 만 camelCase 이고 나머지는 소문자입니다
+      // (businessid, customerid, createdat). 예전에는 businessId 로 조회해 400 이 났습니다.
       if (businessId != null) {
-        query = query.eq('businessId', businessId);
+        query = query.eq('businessid', businessId);
       } else if (customerId != null) {
-        query = query.eq('customerId', customerId);
+        query = query.eq('customerid', customerId);
       } else if (orderId != null) {
         query = query.eq('orderId', orderId);
       }
 
-      // Supabase 테이블은 camelCase 사용
-      final rows = await query.order('createdAt', ascending: false);
+      final rows = await query.order('createdat', ascending: false);
 
       _estimates = rows
           .map((r) => Estimate.fromMap(Map<String, dynamic>.from(r)))
@@ -62,7 +63,7 @@ class EstimateService extends ChangeNotifier {
           .from('estimates')
           .select()
           .inFilter('orderId', orderIds)
-          .order('createdAt', ascending: false);
+          .order('createdat', ascending: false);
 
       for (final r in rows) {
         final map = Map<String, dynamic>.from(r);
@@ -242,7 +243,7 @@ class EstimateService extends ChangeNotifier {
           .from('estimates')
           .update({
             'status': Estimate.STATUS_AWARDED,
-            'awardedAt': DateTime.now().toIso8601String(),
+            'awardedat': DateTime.now().toIso8601String(),
           })
           .eq('id', estimateId);
 
@@ -306,7 +307,7 @@ class EstimateService extends ChangeNotifier {
           .from('estimates')
           .update({
             'status': Estimate.STATUS_REJECTED,
-            'rejectedAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
           })
           .eq('id', estimateId);
 
@@ -368,24 +369,24 @@ class EstimateService extends ChangeNotifier {
           .from('estimates')
           .update({
             'businessid': newBusinessId,
-            'businessName': businessName,
-            'businessPhone': businessPhone,
-            'transferredAt': DateTime.now().toIso8601String(),
-            'transferredBy': transferredBy,
-            'transferReason': reason,
+            'businessname': businessName,
+            'businessphone': businessPhone,
+            'transferredat': DateTime.now().toIso8601String(),
+            'transferredby': transferredBy,
+            'transferreason': reason,
             'status': 'transferred',
           })
           .eq('id', estimateId);
 
       // 이관 기록 저장
       await _sb.from('estimate_transfers').insert({
-        'estimateId': estimateId,
-        'newBusinessId': newBusinessId,
-        'newBusinessName': businessName,
-        'newPhoneNumber': businessPhone,
+        'estimateid': estimateId,
+        'newbusinessid': newBusinessId,
+        'newbusinessname': businessName,
+        'newphonenumber': businessPhone,
         'reason': reason,
-        'transferredBy': transferredBy,
-        'transferredAt': DateTime.now().toIso8601String(),
+        'transferredby': transferredBy,
+        'transferredat': DateTime.now().toIso8601String(),
       });
 
       // 이관받는 사업자에게 알림
@@ -395,7 +396,7 @@ class EstimateService extends ChangeNotifier {
           'title': '견적 이관 받음',
           'body': '새로운 견적이 이관되었습니다. 채팅방에서 확인하세요.',
           'type': 'estimate_transferred',
-          'jobid': estimateId,
+          'estimateid': estimateId,
           'isread': false,
           'createdat': DateTime.now().toIso8601String(),
         });

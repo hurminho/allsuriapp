@@ -6,8 +6,8 @@
 ///   "latest_version": "1.4.2",
 ///   "minimum_supported_version": "1.3.0",
 ///   "force_update": false,
-///   "android_store_url": "market://details?id=com.allsuri.app",
-///   "ios_store_url": "itms-apps://itunes.apple.com/app/id123456789",
+///   "android_store_url": "market://details?id=com.ononcompany.allsuri",
+///   "ios_store_url": "https://apps.apple.com/kr/app/id6760454320",
 ///   "update_message": "더 안정적인 사용을 위해 최신 버전으로 업데이트해 주세요."
 /// }
 /// ```

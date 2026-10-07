@@ -739,6 +739,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (picked.isEmpty) return;
       setState(() => _isSending = true);
       final media = MediaService();
+      if (!mounted) return;
       final myId = Provider.of<AuthService>(context, listen: false).currentUser?.id ?? '';
 
       int failed = 0;
@@ -791,6 +792,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final videoFile = await media.pickVideoFromGallery();
       if (videoFile == null) return;
       setState(() => _isSending = true);
+      if (!mounted) return;
       final myId = Provider.of<AuthService>(context, listen: false).currentUser?.id ?? '';
       final url = await media.uploadMessageVideo(roomId: widget.chatRoomId, userId: myId, file: videoFile);
       if (url == null) throw Exception('동영상 업로드 실패');

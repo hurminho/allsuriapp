@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -64,23 +63,6 @@ class LocalNotificationService {
     } catch (e) {
       print('❌ [LocalNotification] 초기화 실패: $e');
     }
-  }
-
-  /// 알림 채널 생성 (Android)
-  Future<void> _createNotificationChannel(String id, String name, String description) async {
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'allsuri_notifications',
-      '올수리 알림',
-      description: '올수리 앱의 알림을 받습니다',
-      importance: Importance.high,
-      enableVibration: true,
-      playSound: true,
-      showBadge: true,
-    );
-    
-    await _flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
   }
 
   /// 새 오더 알림 표시

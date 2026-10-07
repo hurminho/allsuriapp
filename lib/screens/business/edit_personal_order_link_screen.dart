@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../config.dart';
 import '../../models/order.dart';
 import '../../models/personal_order_link.dart';
 import '../../services/personal_order_link_service.dart';
@@ -38,8 +37,6 @@ class _EditPersonalOrderLinkScreenState
   String? _slugError;
 
   bool _isSaving = false;
-
-  final String _baseUrl = AppConfig.publicWebBaseUrl;
 
   @override
   void initState() {

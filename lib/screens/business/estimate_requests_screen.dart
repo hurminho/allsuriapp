@@ -58,7 +58,7 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
       final userId = authService.currentUser?.id ?? '';
       final results = await Future.wait([
         _market.listListings(status: 'all', enrichOwners: false),
-        _orderService.getOrders(),
+        _orderService.getOrders(assignedContractorId: userId),
       ]);
       final availableOrders = mergeNewOrderFeed(
         listings: results[0] as List<Map<String, dynamic>>,
@@ -108,7 +108,8 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
           _regionKey(request.address) != _selectedRegion) {
         return false;
       }
-      final soon = BusinessTheme.isVisitSoon(request.visitDate);
+      final soon = request.hasVisitDate &&
+          BusinessTheme.isVisitSoon(request.visitDate);
       if (_selectedUrgency == 'urgent' && !soon) return false;
       if (_selectedUrgency == 'normal' && soon) return false;
       final price = request.estimatedPrice;
@@ -447,9 +448,12 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
                                   hasPhoto: request.images.isNotEmpty,
                                   isNew: BusinessTheme.isNewLead(
                                       request.createdAt),
-                                  isUrgent: BusinessTheme.isVisitSoon(
-                                      request.visitDate),
+                                  isUrgent: request.hasVisitDate &&
+                                      BusinessTheme.isVisitSoon(
+                                          request.visitDate),
                                   canBid: true,
+                                  isDirectRequest:
+                                      request.routingType == 'personal_link',
                                   onTap: () => _showRequestDetail(item),
                                 );
                               },
@@ -501,7 +505,8 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
                   style: const TextStyle(color: BusinessTheme.textMuted)),
               const SizedBox(height: 12),
               Text('지역  ${BusinessTheme.regionFromAddress(request.address)}'),
-              Text('방문일  ${request.visitDate.toString().split(' ').first}'),
+              if (request.hasVisitDate)
+                Text('방문일  ${request.visitDate.toString().split(' ').first}'),
               Text('요청일  ${request.createdAt.toString().split('.').first}'),
               const SizedBox(height: 8),
               const Text('고객 정보는 낙찰 후 공개됩니다.',
@@ -509,7 +514,9 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
                       TextStyle(fontSize: 12, color: BusinessTheme.textMuted)),
               const SizedBox(height: 16),
               BusinessPrimaryButton(
-                label: '견적 작성',
+                label: request.routingType == 'personal_link'
+                    ? '견적 보내기'
+                    : '견적 작성',
                 icon: Icons.send_rounded,
                 onPressed: () {
                   Navigator.pop(context);

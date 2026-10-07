@@ -271,6 +271,7 @@ class _ChatListPageState extends State<ChatListPage> {
       ),
     );
     if (confirm == true) {
+      if (!context.mounted) return;
       final userId = Provider.of<AuthService>(context, listen: false).currentUser?.id ?? '';
       final svc = Provider.of<ChatService>(context, listen: false);
       try {

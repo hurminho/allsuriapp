@@ -46,23 +46,7 @@ class NotificationService {
     try {
       debugPrint('🔍 [NotificationService] 알림 조회: userId=$userId');
 
-      // 1차: 백엔드 API (service role)로 조회
-      try {
-        final api = ApiService();
-        final apiResponse = await api.get('/notifications?userId=$userId');
-        if (apiResponse['success'] == true) {
-          final data = List<Map<String, dynamic>>.from(apiResponse['data'] ?? []);
-          // 알림 레코드에는 주소·연락처가 섞여 있어 건수만 남깁니다.
-          AppLog.debug('NotificationService', 'API에서 ${data.length}개 알림 조회');
-          return data;
-        } else {
-          debugPrint('⚠️ [NotificationService] API 조회 실패: ${apiResponse['error']}');
-        }
-      } catch (apiError) {
-        debugPrint('⚠️ [NotificationService] API 조회 예외: $apiError');
-      }
-      
-      // 2차: Supabase 직접 조회 (세션이 유효한 경우)
+      // 서버에는 알림 조회 API가 없습니다(예전 /notifications 호출은 항상 404). 본인 알림을 직접 읽습니다.
       final response = await _sb
           .from('notifications')
           .select()
@@ -364,56 +348,11 @@ class NotificationService {
       
       print('✅ [sendChatNotification] 채팅 알림 저장 완료');
 
-      // 2. Supabase Edge Function으로 FCM 전송 시도 (일시 비활성화)
-      // TODO: Edge Function 배포 후 활성화
-      /*
-      try {
-        await _sendFCMViaEdgeFunction(
-          recipientUserId: recipientUserId,
-          senderName: senderName,
-          message: message,
-          chatRoomId: chatRoomId,
-        );
-      } catch (e) {
-        print('FCM 전송 실패 (무시됨): $e');
-        // FCM 실패해도 Supabase 알림은 성공
-      }
-      */
-      
-      print('FCM 전송은 일시 비활성화됨 (Edge Function 미배포)');
-      
+      // FCM 은 notifications INSERT → Webhook(send-push-webhook)이 보냅니다.
+
       print('채팅 알림 전송 완료: $recipientUserId');
     } catch (e) {
       print('채팅 알림 전송 실패: $e');
-    }
-  }
-
-  /// Supabase Edge Function으로 FCM 전송
-  Future<void> _sendFCMViaEdgeFunction({
-    required String recipientUserId,
-    required String senderName,
-    required String message,
-    required String chatRoomId,
-  }) async {
-    try {
-      final response = await _sb.functions.invoke(
-        'send-chat-notification',
-        body: {
-          'recipientUserId': recipientUserId,
-          'senderName': senderName,
-          'message': message,
-          'chatRoomId': chatRoomId,
-        },
-      );
-      
-      if (response.status != 200) {
-        throw Exception('Edge Function 호출 실패: ${response.status}');
-      }
-      
-      print('FCM 전송 성공 (Edge Function)');
-    } catch (e) {
-      print('Edge Function FCM 전송 실패: $e');
-      rethrow;
     }
   }
 

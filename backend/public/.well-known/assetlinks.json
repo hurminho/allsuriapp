@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ononcompany.allsuri",
+      "sha256_cert_fingerprints": [
+        "E2:CE:07:5E:DE:54:BE:15:48:5B:30:64:2C:BF:E6:37:63:67:B6:1B:3E:49:14:6F:B2:C9:E5:3E:4E:A0:96:BD",
+        "91:AC:DF:8E:8D:C2:BD:F7:B5:5B:0F:48:42:C7:FC:E3:E3:F1:C1:86:E9:1A:31:45:17:DC:3E:7E:E7:F7:43:5E"
+      ]
+    }
+  }
+]

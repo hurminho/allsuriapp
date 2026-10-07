@@ -330,6 +330,7 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                       });
                     }
 
+                    if (!context.mounted) return;
                     Navigator.pop(context); // 로딩 닫기
                     _loadAds(); // 목록 새로고침
                     
@@ -337,6 +338,7 @@ class _AdManagementScreenState extends State<AdManagementScreen> {
                       SnackBar(content: Text(ad == null ? '광고가 추가되었습니다' : '광고가 수정되었습니다')),
                     );
                   } catch (e) {
+                    if (!context.mounted) return;
                     Navigator.pop(context); // 로딩 닫기
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('오류 발생: $e')),

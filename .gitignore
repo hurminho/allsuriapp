@@ -101,3 +101,9 @@ KEYSTORE_BACKUP_INFO.txt
 
 # Local Netlify folder
 .netlify
+
+# 개인 문서 (청구서 등) — 공개 저장소에 올리지 않습니다
+/bill/
+
+# 예전 Express 백엔드 의존성(삭제됨). 남아 있는 로컬 폴더가 다시 올라가지 않게 합니다
+/backend/node_modules/

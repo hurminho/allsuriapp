@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, kReleaseMode;
 import 'package:intl/date_symbol_data_local.dart';
 import 'dart:io' show Platform;
 import 'package:flutter_app_badger/flutter_app_badger.dart';
@@ -6,7 +6,6 @@ import 'package:flutter/cupertino.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' as kakao;
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -16,7 +15,6 @@ import 'services/auth_service.dart';
 import 'services/order_service.dart';
 import 'services/estimate_service.dart';
 import 'services/job_service.dart';
-import 'services/payment_service.dart';
 import 'services/api_service.dart';
 import 'services/chat_service.dart';
 import 'services/notification_service.dart';
@@ -46,7 +44,22 @@ class _BadgeLifecycleObserver with WidgetsBindingObserver {
 }
 
 //126e5d87-94e0-4ad2-94ba-51b9c2454a4a
-void main() async {
+/// 출시 빌드에서는 print/debugPrint 출력을 버립니다. 화면·서비스 곳곳의 디버그 로그에
+/// 전화번호·주소 같은 개인정보가 섞여 기기 로그(logcat 등)에 남지 않게 하기 위함입니다.
+/// (구조화 로그는 AppLog 가 마스킹 후 디버그 빌드에서만 출력합니다.)
+void main() {
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+  runZoned(
+    _main,
+    zoneSpecification: kReleaseMode
+        ? ZoneSpecification(print: (self, parent, zone, line) {})
+        : null,
+  );
+}
+
+Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // ko_KR 로케일 초기화 (NumberFormat.currency, DateFormat에서 LocaleDataException 방지)
   await initializeDateFormatting('ko_KR', null);
@@ -93,12 +106,8 @@ void main() async {
   // 알림 서비스 초기화 (서로 독립적이므로 병렬 실행)
   await Future.wait([
     NotificationService().initialize(),
-    LocalNotificationService().initialize(
-      onSelectNotification: (String? payload) {
-        debugPrint('🔔 [Main] 알림 클릭: $payload');
-        // TODO: 페이로드를 처리하여 적절한 화면으로 이동
-      },
-    ),
+    // 알림 탭 이동은 FCMService 가 처리합니다(같은 플러그인을 뒤에서 다시 초기화하며 탭 콜백을 등록).
+    LocalNotificationService().initialize(),
   ]);
 
   // iOS/Android: 앱 포그라운드 진입 시 앱 아이콘 배지 제거
@@ -182,7 +191,6 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => OrderService()),
         ChangeNotifierProvider(create: (context) => EstimateService()),
         ChangeNotifierProvider(create: (context) => JobService()),
-        ChangeNotifierProvider(create: (context) => PaymentService()),
         ChangeNotifierProvider(create: (context) => ChatService()),
         ChangeNotifierProvider(create: (context) => CommunityService()),
         ChangeNotifierProvider(create: (context) => PersonalOrderLinkService()),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_service.dart';
@@ -24,6 +23,7 @@ import 'order_bidders_screen.dart';
 import 'order_review_screen.dart';
 import 'job_cancel_reason_screen.dart';
 import '../chat_screen.dart'; // 추가
+import '../../utils/app_logger.dart';
 
 class JobManagementScreen extends StatefulWidget {
   final String? highlightedJobId; // 포커싱할 공사 ID
@@ -93,14 +93,6 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
           _listingByJobId[listingId];
     }
     return null;
-  }
-
-  bool _isAssignee(Job job, String userId, Map<String, dynamic>? listing) {
-    if (job.assignedBusinessId == userId) return true;
-    if (listing == null) return false;
-    final selected = listing['selected_bidder_id']?.toString();
-    final claimed = listing['claimed_by']?.toString();
-    return selected == userId || claimed == userId;
   }
 
   String _jobStatusFromListing(String? listingStatus,
@@ -404,28 +396,6 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
     );
   }
 
-  void _showCheck() {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierLabel: 'check',
-      transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (_, __, ___) {
-        return Center(
-          child: SizedBox(
-              width: 140,
-              height: 140,
-              child: Lottie.asset('assets/lottie/check.json', repeat: false)),
-        );
-      },
-    );
-    Future.delayed(const Duration(milliseconds: 900), () {
-      if (Navigator.of(context, rootNavigator: true).canPop()) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    });
-  }
-
   Widget _buildModernFilterChips() {
     return Container(
       width: double.infinity,
@@ -457,75 +427,6 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildModernChip(
-      String label, String value, IconData icon, int count) {
-    final isSelected = _filter == value;
-    final color = const Color(0xFF0B2545); // Navy for professional style
-
-    return GestureDetector(
-      onTap: () => setState(() => _filter = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? color : Colors.grey[300]!,
-            width: 1.5,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isSelected ? Colors.white : color,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.grey[700],
-              ),
-            ),
-            if (count > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.white.withOpacity(0.3)
-                      : color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  count.toString(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : color,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -655,6 +556,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         );
       }
 
+      if (!mounted) return;
       final authService = context.read<AuthService>();
       final currentUserId = authService.currentUser?.id;
 
@@ -716,18 +618,23 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
         // (웹 고객 낙찰 건은 owner_business_id == 낙찰 사업자 본인이므로 자기 자신에게는 보내지 않음)
         final ownerId = job.ownerBusinessId;
         print('   알림 전송 중: $ownerId');
-        if (ownerId != null && ownerId.isNotEmpty && ownerId != currentUserId) {
-          await Supabase.instance.client.from('notifications').insert({
-            'userid': ownerId,
-            'title': '후기/평점 작성 안내',
-            'body': '${job.title} 공사가 완료되었습니다. 후기와 평점을 작성해 주세요.',
-            'type': 'review_request',
-            if (listingId != null) 'listingid': listingId,
-            if (realJobId != null && !_isListingOnlyJobId(realJobId))
-              'jobid': realJobId,
-            'isread': false,
-            'createdat': DateTime.now().toIso8601String(),
-          });
+        if (ownerId.isNotEmpty && ownerId != currentUserId) {
+          // 알림 실패가 완료 처리 전체를 실패로 만들면 안 됩니다(예전에는 없는 listingid 컬럼 때문에
+          // 매번 여기서 예외가 나 jobs 상태 갱신·고객 문자·정산금액 기록이 건너뛰어졌습니다).
+          try {
+            await Supabase.instance.client.from('notifications').insert({
+              'userid': ownerId,
+              'title': '후기/평점 작성 안내',
+              'body': '${job.title} 공사가 완료되었습니다. 후기와 평점을 작성해 주세요.',
+              'type': 'review_request',
+              if (realJobId != null && !_isListingOnlyJobId(realJobId))
+                'jobid': realJobId,
+              'isread': false,
+              'createdat': DateTime.now().toIso8601String(),
+            });
+          } catch (e) {
+            AppLog.warn('JobManagement', '후기 요청 알림 저장 실패: $e');
+          }
         } else {
           print('⚠️ [JobManagement] ownerId 없거나 본인이라 알림을 건너뜀');
         }
@@ -892,6 +799,7 @@ class _JobManagementScreenState extends State<JobManagementScreen> {
       }
     } catch (e) {
       print('❌ [JobManagement] 리뷰 화면 열기 실패: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('리뷰 화면을 열 수 없습니다')),
       );
@@ -1227,7 +1135,6 @@ class _ModernJobsList extends StatelessWidget {
         final listing = job.id != null ? listingsByJobId[job.id] : null;
         final listingStatus = listing?['status']?.toString();
         final effectiveStatus = listingStatus ?? job.status;
-        final badge = _badgeFor(job, currentUserId, listing);
         final listingId = listing != null ? listing['id']?.toString() : null;
         final listingTitle = listing != null
             ? (listing['title']?.toString() ?? job.title)
@@ -1266,7 +1173,7 @@ class _ModernJobsList extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              onPressed: () => onViewBidders(listingId!, listingTitle),
+              onPressed: () => onViewBidders(listingId, listingTitle),
             ),
           );
         } else if (isAssignee &&
@@ -1472,8 +1379,6 @@ class _ModernJobsList extends StatelessWidget {
                         // 상대방 ID 확인 (오더 소유자)
                         final targetUserId = job.ownerBusinessId;
 
-                        if (targetUserId == null) return;
-
                         // 채팅방 생성/조회
                         final chatRoomId = await chatService.ensureChatRoom(
                           customerId: targetUserId, // 오더 소유자
@@ -1483,6 +1388,7 @@ class _ModernJobsList extends StatelessWidget {
                         );
 
                         // 채팅 화면으로 이동
+                        if (!context.mounted) return;
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1494,6 +1400,7 @@ class _ModernJobsList extends StatelessWidget {
                         );
                       } catch (e) {
                         print('❌ 채팅방 이동 실패: $e');
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('채팅방을 열 수 없습니다.')),
                         );
@@ -2502,36 +2409,4 @@ class _ModernJobsList extends StatelessWidget {
         return status;
     }
   }
-
-  static _Badge _badgeFor(Job job, String me, Map<String, dynamic>? listing) {
-    // ✅ 입찰 대기 상태 확인 (내가 입찰한 오더)
-    if (listing != null) {
-      final claimedBy = listing['claimed_by']?.toString();
-      final selectedBidderId = listing['selected_bidder_id']?.toString();
-      final listingStatus = listing['status']?.toString();
-
-      // 내가 입찰했지만 아직 낙찰되지 않은 상태
-      if (claimedBy == me &&
-          selectedBidderId == null &&
-          listingStatus != 'assigned') {
-        return _Badge('낙찰 대기중', Colors.orange, Icons.schedule);
-      }
-
-      // 완료 확인 대기 중 상태
-      if (listingStatus == 'awaiting_confirmation') {
-        return _Badge('원 사업자 확인 대기중', Colors.purple, Icons.hourglass_empty);
-      }
-    }
-
-    // 모든 공사는 내가 가져간 공사이므로 배지 통일
-    return _Badge('진행 중', Colors.green, Icons.construction_outlined);
-  }
-}
-
-class _Badge {
-  final String label;
-  final Color color;
-  final IconData icon;
-
-  const _Badge(this.label, this.color, this.icon);
 }

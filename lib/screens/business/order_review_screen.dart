@@ -30,6 +30,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmitting = false;
   bool _isLoadingReview = true;
+  // 화면을 열 때 저장된 후기가 있었는지. 별점을 고르는 순간 제목이 '수정'으로 바뀌면 안 됩니다.
+  bool _hasSavedReview = false;
 
   final List<Map<String, dynamic>> _availableTags = [
     {'label': '시간을 제대로 지켜요', 'icon': Icons.access_time},
@@ -61,6 +63,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
       if (existingReview != null && mounted) {
         setState(() {
+          _hasSavedReview = true;
           _rating = (existingReview['rating'] as num?)?.toInt() ?? 0;
           _selectedTags
             ..clear()
@@ -281,7 +284,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       );
     }
 
-    final hasExistingReview = _rating > 0;
+    final hasExistingReview = _hasSavedReview;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../utils/app_logger.dart';
 import '../../widgets/business/business_app_shell.dart';
 import '../../widgets/business/business_empty_state.dart';
 import '../../widgets/business/business_primary_button.dart';
@@ -51,10 +52,9 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
       _loadError = null;
     });
     try {
-      await Future.wait([
-        _loadListing(),
-        _loadChatRooms(),
-      ]);
+      await _loadListing();
+      // 채팅방은 오더의 jobid 로도 찾으므로 오더를 읽은 뒤 조회합니다.
+      await _loadChatRooms();
     } catch (_) {
       if (mounted) {
         setState(() => _loadError = '진행 정보를 불러오지 못했습니다');
@@ -76,7 +76,7 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
     if (_listing!['posted_by'] != null) {
       final owner = await _sb
           .from('users')
-          .select('id, name, businessname, phonenumber, profile_image_url')
+          .select('id, name, businessname, phonenumber, profile_image_url:avatar_url')
           .eq('id', _listing!['posted_by'])
           .maybeSingle();
       _ownerInfo = owner != null ? Map<String, dynamic>.from(owner) : null;
@@ -99,7 +99,7 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
 
       final winner = await _sb
           .from('users')
-          .select('id, name, businessname, phonenumber, profile_image_url')
+          .select('id, name, businessname, phonenumber, profile_image_url:avatar_url')
           .eq('id', claimedBy)
           .maybeSingle();
       _winnerInfo = winner != null ? Map<String, dynamic>.from(winner) : null;
@@ -117,13 +117,19 @@ class _OrderProcessScreenState extends State<OrderProcessScreen> {
 
   Future<void> _loadChatRooms() async {
     try {
+      // chat_rooms 실제 컬럼은 listingid / jobid 입니다(listing_id·status 는 없음).
+      final jobId = _listing?['jobid']?.toString();
+      final filters = [
+        'listingid.eq.${widget.listingId}',
+        if (jobId != null && jobId.isNotEmpty) 'jobid.eq.$jobId',
+      ].join(',');
       final rooms = await _sb
           .from('chat_rooms')
-          .select('id, participant_a, participant_b, status')
-          .or('listing_id.eq.${widget.listingId},job_id.eq.${widget.listingId}');
+          .select('id, participant_a, participant_b, active')
+          .or(filters);
       _chatRooms = List<Map<String, dynamic>>.from(rooms);
-    } catch (_) {
-      // Some deployments do not expose listing_id on chat_rooms.
+    } catch (e) {
+      AppLog.debug('OrderProcess', '채팅방 조회 실패: $e');
     }
   }
 

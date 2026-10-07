@@ -18,9 +18,23 @@ let callsSortDirection = 'asc';
 let allCalls = [];
 const selectedCallIds = new Set();
 
-// 관리자 토큰 (.env 파일의 ADMIN_TOKEN과 일치해야 함)
-const ADMIN_TOKEN = 'allsuri-admin-2024';
+// 관리자 토큰은 코드에 두지 않습니다(이 파일은 누구나 내려받을 수 있습니다).
+// 처음 열 때 입력받아 이 탭에서만 기억합니다(sessionStorage). Netlify 환경변수 ADMIN_TOKEN 과 같아야 합니다.
+const ADMIN_TOKEN_KEY = 'allsuri_admin_token';
 let ADMIN_ROLE = 'developer';
+
+function getAdminToken() {
+    try {
+        return sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function forgetAdminToken() {
+    try { sessionStorage.removeItem(ADMIN_TOKEN_KEY); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem('admin_password'); } catch (e) { /* 예전 방식 흔적 정리 */ }
+}
 
 // 광고 편집 상태 (파일 최상단에 선언해야 TDZ 오류 방지)
 let currentEditingAd = null;
@@ -35,18 +49,16 @@ let currentWebOrderId = null;
 let selectedRating = 0;
 let bizSearchTimer = null;
 
-// 로그인 체크
+// 로그인 체크: 토큰이 없으면 입력받습니다. 맞는지는 첫 API 호출(401 여부)로 서버가 판단합니다.
 function checkLogin() {
-    const password = localStorage.getItem('admin_password');
-    if (!password || password !== 'allsuri1912') {
-        const inputPassword = prompt('관리자 비밀번호를 입력하세요:');
-        if (!inputPassword || inputPassword !== 'allsuri1912') {
-            alert('비밀번호가 틀렸습니다.');
-            document.body.innerHTML = '<h1 style="text-align:center;margin-top:50px;">접근이 거부되었습니다.</h1>';
-            return false;
-        }
-        localStorage.setItem('admin_password', inputPassword);
+    try { localStorage.removeItem('admin_password'); } catch (e) { /* 예전 방식 흔적 정리 */ }
+    if (getAdminToken()) return true;
+    const input = (prompt('관리자 토큰을 입력하세요:') || '').trim();
+    if (!input) {
+        document.body.innerHTML = '<h1 style="text-align:center;margin-top:50px;">접근이 거부되었습니다.</h1>';
+        return false;
     }
+    try { sessionStorage.setItem(ADMIN_TOKEN_KEY, input); } catch (e) { /* ignore */ }
     return true;
 }
 
@@ -56,7 +68,7 @@ async function apiCall(endpoint, options = {}) {
     const config = {
         headers: {
             'Content-Type': 'application/json',
-            'admin-token': ADMIN_TOKEN,
+            'admin-token': getAdminToken(),
             ...options.headers
         },
         ...options
@@ -64,8 +76,6 @@ async function apiCall(endpoint, options = {}) {
 
     // 디버그 로그 추가
     console.log('[API CALL] URL:', url);
-    console.log('[API CALL] Headers:', config.headers);
-    console.log('[API CALL] Token being sent:', ADMIN_TOKEN);
 
     try {
         const response = await fetch(url, config);
@@ -87,7 +97,10 @@ async function apiCall(endpoint, options = {}) {
                 console.error('[API CALL] Could not parse error response');
             }
             if (response.status === 401) {
-                throw new Error('관리자 권한이 필요합니다. ADMIN_TOKEN을 확인해주세요.');
+                forgetAdminToken();
+                alert('관리자 토큰이 맞지 않습니다. 다시 입력해 주세요.');
+                location.reload();
+                throw new Error('관리자 권한이 필요합니다.');
             }
             throw new Error(errorMessage);
         }
@@ -1400,7 +1413,7 @@ async function toggleVerifyBypassFromModal() {
                 if (completedEstimates.length === 0) {
                     modalBody.innerHTML = '<div class="loading">완료된 견적이 없어 수익 정보를 계산할 수 없습니다.</div>';
                 } else {
-                    const totalRevenue = completedEstimates.reduce((sum, e) => sum + ((e.estimatedPrice || 0) * 0.05), 0);
+                    const totalRevenue = completedEstimates.reduce((sum, e) => sum + ((e.estimatedPrice || 0) * 0.10), 0); // 플랫폼 수수료 10%
                     const averageRevenue = totalRevenue / completedEstimates.length;
                     
                     const table = `
@@ -1418,7 +1431,7 @@ async function toggleVerifyBypassFromModal() {
                         </div>
                         <div class="detail-row">
                             <div class="detail-label">수수료율:</div>
-                            <div class="detail-value">5%</div>
+                            <div class="detail-value">10%</div>
                         </div>
                         <hr style="margin: 1rem 0;">
                         <h4>완료된 견적 목록</h4>
@@ -1438,7 +1451,7 @@ async function toggleVerifyBypassFromModal() {
                                         <td class="clickable-title" onclick="showEstimateDetail('${estimate.id}')" style="cursor: pointer; color: #1a73e8; text-decoration: underline;">${estimate.title || '제목 없음'}</td>
                                         <td>${estimate.customerName || '고객명 없음'}</td>
                                         <td>${estimate.estimatedPrice ? estimate.estimatedPrice.toLocaleString() + '원' : '금액 없음'}</td>
-                                        <td>${((estimate.estimatedPrice || 0) * 0.05).toLocaleString()}원</td>
+                                        <td>${((estimate.estimatedPrice || 0) * 0.10).toLocaleString()}원</td>
                                         <td>${new Date(estimate.updatedAt).toLocaleDateString()}</td>
                                     </tr>
                                 `).join('')}
@@ -3896,6 +3909,6 @@ async function removeFeaturedBiz(id) {
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Admin page initializing...');
-    checkLogin();
+    if (!checkLogin()) return;
     loadAll();
 });

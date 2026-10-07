@@ -1,6 +1,8 @@
-import type { Handler, HandlerEvent, HandlerContext } from '@netlify/functions'
+import type { Handler, HandlerEvent } from '@netlify/functions'
 
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+// AI 연결 상태 확인용. 키 값·접두사·길이와 환경변수 이름은 내려주지 않습니다
+// (예전에는 키 앞 8자리와 OPEN·AI 가 들어간 환경변수 이름 목록을 공개로 반환했습니다).
+const handler: Handler = async (event: HandlerEvent) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -13,32 +15,15 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
     return { statusCode: 204, headers, body: '' };
   }
 
-  const openaiKey = process.env.OPENAI_API_KEY || '';
-  const orKey = process.env.OPENROUTER_API_KEY || '';
-  const useOpenAI = !!openaiKey;
-  const provider = useOpenAI ? 'openai' : (orKey ? 'openrouter' : 'none');
-
-  // 디버그 정보 추가
-  const debugInfo = {
-    provider,
-    openaiKeyPresent: !!openaiKey,
-    openrouterKeyPresent: !!orKey,
-    openaiKeyLength: openaiKey.length,
-    openrouterKeyLength: orKey.length,
-    openaiKeyPrefix: openaiKey.substring(0, 8),
-    openrouterKeyPrefix: orKey.substring(0, 8),
-    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-    openrouterModel: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free',
-    allEnvKeys: Object.keys(process.env).filter(k => k.includes('OPEN') || k.includes('AI')),
-    timestamp: new Date().toISOString(),
-  };
+  const useOpenAI = !!process.env.OPENAI_API_KEY;
+  const useOpenRouter = !!process.env.OPENROUTER_API_KEY;
+  const provider = useOpenAI ? 'openai' : useOpenRouter ? 'openrouter' : 'none';
 
   return {
     statusCode: 200,
     headers,
-    body: JSON.stringify(debugInfo),
+    body: JSON.stringify({ provider, configured: provider !== 'none' }),
   };
 };
 
 export { handler };
-

@@ -45,10 +45,8 @@ class KakaoShareService {
 
       if (await ShareClient.instance.isKakaoTalkSharingAvailable()) {
         final uri = await ShareClient.instance.shareDefault(template: template);
-        if (uri != null) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-        return true;
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+              return true;
       } else {
         final url = await WebSharerClient.instance.makeDefaultUrl(template: template);
         await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -140,10 +138,8 @@ class KakaoShareService {
         final uri = await ShareClient.instance.shareDefault(template: template);
         
         // URI가 반환되면 직접 실행 (더 확실한 인텐트 전달)
-        if (uri != null) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-        return true;
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+              return true;
       } else {
         // 카카오톡 미설치 시 웹 브라우저 공유
         print('🔍 [KakaoShare] 카카오톡 미설치, 웹 공유 실행');

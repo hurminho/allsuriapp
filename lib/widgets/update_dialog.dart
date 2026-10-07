@@ -57,11 +57,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
     try {
       if (Platform.isAndroid) {
-        if (!mounted) return;
-        final handledNatively = widget.isForced
-            ? await AndroidInAppUpdateService.instance.tryImmediateUpdate()
-            : await AndroidInAppUpdateService.instance
-                .tryFlexibleUpdate(context);
+        final bool handledNatively;
+        if (widget.isForced) {
+          handledNatively =
+              await AndroidInAppUpdateService.instance.tryImmediateUpdate();
+        } else {
+          handledNatively = await AndroidInAppUpdateService.instance
+              .tryFlexibleUpdate(context);
+        }
 
         if (handledNatively) {
           // 선택 업데이트는 백그라운드 다운로드가 시작됐으므로 다이얼로그를 닫고 앱을 계속 사용하게 합니다.

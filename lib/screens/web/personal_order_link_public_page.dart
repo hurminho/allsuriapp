@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../config.dart';
 import '../../models/personal_order_link.dart';
 import '../../services/personal_order_link_service.dart';
 import '../../widgets/business/business_tokens.dart';
@@ -483,6 +486,13 @@ class _PersonalOrderLinkPublicPageState
       eventType: PersonalOrderLinkEventType.quoteStart,
     );
 
+    // 로그인하지 않은 고객은 웹 견적 페이지로 보냅니다. 웹은 서버가 주문을 저장하고
+    // 연락처 확인용 비밀번호·개인정보 동의·사업자 알림까지 처리합니다(앱 직접 저장은 로그인 사용자만 가능).
+    if (Supabase.instance.client.auth.currentSession == null) {
+      _openWebQuoteRequest();
+      return;
+    }
+
     // 견적 요청 화면으로 이동
     Navigator.push(
       context,
@@ -492,11 +502,25 @@ class _PersonalOrderLinkPublicPageState
     );
   }
 
-  void _requestComparisonQuotes() {
-    // TODO: 비교 견적 요청 (마켓플레이스로 전환)
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('비교 견적 요청 기능이 곧 구현됩니다')),
-    );
+  Future<void> _openWebQuoteRequest() async {
+    final uri = Uri.parse(
+        '${AppConfig.publicWebBaseUrl}/allsuri/${Uri.encodeComponent(_link!.slug)}');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('브라우저를 열지 못했습니다. ${uri.toString()} 에서 요청해 주세요.')),
+      );
+    }
+  }
+
+  /// 비교 견적: 여러 업체가 입찰하는 웹 견적 요청(마켓플레이스)으로 보냅니다.
+  Future<void> _requestComparisonQuotes() async {
+    final uri = Uri.parse('${AppConfig.publicWebBaseUrl}/requests');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('브라우저를 열지 못했습니다. ${uri.toString()} 에서 요청해 주세요.')),
+      );
+    }
   }
 }

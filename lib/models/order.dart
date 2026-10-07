@@ -1,5 +1,4 @@
 // unused import 제거됨
-import 'package:flutter/foundation.dart';
 
 class Order {
   final String? id;
@@ -35,6 +34,9 @@ class Order {
   final String? utmMedium;
   final String? utmCampaign;
   final String? referrerDomain;
+  // 오더 찾기(marketplace_listings) 행에는 방문일이 없습니다. 이때 visitDate 는 생성 시각이라
+  // '방문 임박' 판단이나 방문일 표시에 쓰면 안 됩니다.
+  final bool hasVisitDate;
 
   // 카테고리 목록
   static const List<String> CATEGORIES = [
@@ -85,6 +87,7 @@ class Order {
     this.utmMedium,
     this.utmCampaign,
     this.referrerDomain,
+    this.hasVisitDate = true,
   });
 
   // equipmentType getter (하위 호환성)
@@ -107,12 +110,15 @@ class Order {
   /// 오더 찾기(marketplace_listings) 행을 신규 오더 카드용 Order 로 변환합니다.
   factory Order.fromMarketplaceListing(Map<String, dynamic> listing) {
     final region = (listing['region'] ?? '').toString();
+    final rawVisitDate = listing['visit_date'] ?? listing['visitDate'];
     return Order(
       id: listing['id']?.toString(),
       title: (listing['title'] ?? '오더').toString(),
       description: (listing['description'] ?? '').toString(),
       address: region,
-      visitDate: _parseDate(listing['visit_date'] ?? listing['visitDate']),
+      visitDate: _parseDate(rawVisitDate),
+      hasVisitDate: rawVisitDate != null &&
+          DateTime.tryParse(rawVisitDate.toString()) != null,
       status: STATUS_PENDING,
       createdAt: _parseDate(
         listing['createdat'] ?? listing['created_at'] ?? listing['createdAt'],
@@ -253,6 +259,7 @@ class Order {
     String? utmMedium,
     String? utmCampaign,
     String? referrerDomain,
+    bool? hasVisitDate,
   }) {
     return Order(
       id: id ?? this.id,
@@ -286,6 +293,7 @@ class Order {
       utmMedium: utmMedium ?? this.utmMedium,
       utmCampaign: utmCampaign ?? this.utmCampaign,
       referrerDomain: referrerDomain ?? this.referrerDomain,
+      hasVisitDate: hasVisitDate ?? this.hasVisitDate,
     );
   }
 }

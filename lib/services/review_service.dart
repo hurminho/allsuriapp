@@ -85,12 +85,12 @@ class ReviewService {
 
       final order = await _sb
           .from('orders')
-          .select('status, customerid')
+          .select('status, customerId')
           .eq('id', orderId)
           .maybeSingle();
 
       if (order == null) return false;
-      return order['status'] == 'completed' && order['customerid'] == customerId;
+      return order['status'] == 'completed' && order['customerId'] == customerId;
     } catch (e) {
       debugPrint('후기 작성 가능 여부 확인 실패: $e');
       return false;

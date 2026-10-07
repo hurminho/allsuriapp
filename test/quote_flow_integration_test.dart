@@ -9,7 +9,6 @@ import 'package:allsuriapp/models/bid_breakdown.dart';
 import 'package:allsuriapp/models/price_estimate.dart';
 import 'package:allsuriapp/services/api_service.dart';
 import 'package:allsuriapp/services/price_service.dart';
-import 'package:allsuriapp/utils/api_failure.dart';
 import 'package:allsuriapp/utils/app_logger.dart';
 
 /// 견적 요청 → 가격 조회 → 사업자 입찰 → 완료 금액 기록까지의 통합 테스트.

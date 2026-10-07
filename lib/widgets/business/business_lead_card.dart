@@ -15,6 +15,8 @@ class BusinessLeadCard extends StatelessWidget {
   final bool isUrgent;
   final bool isClosingSoon;
   final bool canBid;
+  // 개인 링크로 나에게 직접 온 요청이면 '입찰 가능/견적 작성' 대신 '직접 요청/견적 보내기'로 표시합니다.
+  final bool isDirectRequest;
   final String? statusLabel;
   final Color? statusColor;
   final String? nextAction;
@@ -34,6 +36,7 @@ class BusinessLeadCard extends StatelessWidget {
     this.isUrgent = false,
     this.isClosingSoon = false,
     this.canBid = false,
+    this.isDirectRequest = false,
     this.statusLabel,
     this.statusColor,
     this.nextAction,
@@ -71,7 +74,7 @@ class BusinessLeadCard extends StatelessWidget {
                     ),
                   if (isUrgent)
                     const BusinessStatusBadge(
-                      label: '긴급',
+                      label: '방문 임박',
                       color: BusinessTheme.danger,
                       icon: Icons.priority_high_rounded,
                     ),
@@ -140,18 +143,18 @@ class BusinessLeadCard extends StatelessWidget {
                 Row(
                   children: [
                     if (canBid)
-                      const Row(
+                      Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.check_circle_outline_rounded,
                             size: 16,
                             color: BusinessTokens.success,
                           ),
-                          SizedBox(width: 5),
+                          const SizedBox(width: 5),
                           Text(
-                            '입찰 가능',
-                            style: TextStyle(
+                            isDirectRequest ? '직접 요청' : '입찰 가능',
+                            style: const TextStyle(
                               color: BusinessTokens.success,
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -176,14 +179,15 @@ class BusinessLeadCard extends StatelessWidget {
                           minimumSize: const Size(44, 36),
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '견적 작성',
-                              style: TextStyle(fontWeight: FontWeight.w800),
+                              isDirectRequest ? '견적 보내기' : '견적 작성',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800),
                             ),
-                            Icon(Icons.chevron_right_rounded, size: 18),
+                            const Icon(Icons.chevron_right_rounded, size: 18),
                           ],
                         ),
                       ),

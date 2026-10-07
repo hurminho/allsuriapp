@@ -21,6 +21,7 @@ import '../../utils/business_verify_guard.dart';
 import '../../utils/api_failure.dart';
 import '../../utils/app_logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../config/commission.dart';
 
 class CreateJobScreen extends StatefulWidget {
   const CreateJobScreen({super.key});
@@ -34,13 +35,13 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _budgetController = TextEditingController();
+  // 수수료율은 플랫폼 정책(고정)입니다. 입력하지 않고 보여 주기만 합니다.
   final TextEditingController _feeRateController =
-      TextEditingController(text: '5');
+      TextEditingController(text: kCommissionRatePercent.toStringAsFixed(0));
   final TextEditingController _feeAmountController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
 
   String _selectedCategory = '일반';
-  String _selectedUrgency = 'normal';
   bool _submitting = false;
   bool _jobCreated = false; // 공사 생성 완료 플래그 (재등록 방지)
   bool _creatingOrder = false; // 오더 생성 중복 방지 플래그
@@ -62,8 +63,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     '청소',
     '기타'
   ];
-
-  final Map<String, String> _urgencyLabels = const {};
 
   @override
   void initState() {
@@ -289,7 +288,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     _titleController.clear();
     _descController.clear();
     _budgetController.clear();
-    _feeRateController.text = '5';
+    _feeRateController.text = kCommissionRatePercent.toStringAsFixed(0);
     _feeAmountController.clear();
     _locationController.clear();
     _selectedCategory = '일반';
@@ -347,7 +346,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             : _locationController.text.trim(),
         category: _selectedCategory,
         urgency: 'normal',
-        commissionRate: double.tryParse(_feeRateController.text) ?? 5.0,
+        commissionRate: kCommissionRatePercent,
         mediaUrls: _uploadedImageUrls.isEmpty ? null : _uploadedImageUrls,
       );
 
@@ -363,7 +362,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       );
 
       // 다음 단계 선택: 오더로 올리기 또는 이관하기
-      if (!mounted) return;
       await _showPostCreateOptions(createdJobId,
           title: _titleController.text.trim(),
           description: _descController.text.trim(),
@@ -720,7 +718,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 const SizedBox(height: 16),
                 _formSection(
                   title: '모집 조건',
-                  subtitle: '기존 예산과 협업 수수료를 입력하세요',
+                  subtitle: '기존 예산을 입력하세요. 수수료는 낙찰 금액의 ${kCommissionRatePercent.toStringAsFixed(0)}%입니다',
                   children: [
                     TextFormField(
                       controller: _budgetController,
@@ -745,16 +743,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                         Expanded(
                           child: TextFormField(
                             controller: _feeRateController,
-                            keyboardType: TextInputType.number,
+                            readOnly: true,
                             decoration: _fieldDecoration(
-                              label: '수수료율 *',
+                              label: '수수료율 (고정)',
                               suffixText: '%',
                               icon: Icons.percent_rounded,
                             ),
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? '수수료율을 입력하세요'
-                                : null,
-                            onChanged: (_) => _recalcFee(),
                           ),
                         ),
                         const SizedBox(
@@ -1047,7 +1041,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         region: region ?? '',
         category: category,
         budget: budget,
-        commissionRate: double.tryParse(_feeRateController.text) ?? 5.0,
+        commissionRate: kCommissionRatePercent,
         imageUrl:
             _uploadedImageUrls.isNotEmpty ? _uploadedImageUrls.first : null,
         description: description,

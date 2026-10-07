@@ -400,7 +400,12 @@ async function openOrder(orderId) {
   dash.innerHTML = '<div class="loading-center"><span style="font-size:2rem;">⏳</span><br>불러오는 중...</div>';
 
   try {
-    const res = await fetch(`${API}/order/${orderId}?phone=${encodeURIComponent(authPhone)}&pwd=${encodeURIComponent(authPwd)}`);
+    // 비밀번호는 주소가 아니라 본문으로 보냅니다(접속 기록에 남지 않게).
+    const res = await fetch(`${API}/order/${orderId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: authPhone, password: authPwd }),
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '조회 실패');
     currentOrderData = data;

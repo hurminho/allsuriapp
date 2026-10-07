@@ -623,11 +623,11 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                             context,
                             listen: false,
                           ).signOut();
-                          if (mounted) {
+                          if (context.mounted) {
                             NavigationUtils.navigateToRoleHome(context);
                           }
                         } catch (e) {
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('로그아웃 실패: $e')),
                             );
@@ -767,10 +767,6 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         ],
       ),
     );
-  }
-
-  void _showVerifySuccessDialog(BusinessVerifyResult r) {
-    _showBusinessConfirmedDialog(result: r);
   }
 
   void _showVerifyFailureDialog(BusinessVerifyResult r) {

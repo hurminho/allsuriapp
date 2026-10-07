@@ -602,6 +602,7 @@ class _PersonalOrderLinkManagementScreenState
     await Clipboard.setData(ClipboardData(text: url));
 
     // 공유 통계 업데이트
+    if (!mounted) return;
     final service =
         Provider.of<PersonalOrderLinkService>(context, listen: false);
     if (_link != null) {
@@ -650,6 +651,7 @@ $url''';
       );
 
       // 공유 통계 업데이트
+      if (!mounted) return;
       final service =
           Provider.of<PersonalOrderLinkService>(context, listen: false);
       if (_link != null) {
@@ -761,6 +763,7 @@ $url''';
 
     if (confirmed == true && _link != null) {
       try {
+        if (!mounted) return;
         final service =
             Provider.of<PersonalOrderLinkService>(context, listen: false);
         await service.updateLinkStatus(
@@ -827,6 +830,7 @@ $url''';
 
     if (confirmed == true && _link != null) {
       try {
+        if (!mounted) return;
         final service =
             Provider.of<PersonalOrderLinkService>(context, listen: false);
         await service.updateLinkStatus(

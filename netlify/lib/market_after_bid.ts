@@ -75,16 +75,7 @@ export async function afterBidInserted(opts: {
 }) {
   const { listingId: id, businessId, bidAmount: bid_amount } = opts
   if (opts.bidId) void stampBidTrade(String(opts.bidId), id)
-  // 문자 발송이 타임아웃 예산을 최대한 쓸 수 있도록 대기하지 않습니다.
-  void fetch(`${SUPABASE_URL}/rest/v1/rpc/increment_bid_count`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ p_listing_id: id })
-  }).catch(() => {/* bid_count 업데이트 실패는 무시 */})
+  // bid_count 는 order_bids 트리거(update_bid_count)가 올립니다. 여기서 따로 올리지 않습니다.
 
     // 알림 및 푸시 알림 전송
     try {

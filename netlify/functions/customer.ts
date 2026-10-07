@@ -3,10 +3,11 @@
 // 4자리 PIN으로 본인 확인 후 견적 요청 조회/낙찰/완료/평점 처리
 
 import { customerOrderUrl, formatPhoneDisplay, sendSms, smsBidAwarded, smsWorkDoneReview } from '../lib/solapi_sms'
+import { businessCanAct } from '../lib/business_eligibility'
+import { COMMISSION_RATE } from '../lib/commission'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || 'devtoken'
 
 const sbHeaders = {
   apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -93,6 +94,26 @@ async function verifyOrder(orderId: string, phone: string, password: string): Pr
   return order
 }
 
+// users 에는 category/region/description/profile_image_url 컬럼이 없습니다(예전 코드가 요청해 쿼리가 통째로 실패했음).
+// 실제 컬럼(specialties·serviceareas 배열, avatar_url/profile_image)을 읽어 웹이 쓰는 이름으로 맞춥니다.
+const BIZ_COLS =
+  'id,name,businessname,phonenumber,specialties,serviceareas,avatar_url,profile_image,projects_awarded_count,estimates_created_count,review_average,review_count'
+
+function joinList(v: unknown): string | null {
+  if (Array.isArray(v)) return v.filter(Boolean).join(', ') || null
+  return typeof v === 'string' && v ? v : null
+}
+
+function toPublicBusiness(u: any) {
+  return {
+    ...u,
+    category: joinList(u.specialties),
+    region: joinList(u.serviceareas),
+    description: null,
+    profile_image_url: u.avatar_url || u.profile_image || null,
+  }
+}
+
 export const handler = async (event: any) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: JSON_HEADERS, body: '' }
@@ -105,7 +126,6 @@ export const handler = async (event: any) => {
       .replace(/^\/api\/customer/, '')
       || '/'
 
-    const qp = event.queryStringParameters || {}
 
     // ─────────────────────────────────────────────────────────────
     // POST /verify  - phone + webPassword → 주문 목록 반환
@@ -145,13 +165,15 @@ export const handler = async (event: any) => {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // GET /order/:orderId  - 주문 상세 + 입찰 목록 (phone+pwd 인증)
+    // POST /order/:orderId  - 주문 상세 + 입찰 목록 (phone+pwd 인증, 본문으로 받음)
     // order_bids를 단일 소스로 사용 (앱 사업자 입찰과 동일한 데이터)
+    // 예전 GET ?phone=&pwd= 는 비밀번호가 접속 기록에 남아 받지 않습니다.
     // ─────────────────────────────────────────────────────────────
-    if (event.httpMethod === 'GET' && /^\/order\/[^/]+$/.test(path)) {
+    if (event.httpMethod === 'POST' && /^\/order\/[^/]+$/.test(path)) {
       const orderId = path.split('/')[2]
-      const phone = (qp.phone || '').replace(/[^0-9]/g, '')
-      const password = String(qp.pwd || '').trim()
+      const detailBody = JSON.parse(event.body || '{}')
+      const phone = String(detailBody.phone || '').replace(/[^0-9]/g, '')
+      const password = String(detailBody.password || '').trim()
 
       if (!phone || !password) return err('인증 정보가 필요합니다.', 401)
       const order = await verifyOrder(orderId, phone, password)
@@ -184,7 +206,7 @@ export const handler = async (event: any) => {
         const idsFilter = bidderIds.map((id) => encodeURIComponent(id)).join(',')
         const [usersRes, reviewsRes] = await Promise.all([
           fetch(
-            `${SUPABASE_URL}/rest/v1/users?id=in.(${idsFilter})&select=id,name,businessname,phonenumber,category,region,description,profile_image_url,projects_awarded_count`,
+            `${SUPABASE_URL}/rest/v1/users?id=in.(${idsFilter})&select=${BIZ_COLS}`,
             { headers: sbHeaders }
           ),
           fetch(
@@ -195,7 +217,7 @@ export const handler = async (event: any) => {
         const usersArr = await usersRes.json()
         const reviewsArr = await reviewsRes.json()
         if (Array.isArray(usersArr)) {
-          for (const u of usersArr) bidderProfiles[u.id] = u
+          for (const u of usersArr) bidderProfiles[u.id] = toPublicBusiness(u)
         }
         if (Array.isArray(reviewsArr)) {
           for (const bid of bidderIds) {
@@ -213,11 +235,11 @@ export const handler = async (event: any) => {
         awardedBusiness = bidderProfiles[techId] || null
         if (!awardedBusiness) {
           const bRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(techId)}&select=id,name,businessname,phonenumber,email,category,region,description,profile_image_url,projects_awarded_count&limit=1`,
+            `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(techId)}&select=${BIZ_COLS}&limit=1`,
             { headers: sbHeaders }
           )
           const bArr = await bRes.json()
-          awardedBusiness = Array.isArray(bArr) ? bArr[0] : null
+          awardedBusiness = Array.isArray(bArr) && bArr[0] ? toPublicBusiness(bArr[0]) : null
         }
         if (awardedBusiness) {
           const r = bidderRatings[techId]
@@ -270,7 +292,7 @@ export const handler = async (event: any) => {
 
       const [bizRes, reviewsRes] = await Promise.all([
         fetch(
-          `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(bizId)}&select=id,name,businessname,phonenumber,email,category,region,description,profile_image_url,projects_awarded_count,estimates_created_count&limit=1`,
+          `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(bizId)}&select=${BIZ_COLS}&limit=1`,
           { headers: sbHeaders }
         ),
         fetch(
@@ -280,7 +302,7 @@ export const handler = async (event: any) => {
       ])
 
       const [bizArr, reviewsRaw] = await Promise.all([bizRes.json(), reviewsRes.json()])
-      const biz = Array.isArray(bizArr) ? bizArr[0] : null
+      const biz = Array.isArray(bizArr) && bizArr[0] ? toPublicBusiness(bizArr[0]) : null
       if (!biz) return err('사업자를 찾을 수 없습니다.', 404)
 
       const reviews = Array.isArray(reviewsRaw) ? reviewsRaw : []
@@ -310,7 +332,7 @@ export const handler = async (event: any) => {
 
       // 0. 입찰(order_bids) 조회 + 해당 오더 소속 검증
       const bidRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/order_bids?id=eq.${encodeURIComponent(bidId)}&select=id,listing_id,bidder_id,status,marketplace_listings!inner(web_order_id)&limit=1`,
+        `${SUPABASE_URL}/rest/v1/order_bids?id=eq.${encodeURIComponent(bidId)}&select=id,listing_id,bidder_id,status,bid_amount,marketplace_listings!inner(web_order_id)&limit=1`,
         { headers: sbHeaders }
       )
       const bidArr = await bidRes.json()
@@ -318,8 +340,14 @@ export const handler = async (event: any) => {
       const bidOrderId = bid?.marketplace_listings?.web_order_id
       if (!bid || bidOrderId !== orderId) return err('입찰 정보를 찾을 수 없습니다.', 404)
       if (bid.status !== 'pending') return err('이미 처리된 입찰입니다.')
+      // B2B 낙찰(select_bidder)과 같은 기준: 승인 + 사업자등록번호가 있는 업체만 낙찰할 수 있습니다.
+      if (!(await businessCanAct(String(bid.bidder_id)))) {
+        return err('사업자 정보 확인이 끝나지 않은 업체라 선택할 수 없습니다. 다른 업체를 선택해 주세요.')
+      }
 
       const businessId = bid.bidder_id
+      // 공사 금액 = 낙찰된 입찰가. 수수료(commission_amount)는 DB 트리거가 이 금액으로 계산합니다.
+      const bidAmount = Number(bid.bid_amount) > 0 ? Number(bid.bid_amount) : 0
       const now = new Date().toISOString()
 
       // 1. order_bids 낙찰 처리 (트리거가 marketplace_listings.selected_bidder_id 설정 + 다른 입찰 rejected 처리)
@@ -363,9 +391,9 @@ export const handler = async (event: any) => {
         location: order.address || '',
         category: order.category || '',
         urgency: 'normal',
-        budget_amount: 0,
-        awarded_amount: 0,
-        commission_rate: 5,
+        budget_amount: bidAmount,
+        awarded_amount: bidAmount,
+        commission_rate: COMMISSION_RATE,
         created_at: now,
         updated_at: now,
       }
@@ -408,6 +436,12 @@ export const handler = async (event: any) => {
           method: 'PATCH',
           headers: { ...sbHeaders, Prefer: 'return=minimal' },
           body: JSON.stringify({ job_id: jobId }),
+        }).catch(() => {})
+        // 앱의 공사 완료 처리는 오더(listing)의 jobid 로 공사를 찾습니다.
+        await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=eq.${encodeURIComponent(bid.listing_id)}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, Prefer: 'return=minimal' },
+          body: JSON.stringify({ jobid: jobId, updatedat: now }),
         }).catch(() => {})
       }
 
@@ -458,6 +492,24 @@ export const handler = async (event: any) => {
       if (!order) return err('인증 실패', 401)
       if (!order.isAwarded) return err('낙찰 전에는 완료 처리할 수 없습니다.')
       if (order.status === 'completed') return err('이미 완료 처리된 요청입니다.')
+      // 낙찰 직후 실수로 완료되지 않도록, 사업자가 '공사 완료'를 알렸거나
+      // 방문 희망일이 지난 뒤에만 고객이 최종 확인할 수 있습니다.
+      // (웹 lib/web-order-rules.ts 의 customerCanConfirmCompletion 과 같은 기준)
+      let jobStatus: string | null = null
+      if (order.matchedJobId) {
+        const jobRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/jobs?id=eq.${encodeURIComponent(order.matchedJobId)}&select=status&limit=1`,
+          { headers: sbHeaders }
+        )
+        const jobArr = jobRes.ok ? await jobRes.json() : []
+        jobStatus = Array.isArray(jobArr) ? jobArr[0]?.status ?? null : null
+      }
+      const visitAt = Date.parse(String(order.visitDate || ''))
+      const visitPassed = Number.isFinite(visitAt) && visitAt <= Date.now()
+      const workDone = jobStatus === 'awaiting_confirmation' || jobStatus === 'completed'
+      if (order.status !== 'in_progress' || (!workDone && !visitPassed)) {
+        return err('사업자가 공사 완료를 알리거나 방문 희망일이 지나면 확인할 수 있습니다.')
+      }
 
       const now = new Date().toISOString()
 
@@ -486,7 +538,7 @@ export const handler = async (event: any) => {
         await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=eq.${encodeURIComponent(listingId)}`, {
           method: 'PATCH',
           headers: { ...sbHeaders, Prefer: 'return=minimal' },
-          body: JSON.stringify({ status: 'completed', updatedat: now }),
+          body: JSON.stringify({ status: 'completed', completed_at: now, updatedat: now }),
         })
       }
 

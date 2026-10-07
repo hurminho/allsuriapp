@@ -38,7 +38,7 @@
      ```
      SUPABASE_URL=https://iiunvogtqssxaxdnhqaj.supabase.co
      SUPABASE_SERVICE_ROLE_KEY=[service_role_key]
-     ADMIN_TOKEN=devtoken
+     ADMIN_TOKEN=[임의의 긴 무작위 문자열 — 기본값 없음, 없으면 관리자 API는 모두 401]
      ```
 
 3. **Service Role Key 확인**
@@ -63,7 +63,6 @@
      [PAGE LOAD] DOM이 로드되었습니다
      [loadUsers] 사용자 목록 로딩 시작...
      [API CALL] URL: /api/admin/users
-     [API CALL] Token being sent: devtoken
      [loadUsers] 받은 사용자 수: X
      ```
    
@@ -76,7 +75,7 @@
    - 클릭 후 다음 확인:
      - **Status**: 200 OK 인가요?
      - **Response**: 데이터가 있나요?
-     - **Headers**: `admin-token: devtoken`이 전송되나요?
+     - **Headers**: `admin-token` 헤더가 전송되나요? (관리자 페이지는 처음 열 때 입력한 토큰을 이 탭에서만 기억합니다)
 
 ---
 
@@ -135,7 +134,7 @@ ORDER BY ordinal_position;
 **원인**: ADMIN_TOKEN 불일치
 
 **해결**:
-- Netlify 환경 변수: `ADMIN_TOKEN=devtoken`
+- Netlify 환경 변수 `ADMIN_TOKEN`이 설정돼 있고, 관리자 페이지에 같은 값을 입력했는지 확인
 - 재배포 필요할 수 있음
 
 ### 문제 3: 404 Not Found
@@ -153,10 +152,10 @@ ORDER BY ordinal_position;
 
 ```bash
 # 사용자 목록 조회
-curl -H "admin-token: devtoken" https://api.allsuri.app/api/admin/users
+curl -H "admin-token: $ADMIN_TOKEN" https://api.allsuri.app/api/admin/users
 
 # 대시보드 통계
-curl -H "admin-token: devtoken" https://api.allsuri.app/api/admin/dashboard
+curl -H "admin-token: $ADMIN_TOKEN" https://api.allsuri.app/api/admin/dashboard
 ```
 
 정상이면 JSON 데이터가 반환됩니다.

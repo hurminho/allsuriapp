@@ -43,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       // 성공/실패는 onAuthStateChange에 의해 화면이 전환됨
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('오류: $e')),
       );

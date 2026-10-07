@@ -1,9 +1,14 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/personal_order_link.dart';
 import '../../models/order.dart' as app_models;
 import '../../services/personal_order_link_service.dart';
 import '../../services/order_service.dart';
+import '../../services/media_service.dart';
 import '../../widgets/business/business_tokens.dart';
 import '../../utils/app_logger.dart';
 
@@ -31,6 +36,9 @@ class _PersonalLinkQuoteRequestScreenState
   // Step 2: 증상과 사진
   final _symptomsController = TextEditingController();
   final List<String> _photos = [];
+  static const int _maxPhotos = 5;
+  final MediaService _mediaService = MediaService();
+  bool _uploadingPhotos = false;
 
   // Step 3: 추가 정보
   final _addressController = TextEditingController();
@@ -266,10 +274,45 @@ class _PersonalLinkQuoteRequestScreenState
           },
         ),
         const SizedBox(height: 16),
+        if (_photos.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final url in _photos)
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(url, width: 72, height: 72, fit: BoxFit.cover),
+                    ),
+                    Positioned(
+                      top: -6,
+                      right: -6,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _photos.remove(url)),
+                        child: const CircleAvatar(
+                          radius: 11,
+                          backgroundColor: Colors.black54,
+                          child: Icon(Icons.close, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
         OutlinedButton.icon(
-          onPressed: _pickPhotos,
-          icon: const Icon(Icons.camera_alt_outlined),
-          label: Text(_photos.isEmpty ? '사진 추가 (선택)' : '사진 ${_photos.length}장 선택됨'),
+          onPressed: _uploadingPhotos ? null : _pickPhotos,
+          icon: _uploadingPhotos
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.camera_alt_outlined),
+          label: Text(_uploadingPhotos
+              ? '사진 올리는 중...'
+              : (_photos.isEmpty ? '사진 추가 (선택, 최대 $_maxPhotos장)' : '사진 ${_photos.length}장 · 더 추가')),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
             shape: RoundedRectangleBorder(
@@ -811,6 +854,7 @@ class _PersonalLinkQuoteRequestScreenState
       );
 
       // 이벤트 기록
+      if (!mounted) return;
       final polService =
           Provider.of<PersonalOrderLinkService>(context, listen: false);
       await polService.trackEvent(
@@ -849,10 +893,44 @@ class _PersonalLinkQuoteRequestScreenState
   }
 
   Future<void> _pickPhotos() async {
-    // TODO: 실제 이미지 피커 구현
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('사진 선택 기능이 곧 구현됩니다')),
+    void notify(String message) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+
+    if (kIsWeb) {
+      // 웹 공개 페이지(allsuri.app/allsuri/...)에서는 브라우저 업로드를 씁니다.
+      notify('사진 첨부는 올수리 앱 또는 웹 견적 페이지에서 할 수 있습니다');
+      return;
+    }
+    final remaining = _maxPhotos - _photos.length;
+    if (remaining <= 0) {
+      notify('사진은 최대 $_maxPhotos장까지 첨부할 수 있습니다');
+      return;
+    }
+
+    final picked = await ImagePicker().pickMultiImage(
+      imageQuality: 80,
+      maxWidth: 1920,
+      limit: remaining > 1 ? remaining : null,
     );
+    if (picked.isEmpty || !mounted) return;
+
+    setState(() => _uploadingPhotos = true);
+    var failed = 0;
+    for (final x in picked.take(remaining)) {
+      try {
+        final url = await _mediaService.uploadEstimateImage(file: File(x.path));
+        if (!mounted) return;
+        setState(() => _photos.add(url));
+      } catch (e) {
+        failed++;
+        AppLog.warn('PersonalLinkQuote', '사진 업로드 실패: $e');
+      }
+    }
+    if (!mounted) return;
+    setState(() => _uploadingPhotos = false);
+    if (failed > 0) notify('사진 $failed장을 올리지 못했습니다. 다시 시도해 주세요.');
   }
 
   Future<void> _pickVisitDate() async {

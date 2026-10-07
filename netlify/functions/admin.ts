@@ -2,8 +2,10 @@
 // Netlify function: admin API router
 // Proxies selected endpoints used by backend/public/admin.js
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
+import { COMMISSION_RATE } from '../lib/commission'
 
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || 'devtoken'
+// 환경변수가 없으면 관리자 API는 모두 401입니다(기본값 없음).
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
 
@@ -13,7 +15,31 @@ function unauthorized() {
 
 function withAuth(headers: Record<string, string>): boolean {
   const token = headers['admin-token'] || headers['x-admin-token'] || ''
-  return token === ADMIN_TOKEN
+  return Boolean(ADMIN_TOKEN) && token === ADMIN_TOKEN
+}
+
+
+/**
+ * 웹 고객 주문과 연결된 오더(listing)를 지우거나 취소하면 고객 주문도 취소로 바꿉니다.
+ * 예전에는 오더만 지워져 고객 화면에 '입찰 중'으로 영원히 남았습니다.
+ */
+async function cancelLinkedWebOrders(webOrderIds: string[], reason: string) {
+  const ids = [...new Set(webOrderIds.filter(Boolean))]
+  if (!ids.length) return
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/orders?id=in.(${ids.join(',')})&status=not.in.(completed,cancelled)`,
+    {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ status: 'cancelled', adminNotes: reason, updatedAt: new Date().toISOString() }),
+    },
+  )
+  if (!res.ok) console.warn('[ADMIN] 연결된 웹 주문 취소 실패:', res.status, await res.text().catch(() => ''))
 }
 
 export const handler = async (event: any) => { // event 타입 any로 임시 설정
@@ -75,8 +101,8 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       console.log('[ADMIN DASHBOARD] Total estimate amount:', totalEstimateAmount)
       console.log('[ADMIN DASHBOARD] Completed estimates count:', completedEstimatesList.length)
 
-      // 총 수익: 완료된 견적 금액의 5% 계산
-      const totalRevenue = totalEstimateAmount * 0.05
+      // 총 수익: 완료된 견적 금액 × 플랫폼 수수료율
+      const totalRevenue = totalEstimateAmount * (COMMISSION_RATE / 100)
 
       // Fetch marketplace_listings (에러 객체 시 빈 배열)
       const listingsRes = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?select=id,status,claimed_by,budget_amount`, { headers })
@@ -378,7 +404,7 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       }
       await fetch(`${SUPABASE_URL}/rest/v1/order_bids?listing_id=in.(${idList})`, { method: 'DELETE', headers: sbHeaders })
-      const listed = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=in.(${idList})&select=jobid`, { headers: sbHeaders })
+      const listed = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=in.(${idList})&select=jobid,web_order_id`, { headers: sbHeaders })
       const listingRows = await listed.json()
       const jobIds = Array.isArray(listingRows)
         ? [...new Set(listingRows.map((row: { jobid?: string }) => row.jobid).filter((id): id is string => !!id && uuidRe.test(id)))]
@@ -391,6 +417,12 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       if (jobIds.length) {
         await fetch(`${SUPABASE_URL}/rest/v1/jobs?id=in.(${jobIds.join(',')})`, { method: 'DELETE', headers: sbHeaders })
       }
+      if (Array.isArray(listingRows)) {
+        await cancelLinkedWebOrders(
+          listingRows.map((row: { web_order_id?: string }) => String(row.web_order_id || '')).filter((id) => uuidRe.test(id)),
+          '관리자가 연결된 오더를 삭제했습니다',
+        )
+      }
       return { statusCode: 200, body: JSON.stringify({ success: true, message: `${ids.length}건 삭제되었습니다`, deleted: ids.length }), headers: { 'Content-Type': 'application/json' } }
     }
 
@@ -399,6 +431,13 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       const listingId = path.split('/')[2]
       
       console.log(`[ADMIN] 오더 삭제 시작: listingId=${listingId}`)
+
+      const linkedRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/marketplace_listings?id=eq.${encodeURIComponent(listingId)}&select=web_order_id`,
+        { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } },
+      )
+      const linkedRows = linkedRes.ok ? await linkedRes.json() : []
+      const linkedWebOrderId = Array.isArray(linkedRows) ? String(linkedRows[0]?.web_order_id || '') : ''
       
       // marketplace_listings 삭제 (CASCADE로 order_bids도 삭제됨)
       const delRes = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?id=eq.${encodeURIComponent(listingId)}`, {
@@ -420,6 +459,7 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       }
       
       console.log(`[ADMIN] 오더 삭제 완료: ${listingId}`)
+      if (linkedWebOrderId) await cancelLinkedWebOrders([linkedWebOrderId], '관리자가 연결된 오더를 삭제했습니다')
       
       return { 
         statusCode: 200, 
@@ -611,13 +651,22 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       })
       const resText = await res.text()
       if (!res.ok) return { statusCode: 500, body: JSON.stringify({ success: false, error: resText }), headers: { 'Content-Type': 'application/json' } }
+      if (body.status === 'cancelled') {
+        try {
+          const rows = JSON.parse(resText)
+          const webOrderId = Array.isArray(rows) ? String(rows[0]?.web_order_id || '') : ''
+          if (webOrderId) await cancelLinkedWebOrders([webOrderId], '관리자가 오더를 취소했습니다')
+        } catch {
+          // 응답 파싱 실패는 상태 변경 결과에 영향이 없습니다.
+        }
+      }
       return { statusCode: 200, body: JSON.stringify({ success: true }), headers: { 'Content-Type': 'application/json' } }
     }
 
     // 게시물 목록 (community_posts)
     if (event.httpMethod === 'GET' && path === '/posts') {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/community_posts?select=id,title,content,author_id,created_at,updated_at,likes_count,comments_count,is_active,category&order=created_at.desc&limit=200`,
+        `${SUPABASE_URL}/rest/v1/community_posts?select=id,title,content,author_id:authorid,created_at:createdat,updated_at:updatedat,likes_count:upvotes,comments_count:commentscount,category:tags&order=createdat.desc&limit=200`,
         { headers: sbHeaders }
       )
       const posts = await res.json()
@@ -646,21 +695,14 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       return { statusCode: 200, body: JSON.stringify({ success: true, message: '게시글이 삭제되었습니다' }), headers: { 'Content-Type': 'application/json' } }
     }
 
-    // 채팅방 목록 (createdat/created_at 스키마 호환)
+    // 채팅방 목록 (chat_rooms 실제 컬럼: createdat, "updatedAt", active — status 컬럼은 없습니다)
     if (event.httpMethod === 'GET' && path === '/chats') {
-      const selectCols = 'id,participant_a,participant_b,status'
-      let rooms: any[] = []
-      for (const orderCol of ['createdat', 'created_at']) {
-        const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/chat_rooms?select=${selectCols},${orderCol}&order=${orderCol}.desc&limit=200`,
-          { headers: sbHeaders }
-        )
-        const data = await res.json()
-        if (Array.isArray(data) && !(data as any)?.code) {
-          rooms = data
-          break
-        }
-      }
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/chat_rooms?select=id,participant_a,participant_b,title,active,created_at:createdat,updated_at:updatedAt&order=createdat.desc&limit=200`,
+        { headers: sbHeaders }
+      )
+      const data = await res.json()
+      const rooms: any[] = Array.isArray(data) ? data : []
       const pIds = [...new Set(rooms.flatMap((r: any) => [r.participant_a, r.participant_b]).filter(Boolean))] as string[]
       const usersMap = await fetchUsers(pIds)
       const result = rooms.map((r: any) => ({
@@ -676,18 +718,12 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
     // 채팅방 메시지 (createdat/created_at 스키마 호환)
     if (event.httpMethod === 'GET' && /^\/chats\/[^/]+\/messages$/.test(path)) {
       const roomId = path.split('/')[2]
-      let messages: any[] = []
-      for (const orderCol of ['created_at', 'createdat']) {
-        const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/chat_messages?room_id=eq.${roomId}&select=id,sender_id,content,image_url,video_url,${orderCol},message_type&order=${orderCol}.asc&limit=100`,
-          { headers: sbHeaders }
-        )
-        const data = await res.json()
-        if (Array.isArray(data) && !(data as any)?.code) {
-          messages = data
-          break
-        }
-      }
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/chat_messages?room_id=eq.${roomId}&select=id,sender_id,content,image_url,video_url,created_at:createdat,message_type:type&order=createdat.asc&limit=100`,
+        { headers: sbHeaders }
+      )
+      const data = await res.json()
+      const messages: any[] = Array.isArray(data) ? data : []
       const senderIds = [...new Set(messages.map((m: any) => m.sender_id).filter(Boolean))] as string[]
       const usersMap = await fetchUsers(senderIds)
       const result = messages.map((m: any) => ({ ...m, sender_name: getUserName(usersMap, m.sender_id) }))
@@ -899,10 +935,10 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       const qp = event.queryStringParameters || {}
       const q = (qp.q || '').trim()
       const category = (qp.category || '').trim()
-      let url = `${SUPABASE_URL}/rest/v1/users?select=id,name,businessname,phonenumber,email,category,region,businessstatus,projects_awarded_count,estimates_created_count&role=eq.business&businessstatus=eq.approved&limit=200`
+      let url = `${SUPABASE_URL}/rest/v1/users?select=id,name,businessname,phonenumber,email,category:specialties,region:serviceareas,businessstatus,projects_awarded_count,estimates_created_count&role=eq.business&businessstatus=eq.approved&limit=200`
       if (q) {
         const like = encodeURIComponent(`%${q}%`)
-        url = `${SUPABASE_URL}/rest/v1/users?select=id,name,businessname,phonenumber,email,category,region,businessstatus,projects_awarded_count,estimates_created_count&role=eq.business&businessstatus=eq.approved&or=(businessname.ilike.${like},name.ilike.${like},phonenumber.ilike.${like})&limit=200`
+        url = `${SUPABASE_URL}/rest/v1/users?select=id,name,businessname,phonenumber,email,category:specialties,region:serviceareas,businessstatus,projects_awarded_count,estimates_created_count&role=eq.business&businessstatus=eq.approved&or=(businessname.ilike.${like},name.ilike.${like},phonenumber.ilike.${like})&limit=200`
       }
       const res = await fetch(url, { headers: sbHeaders })
       let businesses = await res.json()
@@ -944,11 +980,12 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
         urgency: 'normal',
         budget_amount: amount || order.estimatedPrice || 0,
         awarded_amount: amount || order.estimatedPrice || 0,
-        commission_rate: 5,
+        commission_rate: COMMISSION_RATE,
+        // 고객 주문과 연결해야 앱의 공사 완료 문자·담당 확인이 동작합니다(예전에는 메모가 있을 때만 넣었음).
+        web_order_id: orderId,
         created_at: now,
         updated_at: now,
       }
-      if (notes) jobPayload.web_order_id = orderId  // web_order_id 컬럼이 있으면 설정
 
       const jobRes = await fetch(`${SUPABASE_URL}/rest/v1/jobs`, {
         method: 'POST',

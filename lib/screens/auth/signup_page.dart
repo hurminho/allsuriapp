@@ -46,6 +46,7 @@ class _SignupPageState extends State<SignupPage> {
         Navigator.pop(context);
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('오류: $e')),
       );

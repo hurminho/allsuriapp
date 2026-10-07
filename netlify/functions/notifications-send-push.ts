@@ -122,12 +122,14 @@ async function claimNotificationForPush(id: string): Promise<boolean> {
 
 // Supabase Webhook 경로 처리 (/send-push-webhook)
 async function handleSupabaseWebhook(event: any) {
-  const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
+  // Webhook 전용 비밀값. PUSH_WEBHOOK_SECRET 을 설정하면 그것만 받고,
+  // 설정 전에는 기존처럼 ADMIN_TOKEN 을 받습니다(교체 기간 호환).
+  const WEBHOOK_SECRET =
+    process.env.PUSH_WEBHOOK_SECRET || process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
   const authHeader = (event.headers['authorization'] || event.headers['Authorization'] || '') as string
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
 
-  // 관리자 토큰 검증
-  if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
+  if (!WEBHOOK_SECRET || token !== WEBHOOK_SECRET) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }), headers: JSON_HEADERS }
   }
 
@@ -257,21 +259,13 @@ export const handler = async (event: any) => {
       return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header required' }), headers: JSON_HEADERS }
     }
 
-    // 관리자 토큰으로도 호출 가능 (테스트 및 서버 측 호출용)
+    // 임의 사용자에게 임의 문구를 보내는 경로라 서버(관리자 토큰·service role)만 호출할 수 있습니다.
+    // 앱의 일반 알림은 notifications INSERT → Webhook 경로로 갑니다.
     const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
-    const isAdminToken = ADMIN_TOKEN && token === ADMIN_TOKEN
-
-    if (!isAdminToken) {
-      // 일반 Supabase JWT 검증
-      const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` },
-      })
-      if (!verifyRes.ok) {
-        console.warn('[send-push] JWT 검증 실패:', verifyRes.status, 'token 앞 20자:', token.substring(0, 20))
-        return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }), headers: JSON_HEADERS }
-      }
-    } else {
-      console.log('[send-push] 관리자 토큰으로 인증됨')
+    const isAdminToken = Boolean(ADMIN_TOKEN) && token === ADMIN_TOKEN
+    const isServiceRole = Boolean(SUPABASE_SERVICE_ROLE_KEY) && token === SUPABASE_SERVICE_ROLE_KEY
+    if (!isAdminToken && !isServiceRole) {
+      return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }), headers: JSON_HEADERS }
     }
 
     // ── 2. 요청 파싱 후 공통 함수 호출 ──────────────────────────────

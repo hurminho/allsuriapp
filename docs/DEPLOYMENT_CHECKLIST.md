@@ -33,16 +33,11 @@ database/fix_claim_listing_for_created_status.sql
 database/add_fcm_token_to_users.sql
 ```
 
-### 2. Supabase Edge Function 배포
+### 2. 푸시 알림 경로
 
-#### ✅ **FCM 푸시 알림 함수**
-```bash
-cd supabase/functions/send-push-notification
-supabase functions deploy send-push-notification
-```
-
-**필요한 환경 변수:**
-- `FCM_SERVER_KEY`: Firebase Console → Project Settings → Cloud Messaging → Server key
+Supabase Edge Function은 쓰지 않습니다. 푸시는 `notifications` INSERT → Database Webhook →
+Netlify `send-push-webhook`(FCM v1) 한 경로로 나갑니다(`database/setup_push_webhook.sql`).
+Webhook 헤더의 `Authorization: Bearer <PUSH_WEBHOOK_SECRET>` 값은 Netlify 환경변수 `PUSH_WEBHOOK_SECRET`과 같아야 합니다.
 
 ### 3. Netlify 환경 변수 설정
 

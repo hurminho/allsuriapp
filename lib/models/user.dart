@@ -1,4 +1,3 @@
-import 'role.dart';
 
 enum BusinessStatus {
   pending,    // 승인 대기

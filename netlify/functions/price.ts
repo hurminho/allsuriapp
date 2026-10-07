@@ -28,6 +28,7 @@ import {
   listBaselines,
   listRateCards,
   listingContext,
+  selectedBidForListing,
   loadCatalog,
   loadSamples,
   marketReport,
@@ -40,7 +41,8 @@ import {
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || 'devtoken'
+// 환경변수가 없으면 관리자 기능은 열리지 않습니다(기본값 없음).
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json',
@@ -444,12 +446,18 @@ async function handleCompletedJob(event: any) {
   let propertyType = normalizePropertyType(body.propertyType)
   let urgency = normalizeUrgency(body.urgency)
 
+  let bidId = body.bidId ? String(body.bidId) : null
   if (body.listingId) {
-    const ctx = await listingContext(String(body.listingId))
+    const [ctx, selectedBid] = await Promise.all([
+      listingContext(String(body.listingId)),
+      selectedBidForListing(String(body.listingId)),
+    ])
+    bidId = bidId || selectedBid?.id || null
     if (ctx.listing && !trade) {
       trade =
         resolveTrade(catalog.trades, {
-          tradeId: ctx.order?.tradeId,
+          // 사업자 간 오더는 고객 주문이 없어, 입찰 때 확정한 공정을 이어받습니다.
+          tradeId: ctx.order?.tradeId || selectedBid?.trade_id,
           category: ctx.order?.category || ctx.listing.category,
           subcategory: ctx.order?.subcategory,
           text: `${ctx.listing.title || ''} ${ctx.listing.description || ''}`,
@@ -483,7 +491,7 @@ async function handleCompletedJob(event: any) {
     order_id: orderId,
     listing_id: body.listingId ? String(body.listingId) : null,
     job_id: body.jobId ? String(body.jobId) : null,
-    bid_id: body.bidId ? String(body.bidId) : null,
+    bid_id: bidId,
     trade_id: trade?.id ?? null,
     category: trade?.category ?? (body.category ? String(body.category) : null),
     subcategory: trade?.subcategory ?? (body.subcategory ? String(body.subcategory) : null),

@@ -68,7 +68,6 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
       // 2. 견적 합산 금액 및 수수료 계산 + 월별 수수료 집계
       double totalEstimate = 0;
       double totalCommission = 0;
-      int commissionCount = 0;
       int jobsWithAmount = 0;
       Map<String, double> monthlyCommission = {};
 
@@ -105,7 +104,6 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
             if (rate > 0) {
               final commission = amount * (rate / 100);
               totalCommission += commission;
-              commissionCount++;
               print('      💰 수수료: ${amount}원 × ${rate}% = ${commission}원');
               
               // 월별 수수료 집계
@@ -746,16 +744,6 @@ class _MyRevenueScreenState extends State<MyRevenueScreen> {
         ],
       ),
     );
-  }
-
-  String _formatNumber(double number) {
-    if (number >= 100000000) {
-      return '${(number / 100000000).toStringAsFixed(1)}억';
-    } else if (number >= 10000) {
-      return '${(number / 10000).toStringAsFixed(0)}만';
-    } else {
-      return number.toStringAsFixed(0);
-    }
   }
 
   String _formatNumberShort(double number) {

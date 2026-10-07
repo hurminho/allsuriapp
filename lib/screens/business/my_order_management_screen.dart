@@ -8,7 +8,6 @@ import '../../services/kakao_share_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../theme/business_theme.dart';
 import '../../widgets/business/business_filter_chip.dart';
-import '../../widgets/business/business_empty_state.dart';
 import '../business/order_bidders_screen.dart';
 import '../business/order_review_screen.dart';
 import '../business/order_process_screen.dart';
@@ -161,8 +160,8 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
             print('   Old: ${payload.oldRecord}');
             print('   New: ${payload.newRecord}');
 
-            final oldStatus = payload.oldRecord?['status'];
-            final newStatus = payload.newRecord?['status'];
+            final oldStatus = payload.oldRecord['status'];
+            final newStatus = payload.newRecord['status'];
 
             if (oldStatus != newStatus) {
               print('   상태 변경: $oldStatus → $newStatus');
@@ -467,74 +466,6 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                 selected: _filter == 'completed',
                 count: completedCount,
                 onTap: () => setState(() => _filter = 'completed')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChip(String label, String value, IconData icon, int count) {
-    final isSelected = _filter == value;
-    final color = const Color(0xFFE6A700); // Orange for orders
-
-    return GestureDetector(
-      onTap: () => setState(() => _filter = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? color : Colors.grey[300]!,
-            width: 1.5,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isSelected ? Colors.white : color,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.grey[700],
-              ),
-            ),
-            if (count > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.white.withOpacity(0.3)
-                      : color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  count.toString(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : color,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -914,6 +845,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                               );
 
                               // 채팅 화면으로 이동
+                              if (!mounted) return;
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -925,6 +857,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                               );
                             } catch (e) {
                               print('❌ 채팅방 이동 실패: $e');
+                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('채팅방을 열 수 없습니다.')),
                               );
@@ -1061,6 +994,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                               );
 
                               // 채팅 화면으로 이동
+                              if (!mounted) return;
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -1072,6 +1006,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
                               );
                             } catch (e) {
                               print('❌ 채팅방 이동 실패: $e');
+                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('채팅방을 열 수 없습니다.')),
                               );
@@ -1304,7 +1239,6 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
   Future<void> _sendReviewRequestNotification({
     required String userId,
     required String orderTitle,
-    String? listingId,
     String? jobId,
   }) async {
     try {
@@ -1313,7 +1247,6 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         'title': '후기/평점 작성 안내',
         'body': '$orderTitle 공사가 완료되었습니다. 후기와 평점을 작성해 주세요.',
         'type': 'review_request',
-        if (listingId != null) 'listingid': listingId,
         if (jobId != null) 'jobid': jobId,
         'isread': false,
         'createdat': DateTime.now().toIso8601String(),
@@ -1380,6 +1313,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
         );
       }
 
+      if (!mounted) return;
       final authService = context.read<AuthService>();
       final currentUserId = authService.currentUser?.id;
       if (currentUserId == null) throw Exception('로그인이 필요합니다');
@@ -1403,7 +1337,6 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       await _sendReviewRequestNotification(
         userId: currentUserId,
         orderTitle: title,
-        listingId: listingId,
         jobId: jobId,
       );
 
@@ -1478,6 +1411,7 @@ class _MyOrderManagementScreenState extends State<MyOrderManagementScreen> {
       print('⚠️ [MyOrderManagement] 사업자 이름 조회 실패: $e');
     }
 
+    if (!mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(

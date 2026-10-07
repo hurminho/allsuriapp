@@ -303,6 +303,9 @@ class MarketplaceService extends ChangeNotifier {
   }
 
   /// [breakdown] 은 전부 선택 입력입니다. 넘기지 않으면 기존과 동일하게 총액만 전송됩니다.
+  /// 마지막 지원 실패 사유(서버 안내 문구). 화면이 일반 실패 문구 대신 보여 줍니다.
+  String? lastClaimError;
+
   Future<bool> claimListing(
     String listingId, {
     required String businessId,
@@ -311,6 +314,7 @@ class MarketplaceService extends ChangeNotifier {
     String? message,
     BidBreakdown? breakdown,
   }) async {
+    lastClaimError = null;
     try {
       debugPrint('🔍 [MarketplaceService.claimListing] 시작: $listingId');
       debugPrint('   사용자 ID: $businessId, 금액: $bidAmount, 기일: $estimatedDays');
@@ -350,6 +354,11 @@ class MarketplaceService extends ChangeNotifier {
       }
 
       debugPrint('❌ [MarketplaceService.claimListing] 실패: $msg');
+      // 승인·사업자번호가 없어 막힌 경우 등 업무 규칙 안내는 그대로 보여 줍니다.
+      final serverMessage = data is Map ? data['message']?.toString() : null;
+      if (data is Map && data['code'] != null && serverMessage != null) {
+        lastClaimError = serverMessage;
+      }
       return false;
     } catch (e) {
       debugPrint('❌ [MarketplaceService.claimListing] 에러: $e');

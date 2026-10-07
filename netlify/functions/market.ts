@@ -6,9 +6,39 @@
 import crypto from 'crypto'
 import { normalizeBidBreakdown } from '../lib/bid_breakdown'
 import { afterBidInserted } from '../lib/market_after_bid'
+import { businessCanAct, NOT_ELIGIBLE_MESSAGE } from '../lib/business_eligibility'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
+
+/// 호출자. 서버(관리자 토큰·service role)는 대신 처리할 수 있고, 사용자는 본인 것만 처리합니다.
+type Caller = { kind: 'server' } | { kind: 'user'; userId: string }
+
+async function resolveCaller(event: any): Promise<Caller | null> {
+  const h = event.headers || {}
+  const token = String(h.authorization || h.Authorization || '').replace(/^Bearer\s+/i, '').trim()
+  const adminHeader = String(h['admin-token'] || h['x-admin-token'] || '')
+  const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
+  if (ADMIN_TOKEN && (adminHeader === ADMIN_TOKEN || token === ADMIN_TOKEN)) return { kind: 'server' }
+  if (!token) return null
+  if (SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY) return { kind: 'server' }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return null
+    const u = await res.json()
+    return u?.id ? { kind: 'user', userId: String(u.id) } : null
+  } catch {
+    return null
+  }
+}
+
+function actsAs(caller: Caller, claimedUserId: unknown): boolean {
+  return caller.kind === 'server' || caller.userId === String(claimedUserId || '')
+}
+
+const FORBIDDEN = { message: '본인 계정으로만 처리할 수 있습니다' }
 
 export const handler = async (event: any, context: any) => {
   // Netlify redirects: /api/market/* -> /.netlify/functions/market/*
@@ -26,6 +56,11 @@ export const handler = async (event: any, context: any) => {
 
   console.log(`[market] ${method} ${event.path} -> ${path}`)
 
+  // 모든 경로는 로그인(또는 서버 호출)이 필요합니다. 예전에는 인증 없이 누구나
+  // 다른 사업자 이름으로 입찰·낙찰·취소할 수 있었습니다.
+  const caller = await resolveCaller(event)
+  if (!caller) return jsonRes(401, { message: '로그인이 필요합니다' })
+
   try {
     // GET /listings
     if (method === 'GET' && path.startsWith('/listings') && !path.includes('/bids')) {
@@ -34,32 +69,32 @@ export const handler = async (event: any, context: any) => {
 
     // GET /bids
     if (method === 'GET' && path === '/bids') {
-      return await handleListBids(event)
+      return await handleListBids(event, caller)
     }
 
     // POST /listings/:id/claim
     if (method === 'POST' && path.match(/^\/listings\/[^/]+\/claim$/)) {
-      return await handleClaimListing(event, path)
+      return await handleClaimListing(event, path, caller)
     }
 
     // POST /listings/:id/bid
     if (method === 'POST' && path.match(/^\/listings\/[^/]+\/bid$/)) {
-      return await handleBidListing(event, path)
+      return await handleBidListing(event, path, caller)
     }
 
     // GET /listings/:id/bids
     if (method === 'GET' && path.match(/^\/listings\/[^/]+\/bids$/)) {
-      return await handleGetBids(event, path)
+      return await handleGetBids(event, path, caller)
     }
 
     // POST /listings/:id/select-bidder
     if (method === 'POST' && path.match(/^\/listings\/[^/]+\/select-bidder$/)) {
-      return await handleSelectBidder(event, path)
+      return await handleSelectBidder(event, path, caller)
     }
 
     // DELETE /bids/:listingId
     if (method === 'DELETE' && path.match(/^\/bids\/[^/]+$/)) {
-      return await handleDeleteBid(event, path)
+      return await handleDeleteBid(event, path, caller)
     }
 
     return { statusCode: 404, body: JSON.stringify({ message: 'Not found' }), headers: { 'Content-Type': 'application/json' } };
@@ -122,7 +157,7 @@ async function handleGetListings(event: any) {
   return { statusCode: 200, body: JSON.stringify(data || []), headers: { 'Content-Type': 'application/json' } };
 }
 
-async function handleClaimListing(event: any, path: string) {
+async function handleClaimListing(event: any, path: string, caller: Caller) {
   const id = listingIdFromPath(path)
   const body = JSON.parse(event.body || '{}')
   const { businessId } = body
@@ -130,6 +165,18 @@ async function handleClaimListing(event: any, path: string) {
   if (!businessId) {
     return { statusCode: 400, body: JSON.stringify({ message: 'businessId는 필수입니다' }), headers: { 'Content-Type': 'application/json' } };
   }
+  if (!actsAs(caller, businessId)) return jsonRes(403, FORBIDDEN)
+
+  const listing = await fetchListingInfo(id)
+  if (listing && (!listing.posted_by || listing.web_order_id)) {
+    // 고객 웹 오더는 고객이 견적가를 보고 업체를 고릅니다. 가져가기 대상이 아닙니다.
+    return jsonRes(200, {
+      success: false,
+      code: 'WEB_ORDER_NEEDS_BID',
+      message: '고객 오더는 견적가를 넣어 지원해 주세요.',
+    })
+  }
+  if (!(await businessCanAct(String(businessId)))) return jsonRes(403, NOT_ELIGIBLE)
 
   try {
     // RPC 호출
@@ -153,6 +200,12 @@ async function handleClaimListing(event: any, path: string) {
     }
 
     if (rpcData === true) {
+      // 가져가기는 오더에 올라온 금액을 그대로 받아들인 입찰입니다.
+      try {
+        await recordAwardedAmount(listing?.jobid ?? null, positiveAmount(listing?.budget_amount))
+      } catch (e: any) {
+        console.warn('[market] claim awarded_amount 실패:', e?.message)
+      }
       // 성공 - jobs_accepted_count 증가
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/rpc/increment_user_jobs_accepted_count`, {
@@ -181,6 +234,60 @@ async function handleClaimListing(event: any, path: string) {
 
 function jsonRes(statusCode: number, body: Record<string, unknown>) {
   return { statusCode, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }
+}
+
+const NOT_ELIGIBLE = { success: false, code: 'BUSINESS_NOT_ELIGIBLE', message: NOT_ELIGIBLE_MESSAGE }
+
+function sbHeaders(extra: Record<string, string> = {}) {
+  return { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, ...extra }
+}
+
+type ListingInfo = {
+  id: string
+  posted_by: string | null
+  budget_amount: number | null
+  jobid: string | null
+  web_order_id: string | null
+}
+
+async function fetchListingInfo(id: string): Promise<ListingInfo | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/marketplace_listings?id=eq.${encodeURIComponent(id)}` +
+      `&select=id,posted_by,budget_amount,jobid,web_order_id&limit=1`,
+    { headers: sbHeaders() },
+  )
+  if (!res.ok) return null
+  const rows = await res.json().catch(() => [])
+  return Array.isArray(rows) && rows[0] ? (rows[0] as ListingInfo) : null
+}
+
+function positiveAmount(v: unknown): number | null {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * 공사 금액(awarded_amount)을 저장합니다. 수수료(commission_amount)는 DB 트리거가
+ * awarded_amount × commission_rate 로 계산합니다. 기준은 낙찰된 입찰가이고,
+ * 금액 없이 '바로 지원'한 입찰은 오더에 올라온 금액(budget_amount)을 입찰가로 봅니다.
+ */
+async function recordAwardedAmount(jobId: string | null, amount: number | null, bidId?: string | null) {
+  if (!jobId) return
+  if (amount != null) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}`, {
+      method: 'PATCH',
+      headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+      body: JSON.stringify({ awarded_amount: amount, updated_at: new Date().toISOString() }),
+    })
+    if (!res.ok) console.warn('[market] awarded_amount 저장 실패:', res.status, await res.text().catch(() => ''))
+  }
+  if (bidId) {
+    await fetch(`${SUPABASE_URL}/rest/v1/order_bids?id=eq.${encodeURIComponent(bidId)}`, {
+      method: 'PATCH',
+      headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+      body: JSON.stringify({ job_id: jobId }),
+    }).catch(() => undefined)
+  }
 }
 
 /// `/api/market/...` 리다이렉트와 `/.netlify/functions/market/...` 직접 호출 모두에서
@@ -229,7 +336,7 @@ async function insertBid(row: Record<string, unknown>) {
   return { res, data }
 }
 
-async function handleBidListing(event: any, path: string) {
+async function handleBidListing(event: any, path: string, caller: Caller) {
   const id = listingIdFromPath(path)
   const body = JSON.parse(event.body || '{}')
   const { businessId, message, estimated_days } = body
@@ -240,10 +347,22 @@ async function handleBidListing(event: any, path: string) {
   if (!businessId) {
     return jsonRes(400, { message: 'businessId는 필수입니다' })
   }
+  if (!actsAs(caller, businessId)) return jsonRes(403, FORBIDDEN)
 
   // 세부 원가는 전부 선택 입력입니다. 총액만 보내도 기존과 동일하게 동작합니다.
   const breakdown = normalizeBidBreakdown(body)
   const bid_amount = breakdown.totalAmount
+
+  if (!(await businessCanAct(String(businessId)))) return jsonRes(403, NOT_ELIGIBLE)
+  const listing = await fetchListingInfo(id)
+  if (listing?.web_order_id && positiveAmount(bid_amount) == null) {
+    // 고객은 견적가를 보고 업체를 고르고, 수수료도 이 금액 기준입니다.
+    return jsonRes(400, {
+      success: false,
+      code: 'BID_AMOUNT_REQUIRED',
+      message: '고객 오더는 견적가를 입력해야 지원할 수 있습니다.',
+    })
+  }
 
   try {
     // 중복 입찰 확인 (같은 사업자가 같은 오더에 이미 입찰했는지)
@@ -402,7 +521,7 @@ async function fetchAuthUser(userId: string): Promise<any | null> {
   }
 }
 
-async function handleGetBids(event: any, path: string) {
+async function handleGetBids(event: any, path: string, caller: Caller) {
   const listingId = listingIdFromPath(path)
 
   // GET 요청용 헤더 — Content-Type 없음 (admin.ts와 동일, PostgREST GET 표준)
@@ -411,8 +530,9 @@ async function handleGetBids(event: any, path: string) {
     Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
   }
 
-  // 모든 컬럼 가져오기 (특정 컬럼명 의존 제거)
-  const USER_COLS = '*'
+  // 입찰자 화면에 필요한 공개 정보만 내려줍니다(푸시 토큰·카카오 ID·이메일 등 제외).
+  const USER_COLS =
+    'id,name,businessname,businessnumber,business_verify_status,businessstatus,avatar_url,profile_image,serviceareas,specialties,jobs_accepted_count,estimates_created_count,review_average,review_count'
 
   try {
     // ── 1단계: order_bids 조회 ─────────────────────────────────────
@@ -426,6 +546,22 @@ async function handleGetBids(event: any, path: string) {
 
     if (!Array.isArray(bids) || bids.length === 0) {
       return { statusCode: 200, body: JSON.stringify([]), headers: { 'Content-Type': 'application/json' } }
+    }
+
+    // 오더 등록자는 전체 입찰을, 그 외 사용자는 본인 입찰만 봅니다.
+    if (caller.kind === 'user') {
+      const ownerRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/marketplace_listings?id=eq.${encodeURIComponent(listingId)}&select=posted_by&limit=1`,
+        { headers: getHeaders },
+      )
+      const ownerRows = ownerRes.ok ? await ownerRes.json() : []
+      const postedBy = Array.isArray(ownerRows) ? ownerRows[0]?.posted_by : null
+      if (String(postedBy || '') !== caller.userId) {
+        bids = bids.filter((b: any) => String(b.bidder_id) === caller.userId)
+        if (bids.length === 0) {
+          return { statusCode: 200, body: JSON.stringify([]), headers: { 'Content-Type': 'application/json' } }
+        }
+      }
     }
 
     // ── 2단계: public.users 조회 — 개별 id=eq.UUID 병렬 조회 (가장 확실한 방식) ──
@@ -505,9 +641,14 @@ async function handleGetBids(event: any, path: string) {
   }
 }
 
-async function handleListBids(event: any) {
+async function handleListBids(event: any, caller: Caller) {
   const params = event.queryStringParameters || {}
-  const { bidderId, status, statuses } = params
+  const { status, statuses } = params
+  let { bidderId } = params
+  if (caller.kind === 'user') {
+    if (bidderId && bidderId !== caller.userId) return jsonRes(403, FORBIDDEN)
+    bidderId = caller.userId
+  }
 
   const filters: string[] = []
   if (bidderId) {
@@ -553,7 +694,7 @@ async function handleListBids(event: any) {
   return { statusCode: 200, body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }
 }
 
-async function handleSelectBidder(event: any, path: string) {
+async function handleSelectBidder(event: any, path: string, caller: Caller) {
   const id = listingIdFromPath(path)
   const body = JSON.parse(event.body || '{}')
   const { bidderId, ownerId } = body
@@ -563,6 +704,7 @@ async function handleSelectBidder(event: any, path: string) {
   if (!bidderId || !ownerId) {
     return { statusCode: 400, body: JSON.stringify({ message: 'bidderId, ownerId는 필수입니다' }), headers: { 'Content-Type': 'application/json' } };
   }
+  if (!actsAs(caller, ownerId)) return jsonRes(403, FORBIDDEN)
 
   try {
     console.log(`[handleSelectBidder] RPC 호출 중...`)
@@ -592,6 +734,24 @@ async function handleSelectBidder(event: any, path: string) {
         return jsonRes(200, { success: false, code: 'BIDDER_NOT_VERIFIED', message: detail })
       }
       throw new Error(detail || 'Select bidder failed')
+    }
+
+    // 공사 금액 = 낙찰된 입찰가 (수수료 기준). 알림·채팅보다 먼저, 응답 전에 저장합니다.
+    let awardedAmount: number | null = null
+    try {
+      const [listingInfo, bidRows] = await Promise.all([
+        fetchListingInfo(id),
+        fetch(
+          `${SUPABASE_URL}/rest/v1/order_bids?listing_id=eq.${encodeURIComponent(id)}` +
+            `&bidder_id=eq.${encodeURIComponent(bidderId)}&select=id,bid_amount&limit=1`,
+          { headers: sbHeaders() },
+        ).then((r) => (r.ok ? r.json() : [])),
+      ])
+      const selectedBid = Array.isArray(bidRows) ? bidRows[0] : null
+      awardedAmount = positiveAmount(selectedBid?.bid_amount) ?? positiveAmount(listingInfo?.budget_amount)
+      await recordAwardedAmount(listingInfo?.jobid ?? null, awardedAmount, selectedBid?.id ?? null)
+    } catch (e: any) {
+      console.warn('[market] select-bidder awarded_amount 실패:', e?.message)
     }
 
     // 알림/채팅 생성이 느려도 낙찰(select_bidder RPC)은 이미 커밋된 상태입니다.
@@ -703,32 +863,43 @@ async function handleSelectBidder(event: any, path: string) {
           const owner = Array.isArray(ownerData) && ownerData.length > 0 ? ownerData[0] : null
           
           if (owner && owner.posted_by) {
-            const roomId = `order_${id}`
-            console.log('[market] 채팅방 생성 중:', { roomId, owner: owner.posted_by, bidder: bidderId })
-            
-            // 채팅방 생성 (upsert)
-            const chatRoomResponse = await fetch(`${SUPABASE_URL}/rest/v1/chat_rooms`, {
-              method: 'POST',
-              headers: {
-                apikey: SUPABASE_SERVICE_ROLE_KEY,
-                Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'resolution=merge-duplicates',
-              },
-              body: JSON.stringify({
-                id: roomId,
-                listingid: id,
-                ...(listing.jobid ? { jobid: listing.jobid } : {}),
-                participant_a: owner.posted_by,
-                participant_b: bidderId,
-                createdat: nowIso,
-                updatedat: nowIso,
-                active: true,
-              })
-            })
-            
-            if (!chatRoomResponse.ok) {
-              console.warn('[market] 채팅방 생성 실패:', await chatRoomResponse.text())
+            // 앱(ChatService.ensureChatRoom)은 참여자 + listingid 로 기존 방을 찾습니다.
+            // 같은 키로 만들어 두면 앱이 이 방을 그대로 씁니다. (예전 코드는 uuid 가 아닌
+            // id 와 없는 updatedat 컬럼을 넣어 항상 실패했습니다)
+            const existingRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/chat_rooms?listingid=eq.${encodeURIComponent(id)}` +
+                `&or=(and(participant_a.eq.${owner.posted_by},participant_b.eq.${bidderId}),and(participant_a.eq.${bidderId},participant_b.eq.${owner.posted_by}))` +
+                `&select=id&limit=1`,
+              { headers: sbHeaders() },
+            )
+            const existingRooms = existingRes.ok ? await existingRes.json() : []
+            const hasRoom = Array.isArray(existingRooms) && existingRooms.length > 0
+
+            const chatRoomResponse = hasRoom
+              ? null
+              : await fetch(`${SUPABASE_URL}/rest/v1/chat_rooms`, {
+                  method: 'POST',
+                  headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+                  body: JSON.stringify({
+                    listingid: id,
+                    ...(listing.jobid ? { jobid: listing.jobid } : {}),
+                    participant_a: owner.posted_by,
+                    participant_b: bidderId,
+                    customerid: owner.posted_by,
+                    businessid: bidderId,
+                    title: listing.title || null,
+                    createdat: nowIso,
+                    updatedAt: nowIso,
+                    active: true,
+                  }),
+                })
+            const created = chatRoomResponse && chatRoomResponse.ok ? await chatRoomResponse.json() : null
+            const roomId = Array.isArray(created) ? created[0]?.id : created?.id
+
+            if (hasRoom) {
+              console.log('[market] 채팅방 이미 있음 — 생성 생략')
+            } else if (!chatRoomResponse?.ok || !roomId) {
+              console.warn('[market] 채팅방 생성 실패:', chatRoomResponse ? await chatRoomResponse.text().catch(() => '') : '')
             } else {
               console.log('[market] 채팅방 생성 완료:', roomId)
               
@@ -771,7 +942,7 @@ async function handleSelectBidder(event: any, path: string) {
       console.warn('[market] select-bidder side effects skipped:', e.message)
     }
 
-    return jsonRes(200, { success: true })
+    return jsonRes(200, { success: true, awardedAmount })
   } catch (error: any) {
     console.error('[handleSelectBidder] 에러:', error.message)
     return { statusCode: 500, body: JSON.stringify({ 
@@ -782,7 +953,7 @@ async function handleSelectBidder(event: any, path: string) {
   }
 }
 
-async function handleDeleteBid(event: any, path: string) {
+async function handleDeleteBid(event: any, path: string, caller: Caller) {
   const listingId = listingIdFromPath(path, 'bids')
   const params = event.queryStringParameters || {}
   const { bidderId } = params
@@ -795,6 +966,7 @@ async function handleDeleteBid(event: any, path: string) {
   if (!bidderId) {
     return { statusCode: 400, body: JSON.stringify({ success: false, message: 'bidderId는 필수입니다' }), headers: { 'Content-Type': 'application/json' } };
   }
+  if (!actsAs(caller, bidderId)) return jsonRes(403, { success: false, ...FORBIDDEN })
 
   try {
     // Service Role로 RLS 우회하여 삭제

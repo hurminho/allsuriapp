@@ -160,7 +160,7 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
       final orderService = Provider.of<OrderService>(context, listen: false);
       final results = await Future.wait([
         _market.listListings(status: 'all', enrichOwners: false),
-        orderService.getOrders(),
+        orderService.getOrders(assignedContractorId: userId),
       ]);
       return mergeNewOrderFeed(
         listings: results[0] as List<Map<String, dynamic>>,
@@ -217,7 +217,8 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
           .from('jobs')
           .select('id')
           .eq('assigned_business_id', userId)
-          .eq('status', 'in_progress')
+          // 가져가기·웹 낙찰 공사는 'assigned' 로 시작합니다. 진행 중에 함께 셉니다.
+          .inFilter('status', ['assigned', 'in_progress'])
           .count(CountOption.exact);
       return response.count;
     } catch (e) {
@@ -540,7 +541,9 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
                   : order.address,
               timeLabel: BusinessTheme.relativeTime(order.createdAt),
               isNew: BusinessTheme.isNewLead(order.createdAt),
-              isUrgent: BusinessTheme.isVisitSoon(order.visitDate),
+              isUrgent: order.hasVisitDate &&
+                  BusinessTheme.isVisitSoon(order.visitDate),
+              isDirectRequest: order.routingType == 'personal_link',
               onTap: () => _openNewOrderItem(item),
             );
           } else {
@@ -714,6 +717,7 @@ class _DashboardAdCarouselState extends State<_DashboardAdCarousel> {
       }
     } catch (e) {
       print('❌ 링크 열기 실패: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('링크를 열 수 없습니다.')),
       );
@@ -811,6 +815,8 @@ class _CompactOrderCard extends StatelessWidget {
   final String? timeLabel;
   final bool isNew;
   final bool isUrgent;
+  // 개인 링크로 나에게 직접 온 요청. 경쟁 입찰이 아니므로 '입찰 가능' 대신 '직접 요청'으로 표시합니다.
+  final bool isDirectRequest;
   final VoidCallback? onTap;
 
   const _CompactOrderCard({
@@ -820,6 +826,7 @@ class _CompactOrderCard extends StatelessWidget {
     this.timeLabel,
     this.isNew = false,
     this.isUrgent = false,
+    this.isDirectRequest = false,
     this.onTap,
   });
 
@@ -893,7 +900,7 @@ class _CompactOrderCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
-                              '긴급',
+                              '방문 임박',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -949,23 +956,23 @@ class _CompactOrderCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // 우측: 입찰 가능 + 견적 작성
+              // 우측: 입찰 가능(또는 직접 요청) + 견적 작성
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Row(
+                  Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.check_circle_outline_rounded,
                         size: 14,
                         color: BusinessTokens.success,
                       ),
-                      SizedBox(width: 3),
+                      const SizedBox(width: 3),
                       Text(
-                        '입찰 가능',
-                        style: TextStyle(
+                        isDirectRequest ? '직접 요청' : '입찰 가능',
+                        style: const TextStyle(
                           color: BusinessTokens.success,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -978,14 +985,14 @@ class _CompactOrderCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '견적 작성',
-                        style: TextStyle(
+                        isDirectRequest ? '견적 보내기' : '견적 작성',
+                        style: const TextStyle(
                           color: BusinessTokens.blue,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Icon(
+                      const Icon(
                         Icons.chevron_right_rounded,
                         size: 16,
                         color: BusinessTokens.blue,

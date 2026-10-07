@@ -26,6 +26,7 @@ import 'package:allsuriapp/widgets/business/business_filter_chip.dart';
 import 'package:allsuriapp/widgets/business/business_primary_button.dart';
 import 'package:allsuriapp/widgets/business/business_status_chip.dart';
 import 'package:allsuriapp/widgets/business/business_tokens.dart';
+import '../../config/commission.dart';
 
 class OrderMarketplaceScreen extends StatefulWidget {
   final bool showSuccessMessage;
@@ -444,26 +445,6 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
     } catch (e) {
       print('⚠️ [_loadMyBidsData] 실패: $e');
       return null;
-    }
-  }
-
-  Future<void> _loadMyBids() async {
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final currentUserId = authService.currentUser?.id;
-
-      if (currentUserId == null) return;
-
-      final bidsData = await _loadMyBidsData(currentUserId);
-      if (bidsData != null) {
-        setState(() {
-          _myBidStatusByListing = bidsData['statusMap'] as Map<String, String>;
-          _myActiveBidListingIds = bidsData['activeIds'] as Set<String>;
-        });
-        print('✅ [_loadMyBids] ${_myActiveBidListingIds.length}개 진행중 입찰');
-      }
-    } catch (e) {
-      print('⚠️ [_loadMyBids] 실패 (무시): $e');
     }
   }
 
@@ -992,12 +973,8 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                   (e['status'] ?? '-') as String;
                               final createdAt =
                                   (e['createdat'] ?? e['createdAt']);
-                              final budget =
-                                  e['budget_amount'] ?? e['budgetAmount'];
                               final String? postedBy =
                                   (e['posted_by'] ?? e['postedBy'])?.toString();
-                              final String jobId =
-                                  (e['jobid'] ?? e['jobId'] ?? '').toString();
                               final String createdText = createdAt != null
                                   ? (DateTime.tryParse(createdAt.toString())
                                           ?.toLocal()
@@ -1017,12 +994,6 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                           e['bid_count']?.toString() ?? '0') ??
                                       0;
 
-                              // 현재 사용자가 오더 소유자인지 확인
-                              final authService = Provider.of<AuthService>(
-                                  context,
-                                  listen: false);
-                              final currentUserId = authService.currentUser?.id;
-                              final isOwner = currentUserId == postedBy;
                               final String? myBidStatus =
                                   _myBidStatusByListing[id];
                               final BidAction bidAction = resolveBidAction(
@@ -1963,7 +1934,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '소비자 견적에 선정될 경우 10%의 시스템 유지비가 선정된 사업자에게 부과됩니다.',
+                          '소비자 견적에 선정될 경우 ${kCommissionRatePercent.toStringAsFixed(0)}%의 시스템 유지비가 선정된 사업자에게 부과됩니다.',
                           style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[800],
@@ -2025,6 +1996,17 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       final typedAmount = BidBreakdown.parseWon(amountCtrl.text);
       // 총액을 비워도 세부 항목 합계로 입찰할 수 있습니다.
       final resolved = breakdown.resolvedTotal(typedAmount);
+      // 고객 웹 오더는 고객이 견적가를 보고 고르고, 수수료도 이 금액 기준입니다.
+      if (isWebOrder && (resolved == null || resolved <= 0)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('고객 오더는 견적가를 입력해야 지원할 수 있습니다.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
       final estimatedDays = int.tryParse(daysCtrl.text);
       final msg = msgCtrl.text.trim();
       for (final warning in breakdown.warnings(typedAmount)) {
@@ -2062,6 +2044,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
       print('🔍 [_claimListing] 오더 잡기 시작: $id');
 
       // 사용자 로그인 확인 (AuthService 사용)
+      if (!mounted) return;
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentUserId = authService.currentUser?.id;
       print('   현재 사용자 (AuthService): ${currentUserId ?? "null"}');
@@ -2124,10 +2107,11 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
         });
         print('   ❌ 오더 잡기 실패');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('지원에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
+          SnackBar(
+            content: Text(_market.lastClaimError ??
+                '지원에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
             backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -2198,7 +2182,6 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
     final String description = data['description']?.toString() ?? '';
     final String region = data['region']?.toString() ?? '';
     final String category = data['category']?.toString() ?? '';
-    final estimateAmount = data['estimate_amount'] ?? data['estimateAmount'];
     final mediaUrls = data['media_urls'] is List
         ? List<String>.from(data['media_urls'])
         : <String>[];
@@ -2391,7 +2374,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  '예상 예산: ${budget is num ? '${(budget as num).toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원' : budget.toString()}',
+                                  '예상 예산: ${budget is num ? '${(budget).toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원' : budget.toString()}',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,

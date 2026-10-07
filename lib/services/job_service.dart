@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/job.dart';
 import 'notification_service.dart';
+import '../config/commission.dart';
 
 class JobService extends ChangeNotifier {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -26,7 +27,7 @@ class JobService extends ChangeNotifier {
         location: location,
         category: category,
         urgency: urgency,
-        commissionRate: commissionRate ?? 5.0, // Default 5% commission
+        commissionRate: commissionRate ?? kCommissionRatePercent,
         mediaUrls: mediaUrls?.isNotEmpty == true ? mediaUrls : null,
         status: 'created',
         createdAt: DateTime.now(),
@@ -199,7 +200,6 @@ class JobService extends ChangeNotifier {
           .single();
 
       final ownerId = row['owner_business_id'] as String?;
-      final receiverId = row['transfer_to_business_id'] as String?;
       final assigneeId = row['assigned_business_id'] as String?;
       final jobTitle = row['title'] as String? ?? '공사';
       

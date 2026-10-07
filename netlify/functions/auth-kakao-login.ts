@@ -1,9 +1,9 @@
 /// <reference types="node" />
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
+import { randomBytes } from 'crypto'
 
 const SUPABASE_URL = process.env.SUPABASE_URL as string
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string
-const JWT_SECRET = process.env.JWT_SECRET || 'change_me'
 
 export const handler = async (event: any) => {
   try {
@@ -66,6 +66,9 @@ export const handler = async (event: any) => {
 
     let supabaseAccessToken: string | null = null;
     let supabaseRefreshToken: string | null = null;
+    // Supabase Auth 비밀번호는 로그인할 때마다 새로 만든 난수입니다. 토큰 발급에만 쓰고 저장하지 않습니다.
+    // (예전에는 카카오 회원번호를 그대로 비밀번호로 써서, 회원번호만 알면 누구나 로그인할 수 있었습니다.)
+    const sessionPassword = randomBytes(32).toString('base64url')
     
     console.log('[Kakao Login] 🔐 Step 1: Supabase Auth 처리 시작');
     console.log(`   - SUPABASE_URL: ${SUPABASE_URL ? '설정됨' : '❌ 없음'}`);
@@ -160,7 +163,7 @@ export const handler = async (event: any) => {
         console.log(`   - Create User URL: ${createUserUrl}`);
         const createUserBody = {
           email: supabaseAuthEmail,
-          password: kakaoId,
+          password: sessionPassword,
           email_confirm: true,
           user_metadata: {
             email_verified: true,
@@ -169,7 +172,6 @@ export const handler = async (event: any) => {
             provider: 'kakao',
           },
         };
-        console.log(`   - Create User Request Body:`, createUserBody);
 
         const createUserRes = await fetch(createUserUrl, {
           method: 'POST',
@@ -241,12 +243,14 @@ export const handler = async (event: any) => {
           authUserId = createUserData.id;
           console.log(`✅ [Kakao Login] Supabase Auth 사용자 생성 완료: ${authUserId}`);
         }
-      } else if (existingSupabaseUser && authUserId) {
-        // 기존 사용자의 비밀번호를 강제로 업데이트 (password grant 로그인을 위해)
+      }
+
+      if (userAlreadyExists && existingSupabaseUser && authUserId) {
+        // 기존 사용자(재조회로 찾은 경우 포함)의 비밀번호를 이번 로그인용 난수로 바꿉니다 (password grant 로그인을 위해)
         console.log(`🔄 [Kakao Login] Step 1-3: 기존 사용자 비밀번호 업데이트 시도...`);
         const updateUserUrl = `${SUPABASE_URL}/auth/v1/admin/users/${authUserId}`;
-        const updateUserBody: Record<string, any> = { 
-          password: kakaoId
+        const updateUserBody: Record<string, any> = {
+          password: sessionPassword
         };
         
         if (existingSupabaseUser.email !== supabaseAuthEmail) {
@@ -267,7 +271,9 @@ export const handler = async (event: any) => {
         if (updateRes.ok) {
           console.log(`✅ [Kakao Login] 사용자 정보 업데이트 완료 (비밀번호 & 이메일)`);
         } else {
-          console.warn(`❌ [Kakao Login] 사용자 정보 업데이트 실패: ${await updateRes.text()}`);
+          const errText = await updateRes.text();
+          console.warn(`❌ [Kakao Login] 사용자 정보 업데이트 실패: ${errText}`);
+          return { statusCode: 500, body: JSON.stringify({ success: false, message: 'Supabase Auth 사용자 갱신 실패', error: errText }), headers: { 'Content-Type': 'application/json' } };
         }
       }
       
@@ -282,7 +288,7 @@ export const handler = async (event: any) => {
       const tokenUrl = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
       const tokenBody = {
         email: supabaseAuthEmail,
-        password: kakaoId,
+        password: sessionPassword,
       };
 
       const tokenRes = await fetch(tokenUrl, {
@@ -301,8 +307,9 @@ export const handler = async (event: any) => {
         supabaseAccessToken = tokenData.access_token || null;
         supabaseRefreshToken = tokenData.refresh_token || null;
         console.log('[Kakao Login] ✅ Supabase 세션 토큰 생성 성공');
-        console.log(`   - Access Token: ${supabaseAccessToken ? `있음 (${supabaseAccessToken.substring(0, 20)}...)` : '❌ 없음'}`);
-        console.log(`   - Refresh Token: ${supabaseRefreshToken ? `있음 (${supabaseRefreshToken.substring(0, 20)}...)` : '❌ 없음'}`);
+        // 토큰 값은 일부라도 로그에 남기지 않습니다(리프레시 토큰은 20자 안팎이라 통째로 노출됨).
+        console.log(`   - Access Token: ${supabaseAccessToken ? '있음' : '❌ 없음'}`);
+        console.log(`   - Refresh Token: ${supabaseRefreshToken ? '있음' : '❌ 없음'}`);
       } else {
         const errText = await tokenRes.text();
         console.error('[Kakao Login] ❌ Supabase 토큰 생성 실패');

@@ -30,7 +30,12 @@ class OrderService extends ChangeNotifier {
   }
 
   // 주문 목록 로드
-  Future<void> loadOrders({String? customerId, String? status, String? sessionId}) async {
+  Future<void> loadOrders({
+    String? customerId,
+    String? status,
+    String? sessionId,
+    String? assignedContractorId,
+  }) async {
     _isLoading = true;
     _notifyListenersSafely();
 
@@ -54,6 +59,12 @@ class OrderService extends ChangeNotifier {
       if (status != null) {
         print('🔍 status로 필터링: $status');
         query = query.eq('status', status);
+      }
+      if (assignedContractorId != null) {
+        // 사업자 화면은 본인에게 배정된 개인 링크 주문만 씁니다(고객 연락처가 든 전체 주문을 받지 않음).
+        query = query
+            .eq('assigned_contractor_id', assignedContractorId)
+            .eq('routing_type', 'personal_link');
       }
       if (sessionId != null) {
         print('🔍 sessionId로 필터링: $sessionId');
@@ -82,8 +93,16 @@ class OrderService extends ChangeNotifier {
     }
   }
 
-  Future<List<app_models.Order>> getOrders({String? customerId, String? status}) async {
-    await loadOrders(customerId: customerId, status: status);
+  Future<List<app_models.Order>> getOrders({
+    String? customerId,
+    String? status,
+    String? assignedContractorId,
+  }) async {
+    await loadOrders(
+      customerId: customerId,
+      status: status,
+      assignedContractorId: assignedContractorId,
+    );
     return _orders;
   }
 

@@ -296,6 +296,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      if (!mounted) return;
       final authService = Provider.of<AuthService>(context, listen: false);
       final estimateService =
           Provider.of<EstimateService>(context, listen: false);
