@@ -1934,7 +1934,7 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '소비자 견적에 선정될 경우 ${kCommissionRatePercent.toStringAsFixed(0)}%의 시스템 유지비가 선정된 사업자에게 부과됩니다.',
+                          '소비자 견적에 선정될 경우 ${kWebOrderCommissionRatePercent.toStringAsFixed(0)}%의 시스템 유지비가 선정된 사업자에게 부과됩니다.',
                           style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[800],

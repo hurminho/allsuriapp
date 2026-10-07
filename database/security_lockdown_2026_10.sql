@@ -19,8 +19,7 @@
 --        chat_messages  해당 방 참여자만, 보낼 때는 본인 이름으로만
 --        admins 등 서버 전용 테이블은 차단
 --   4) users 권한 상승 차단 트리거: is_admin·admin 역할·사업자 인증 결과는 본인이 바꿀 수 없음
---   5) 공사 금액·수수료 보호: 수수료율 10%(allsuri_commission_rate) 고정,
---      jobs.awarded_amount·commission_* 는 서버·관리자만 바꿈
+--   (공사 금액·수수료 보호는 database/commission_guard_2026_10.sql 로 따로 실행합니다)
 --
 -- 서버 경로(Netlify Functions·웹 API·카카오 로그인)는 service_role 이라 영향이 없습니다.
 -- 이후 새 공개 테이블을 만들면 anon 에 필요한 권한을 직접 GRANT 해야 합니다(기본 권한을 막아 둠).
@@ -276,66 +275,6 @@ DROP TRIGGER IF EXISTS allsuri_guard_user_privileges ON public.users;
 CREATE TRIGGER allsuri_guard_user_privileges
   BEFORE INSERT OR UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.allsuri_guard_user_privileges();
-
-
--- 5) 공사 금액·수수료 보호 -----------------------------------------------------------
--- 수수료 = awarded_amount(낙찰된 입찰가) × commission_rate. 금액은 서버(낙찰 API)가 저장합니다.
--- 앱 사용자가 직접 바꾸면 수수료가 틀어지므로(예: 0원으로 수정), 로그인 사용자의 변경은
--- 오류 없이 기존 값으로 되돌립니다. 예전 앱 버전이 낙찰 직후 예산 금액으로 덮어쓰던 동작도 막힙니다.
-
--- 플랫폼 수수료율(%)은 이 함수 한 곳에서 정합니다. 바꿀 때는 이 함수만 다시 만들면 됩니다.
--- (앱 lib/config/commission.dart, 서버 netlify/lib/commission.ts, 웹 lib/commission.ts 와 같은 값)
-CREATE OR REPLACE FUNCTION public.allsuri_commission_rate()
-RETURNS numeric
-LANGUAGE sql
-STABLE
-AS $$ SELECT 10::numeric $$;
-
-GRANT EXECUTE ON FUNCTION public.allsuri_commission_rate() TO anon, authenticated, service_role;
-ALTER TABLE public.jobs ALTER COLUMN commission_rate SET DEFAULT public.allsuri_commission_rate();
-
--- 아직 아무에게도 넘어가지 않은(등록만 된) 공사는 새 수수료율을 적용합니다. 진행·완료된 공사는 그대로 둡니다.
-UPDATE public.jobs
-SET commission_rate = public.allsuri_commission_rate()
-WHERE status = 'created'
-  AND assigned_business_id IS NULL
-  AND commission_rate IS DISTINCT FROM public.allsuri_commission_rate();
-CREATE OR REPLACE FUNCTION public.allsuri_guard_job_commission()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  req_role text := coalesce(nullif(current_setting('request.jwt.claims', true), '')::json ->> 'role', '');
-BEGIN
-  IF req_role NOT IN ('authenticated', 'anon') THEN
-    RETURN NEW;
-  END IF;
-  IF public.allsuri_is_admin() THEN
-    RETURN NEW;
-  END IF;
-
-  IF TG_OP = 'INSERT' THEN
-    -- 앱이 공사를 올릴 때는 금액이 정해지지 않습니다(낙찰 때 서버가 저장).
-    -- 수수료율은 플랫폼 정책이라 앱이 보낸 값 대신 고정 비율을 씁니다.
-    NEW.awarded_amount := NULL;
-    NEW.commission_amount := NULL;
-    NEW.commission_rate := public.allsuri_commission_rate();
-    RETURN NEW;
-  END IF;
-
-  NEW.awarded_amount := OLD.awarded_amount;
-  NEW.commission_rate := OLD.commission_rate;
-  NEW.commission_amount := OLD.commission_amount;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS allsuri_guard_job_commission ON public.jobs;
-CREATE TRIGGER allsuri_guard_job_commission
-  BEFORE INSERT OR UPDATE ON public.jobs
-  FOR EACH ROW EXECUTE FUNCTION public.allsuri_guard_job_commission();
 
 COMMIT;
 

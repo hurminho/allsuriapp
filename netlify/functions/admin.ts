@@ -2,7 +2,7 @@
 // Netlify function: admin API router
 // Proxies selected endpoints used by backend/public/admin.js
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
-import { COMMISSION_RATE } from '../lib/commission'
+import { WEB_ORDER_COMMISSION_RATE } from '../lib/commission'
 
 // 환경변수가 없으면 관리자 API는 모두 401입니다(기본값 없음).
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
@@ -101,8 +101,8 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       console.log('[ADMIN DASHBOARD] Total estimate amount:', totalEstimateAmount)
       console.log('[ADMIN DASHBOARD] Completed estimates count:', completedEstimatesList.length)
 
-      // 총 수익: 완료된 견적 금액 × 플랫폼 수수료율
-      const totalRevenue = totalEstimateAmount * (COMMISSION_RATE / 100)
+      // 총 수익: 완료된 고객 견적 금액 × 고객 오더 수수료율
+      const totalRevenue = totalEstimateAmount * (WEB_ORDER_COMMISSION_RATE / 100)
 
       // Fetch marketplace_listings (에러 객체 시 빈 배열)
       const listingsRes = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_listings?select=id,status,claimed_by,budget_amount`, { headers })
@@ -980,7 +980,7 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
         urgency: 'normal',
         budget_amount: amount || order.estimatedPrice || 0,
         awarded_amount: amount || order.estimatedPrice || 0,
-        commission_rate: COMMISSION_RATE,
+        commission_rate: WEB_ORDER_COMMISSION_RATE,
         // 고객 주문과 연결해야 앱의 공사 완료 문자·담당 확인이 동작합니다(예전에는 메모가 있을 때만 넣었음).
         web_order_id: orderId,
         created_at: now,

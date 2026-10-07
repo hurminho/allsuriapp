@@ -27,7 +27,7 @@ class JobService extends ChangeNotifier {
         location: location,
         category: category,
         urgency: urgency,
-        commissionRate: commissionRate ?? kCommissionRatePercent,
+        commissionRate: commissionRate ?? kDefaultB2BCommissionRatePercent,
         mediaUrls: mediaUrls?.isNotEmpty == true ? mediaUrls : null,
         status: 'created',
         createdAt: DateTime.now(),

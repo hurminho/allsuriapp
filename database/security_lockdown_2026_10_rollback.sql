@@ -8,14 +8,9 @@
 
 BEGIN;
 
--- 1) 권한 상승·수수료 보호 트리거 제거
+-- 1) 권한 상승 차단 트리거 제거 (수수료 보호는 commission_guard_2026_10.sql 의 되돌리기 참고)
 DROP TRIGGER IF EXISTS allsuri_guard_user_privileges ON public.users;
 DROP FUNCTION IF EXISTS public.allsuri_guard_user_privileges();
-DROP TRIGGER IF EXISTS allsuri_guard_job_commission ON public.jobs;
-DROP FUNCTION IF EXISTS public.allsuri_guard_job_commission();
--- 수수료율 10% 정책은 유지하고, 기본값만 함수 대신 숫자로 바꾼 뒤 함수를 지웁니다.
-ALTER TABLE public.jobs ALTER COLUMN commission_rate SET DEFAULT 10;
-DROP FUNCTION IF EXISTS public.allsuri_commission_rate();
 
 -- 2) 새 정책 제거 후 예전 정책 복원
 DO $$

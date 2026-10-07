@@ -35,9 +35,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _budgetController = TextEditingController();
-  // 수수료율은 플랫폼 정책(고정)입니다. 입력하지 않고 보여 주기만 합니다.
-  final TextEditingController _feeRateController =
-      TextEditingController(text: kCommissionRatePercent.toStringAsFixed(0));
+  // 사업자 간 오더의 수수료율은 올리는 사업자(원청)가 정합니다. 기본값만 채워 둡니다.
+  final TextEditingController _feeRateController = TextEditingController(
+      text: kDefaultB2BCommissionRatePercent.toStringAsFixed(0));
   final TextEditingController _feeAmountController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
 
@@ -112,6 +112,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     _locationController.dispose();
     super.dispose();
   }
+
+  /// 입력한 수수료율. 비었거나 잘못되면 기본값을 씁니다.
+  double _feeRate() =>
+      double.tryParse(_feeRateController.text.trim()) ??
+      kDefaultB2BCommissionRatePercent;
 
   void _recalcFee() {
     final rawBudget = _budgetController.text.replaceAll(',', '');
@@ -288,7 +293,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     _titleController.clear();
     _descController.clear();
     _budgetController.clear();
-    _feeRateController.text = kCommissionRatePercent.toStringAsFixed(0);
+    _feeRateController.text =
+        kDefaultB2BCommissionRatePercent.toStringAsFixed(0);
     _feeAmountController.clear();
     _locationController.clear();
     _selectedCategory = '일반';
@@ -346,7 +352,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             : _locationController.text.trim(),
         category: _selectedCategory,
         urgency: 'normal',
-        commissionRate: kCommissionRatePercent,
+        commissionRate: _feeRate(),
         mediaUrls: _uploadedImageUrls.isEmpty ? null : _uploadedImageUrls,
       );
 
@@ -718,7 +724,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 const SizedBox(height: 16),
                 _formSection(
                   title: '모집 조건',
-                  subtitle: '기존 예산을 입력하세요. 수수료는 낙찰 금액의 ${kCommissionRatePercent.toStringAsFixed(0)}%입니다',
+                  subtitle: '기존 예산과 협업 수수료를 입력하세요',
                   children: [
                     TextFormField(
                       controller: _budgetController,
@@ -743,12 +749,22 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                         Expanded(
                           child: TextFormField(
                             controller: _feeRateController,
-                            readOnly: true,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: _fieldDecoration(
-                              label: '수수료율 (고정)',
+                              label: '수수료율 *',
                               suffixText: '%',
                               icon: Icons.percent_rounded,
                             ),
+                            validator: (v) {
+                              final rate = double.tryParse((v ?? '').trim());
+                              if (rate == null) return '수수료율을 입력하세요';
+                              if (rate < 0 || rate > 100) {
+                                return '0~100 사이로 입력하세요';
+                              }
+                              return null;
+                            },
+                            onChanged: (_) => _recalcFee(),
                           ),
                         ),
                         const SizedBox(
@@ -1041,7 +1057,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         region: region ?? '',
         category: category,
         budget: budget,
-        commissionRate: kCommissionRatePercent,
+        commissionRate: _feeRate(),
         imageUrl:
             _uploadedImageUrls.isNotEmpty ? _uploadedImageUrls.first : null,
         description: description,
