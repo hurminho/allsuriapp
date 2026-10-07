@@ -19,7 +19,8 @@ let allCalls = [];
 const selectedCallIds = new Set();
 
 // 관리자 토큰은 코드에 두지 않습니다(이 파일은 누구나 내려받을 수 있습니다).
-// 처음 열 때 입력받아 이 탭에서만 기억합니다(sessionStorage). Netlify 환경변수 ADMIN_TOKEN 과 같아야 합니다.
+// 처음 한 번 입력하면 이 브라우저에 기억해(localStorage) 다음부터는 바로 접속합니다.
+// 로그아웃 버튼이나 토큰이 틀렸을 때(401) 지웁니다. Netlify 환경변수 ADMIN_TOKEN 과 같아야 합니다.
 const ADMIN_TOKEN_KEY = 'allsuri_admin_token';
 let ADMIN_ROLE = 'developer';
 let ADMIN_LOGIN_DENIED = false;
@@ -32,9 +33,15 @@ function isValidAdminToken(token) {
 
 function getAdminToken() {
     try {
-        const token = sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
-        if (token && !isValidAdminToken(token)) {
+        let token = localStorage.getItem(ADMIN_TOKEN_KEY) || '';
+        if (!token) {
+            // 예전 방식(탭마다 기억)으로 입력해 둔 토큰은 이 브라우저에 옮겨 둡니다.
+            token = sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
             sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+            if (token && isValidAdminToken(token)) localStorage.setItem(ADMIN_TOKEN_KEY, token);
+        }
+        if (token && !isValidAdminToken(token)) {
+            localStorage.removeItem(ADMIN_TOKEN_KEY);
             return '';
         }
         return token;
@@ -44,6 +51,7 @@ function getAdminToken() {
 }
 
 function forgetAdminToken() {
+    try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch (e) { /* ignore */ }
     try { sessionStorage.removeItem(ADMIN_TOKEN_KEY); } catch (e) { /* ignore */ }
     try { localStorage.removeItem('admin_password'); } catch (e) { /* 예전 방식 흔적 정리 */ }
 }
@@ -75,11 +83,18 @@ function checkLogin() {
             return false;
         }
         if (isValidAdminToken(input)) {
-            try { sessionStorage.setItem(ADMIN_TOKEN_KEY, input); } catch (e) { /* ignore */ }
+            try { localStorage.setItem(ADMIN_TOKEN_KEY, input); } catch (e) { /* ignore */ }
             return true;
         }
         message = '토큰은 영문·숫자·기호로만 입력해 주세요. 한/영 키가 한글로 되어 있는지 확인해 주세요.\n\n관리자 토큰을 입력하세요:';
     }
+}
+
+// 로그아웃: 이 브라우저에 기억한 토큰을 지웁니다. 공용 PC 에서는 쓰고 나서 꼭 누르세요.
+function adminLogout() {
+    if (!confirm('로그아웃할까요? 다음에 열 때 관리자 토큰을 다시 입력합니다.')) return;
+    forgetAdminToken();
+    location.reload();
 }
 
 // API 호출 헬퍼 함수 테스트

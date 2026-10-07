@@ -163,6 +163,14 @@
             box-shadow: var(--shadow-sm);
         }
 
+        .logout-btn {
+            background: #6b7280;
+        }
+
+        .logout-btn:hover {
+            background: #4b5563 !important;
+        }
+
         .refresh-btn:hover {
             background: var(--primary-dark);
             transform: translateY(-1px);
@@ -803,10 +811,16 @@
                     <span class="material-icons" style="font-size:1.5rem;">menu</span>
                 </button>
                 <h1 class="page-title" id="page-title">대시보드</h1>
-                <button class="refresh-btn" onclick="loadAll()">
-                    <span class="material-icons">refresh</span>
-                    <span class="hide-mobile">새로고침</span>
-                </button>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <button class="refresh-btn" onclick="loadAll()">
+                        <span class="material-icons">refresh</span>
+                        <span class="hide-mobile">새로고침</span>
+                    </button>
+                    <button class="refresh-btn logout-btn" onclick="adminLogout()" title="이 브라우저에 기억한 관리자 토큰을 지웁니다">
+                        <span class="material-icons">logout</span>
+                        <span class="hide-mobile">로그아웃</span>
+                    </button>
+                </div>
             </div>
 
             <div class="content-area">
@@ -1801,7 +1815,7 @@
         </div>
     </div>
 
-    <script src="admin.js?v=10&t=20261007001"></script>
+    <script src="admin.js?v=11&t=20261007002"></script>
     <script>
         // Kakao SDK 초기화
         if (window.Kakao && !Kakao.isInitialized()) {
