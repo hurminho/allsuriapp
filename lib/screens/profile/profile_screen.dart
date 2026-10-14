@@ -13,6 +13,7 @@ import '../business/rate_card_screen.dart';
 import '../admin/ad_management_screen.dart';
 import '../home/home_screen.dart';
 import 'my_revenue_screen.dart';
+import 'marketing_consent_screen.dart';
 import 'package:app_settings/app_settings.dart';
 
 /// RPC 실패 시 안내용 (웹에서 마무리 — dart-define으로 교체 가능)
@@ -238,6 +239,18 @@ class ProfileScreen extends StatelessWidget {
           () {
             AppSettings.openAppSettings();
           },
+        ),
+        _buildActionTile(
+          context,
+          Icons.campaign_outlined,
+          '소식·혜택 받기',
+          () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MarketingConsentScreen()),
+            );
+          },
+          subtitle: '새 기능·이벤트 소식 수신 동의 (선택)',
         ),
         if (user.role == 'business')
           _buildActionTile(

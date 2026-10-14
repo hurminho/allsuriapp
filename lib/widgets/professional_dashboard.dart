@@ -17,6 +17,7 @@ import '../screens/create_estimate_screen.dart';
 import '../screens/notification/notification_screen.dart';
 import '../screens/business/my_order_management_screen.dart';
 import '../screens/business/pending_approval_screen.dart';
+import '../screens/profile/marketing_consent_screen.dart';
 import 'business/business_tab_scope.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -54,14 +55,15 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     super.initState();
     _setupRealtimeListeners();
 
-    // 로그인 후 푸시 알림 권한 체크 (딜레이 후 표시)
+    // 로그인 후 푸시 알림 권한 체크 (딜레이 후 표시), 그다음 소식 받기 동의를 한 번만 묻습니다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(seconds: 2), () {
+      Future.delayed(const Duration(seconds: 2), () async {
         if (!mounted) return;
         final userId = context.read<AuthService>().currentUser?.id ?? '';
-        if (userId.isNotEmpty) {
-          PushPermissionService.checkAndRequest(context, userId: userId);
-        }
+        if (userId.isEmpty) return;
+        await PushPermissionService.checkAndRequest(context, userId: userId);
+        if (!mounted) return;
+        await maybeAskMarketingConsent(context, userId);
       });
     });
   }
