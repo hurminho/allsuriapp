@@ -13,6 +13,7 @@ import '../../config.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/personal_order_link_nav.dart';
 import 'edit_personal_order_link_screen.dart';
+import '../../config/trade_categories.dart';
 
 /// 개인 오더 링크 관리 화면
 class PersonalOrderLinkManagementScreen extends StatefulWidget {
@@ -181,7 +182,10 @@ class _PersonalOrderLinkManagementScreenState
       await service.createPersonalOrderLink(
         slug: slug,
         displayName: displayName,
-        supportedCategories: user.specialties.isNotEmpty ? user.specialties : null,
+        // 링크 페이지의 공종 선택지는 대분류입니다. 전문분야(세부 공종)를 대분류로 묶어 넣습니다.
+        supportedCategories: user.specialties.isNotEmpty
+            ? user.specialties.map(TradeCategories.groupOf).toSet().toList()
+            : null,
         serviceRegions: user.serviceAreas.isNotEmpty ? user.serviceAreas : null,
       );
 

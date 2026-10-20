@@ -3,6 +3,7 @@
 // Proxies selected endpoints used by backend/public/admin.js
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
 import { WEB_ORDER_COMMISSION_RATE } from '../lib/commission'
+import { groupOf } from '../lib/trade_categories'
 
 // 환경변수가 없으면 관리자 API는 모두 401입니다(기본값 없음).
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
@@ -944,7 +945,11 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       let businesses = await res.json()
       if (!Array.isArray(businesses)) businesses = []
       if (category) {
-        businesses = businesses.filter((b: any) => (b.category || '').includes(category))
+        // 전문분야는 세부 공종·대분류·예전 값이 섞여 있어 대분류로 맞춰 비교합니다.
+        businesses = businesses.filter((b: any) =>
+          (Array.isArray(b.category) ? b.category : String(b.category || '').split(','))
+            .some((v: string) => groupOf(String(v).trim()) === groupOf(category)),
+        )
       }
       return { statusCode: 200, body: JSON.stringify(businesses), headers: { 'Content-Type': 'application/json' } }
     }

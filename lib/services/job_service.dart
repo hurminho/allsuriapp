@@ -14,6 +14,7 @@ class JobService extends ChangeNotifier {
     double? budgetAmount,
     String? location,
     String? category,
+    String? subcategory,
     String urgency = 'normal',
     double? commissionRate,
     List<String>? mediaUrls,
@@ -33,11 +34,17 @@ class JobService extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
 
-      final response = await _supabase
-          .from('jobs')
-          .insert(job.toMap())
-          .select()
-          .single();
+      final row = job.toMap();
+      if (subcategory != null && subcategory.isNotEmpty) row['subcategory'] = subcategory;
+      Map<String, dynamic> response;
+      try {
+        response = await _supabase.from('jobs').insert(row).select().single();
+      } on PostgrestException catch (e) {
+        // 세부 공종 칸(subcategory)을 추가하는 SQL 실행 전이면 그 칸만 빼고 다시 저장합니다.
+        if (!row.containsKey('subcategory') || (e.code != 'PGRST204' && e.code != '42703')) rethrow;
+        row.remove('subcategory');
+        response = await _supabase.from('jobs').insert(row).select().single();
+      }
 
       return response['id'];
     } catch (e) {

@@ -1,4 +1,4 @@
-// unused import 제거됨
+import '../config/trade_categories.dart';
 
 class Order {
   final String? id;
@@ -38,16 +38,8 @@ class Order {
   // '방문 임박' 판단이나 방문일 표시에 쓰면 안 됩니다.
   final bool hasVisitDate;
 
-  // 카테고리 목록
-  static const List<String> CATEGORIES = [
-    '누수',
-    '화장실',
-    '배관',
-    '난방',
-    '주방',
-    '리모델링',
-    '기타',
-  ];
+  // 카테고리(대분류) 목록 — lib/config/trade_categories.dart 와 같음
+  static List<String> get CATEGORIES => TradeCategories.groupNames;
 
   static const String STATUS_PENDING = 'pending';
   static const String STATUS_IN_PROGRESS = 'in_progress';

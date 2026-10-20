@@ -153,6 +153,7 @@ class MarketplaceService extends ChangeNotifier {
     String? description,
     String? region,
     String? category,
+    String? subcategory,
     double? budgetAmount,
     DateTime? expiresAt,
     String? postedBy, // 사용자 ID를 직접 전달받도록 추가
@@ -175,6 +176,7 @@ class MarketplaceService extends ChangeNotifier {
       'description': description,
       'region': region,
       'category': category,
+      if (subcategory != null && subcategory.isNotEmpty) 'subcategory': subcategory,
       'budget_amount': budgetAmount,
       'posted_by': userId,
       'status': 'created', // 'created' 상태로 시작
@@ -200,11 +202,15 @@ class MarketplaceService extends ChangeNotifier {
       }
 
       // Supabase 직접 INSERT (anon 키 사용, RLS 정책 통과 필요)
-      final rows = await _sb
-          .from('marketplace_listings')
-          .insert(payload)
-          .select()
-          .limit(1);
+      List<Map<String, dynamic>> rows;
+      try {
+        rows = await _sb.from('marketplace_listings').insert(payload).select().limit(1);
+      } on PostgrestException catch (e) {
+        // 세부 공종 칸(subcategory)을 추가하는 SQL 실행 전이면 그 칸만 빼고 다시 저장합니다.
+        if (!payload.containsKey('subcategory') || (e.code != 'PGRST204' && e.code != '42703')) rethrow;
+        payload.remove('subcategory');
+        rows = await _sb.from('marketplace_listings').insert(payload).select().limit(1);
+      }
       debugPrint('createListing DB 결과: $rows');
 
       if (rows.isEmpty) {

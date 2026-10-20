@@ -14,6 +14,7 @@ import '../../widgets/business/business_primary_button.dart';
 import '../../widgets/business/business_tokens.dart';
 import '../create_estimate_screen.dart';
 import 'order_marketplace_screen.dart';
+import '../../config/trade_categories.dart';
 
 class EstimateRequestsScreen extends StatefulWidget {
   const EstimateRequestsScreen({super.key});
@@ -83,14 +84,8 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
     }
   }
 
-  String _mapCategory(String? raw) {
-    final v = (raw ?? '').trim();
-    if (v.contains('누수')) return '누수';
-    if (v.contains('배관') || v.contains('보일러') || v.contains('난방')) return '배관';
-    if (v.contains('화장실') || v.contains('욕실') || v.contains('변기')) return '화장실';
-    if (v.contains('방수')) return '방수';
-    return '기타';
-  }
+  /// 예전 분류·세부 공종도 새 대분류로 맞춰 거릅니다.
+  String _mapCategory(String? raw) => TradeCategories.groupOf(raw);
 
   String _regionKey(String address) {
     final parts = address.trim().split(RegExp(r'\s+'));
@@ -367,36 +362,14 @@ class _EstimateRequestsScreenState extends State<EstimateRequestsScreen> {
                     onTap: () => _onCategoryChanged('all'),
                     count: _requests.length,
                   ),
-                  const SizedBox(width: 8),
-                  BusinessFilterChip(
-                    label: '누수',
-                    selected: _selectedCategory == '누수',
-                    onTap: () => _onCategoryChanged('누수'),
-                  ),
-                  const SizedBox(width: 8),
-                  BusinessFilterChip(
-                    label: '배관',
-                    selected: _selectedCategory == '배관',
-                    onTap: () => _onCategoryChanged('배관'),
-                  ),
-                  const SizedBox(width: 8),
-                  BusinessFilterChip(
-                    label: '화장실',
-                    selected: _selectedCategory == '화장실',
-                    onTap: () => _onCategoryChanged('화장실'),
-                  ),
-                  const SizedBox(width: 8),
-                  BusinessFilterChip(
-                    label: '방수',
-                    selected: _selectedCategory == '방수',
-                    onTap: () => _onCategoryChanged('방수'),
-                  ),
-                  const SizedBox(width: 8),
-                  BusinessFilterChip(
-                    label: '기타',
-                    selected: _selectedCategory == '기타',
-                    onTap: () => _onCategoryChanged('기타'),
-                  ),
+                  for (final name in TradeCategories.groupNames) ...[
+                    const SizedBox(width: 8),
+                    BusinessFilterChip(
+                      label: name,
+                      selected: _selectedCategory == name,
+                      onTap: () => _onCategoryChanged(name),
+                    ),
+                  ],
                 ],
               ),
             ),

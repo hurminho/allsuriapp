@@ -673,7 +673,9 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
     final title = (item['title'] ?? item['description'] ?? '제목 없음').toString();
     final description = item['description']?.toString() ?? '';
     final region = item['region']?.toString() ?? '';
-    final category = item['category']?.toString() ?? '';
+    // 세부 공종이 있으면 '대분류 · 세부'로 보여 줍니다.
+    final sub = item['subcategory']?.toString() ?? '';
+    final category = [item['category']?.toString() ?? '', sub].where((v) => v.isNotEmpty).join(' · ');
     final status = item['status']?.toString() ?? '';
     final postedBy = (item['posted_by'] ?? item['postedBy'])?.toString() ?? '';
     final ownerName = item['owner_business_name']?.toString() ?? '';
@@ -2181,7 +2183,9 @@ class _OrderMarketplaceScreenState extends State<OrderMarketplaceScreen> {
         (data['title'] ?? data['description'] ?? '협업 일감').toString();
     final String description = data['description']?.toString() ?? '';
     final String region = data['region']?.toString() ?? '';
-    final String category = data['category']?.toString() ?? '';
+    final String category = [data['category']?.toString() ?? '', data['subcategory']?.toString() ?? '']
+        .where((v) => v.isNotEmpty)
+        .join(' · ');
     final mediaUrls = data['media_urls'] is List
         ? List<String>.from(data['media_urls'])
         : <String>[];

@@ -1,3 +1,4 @@
+import { priceTradeGroup } from './trade_categories'
 /// <reference types="node" />
 // 가격 엔진 공정 카탈로그 — 구성 데이터.
 //
@@ -651,7 +652,8 @@ export function resolveTrade(
   }
 
   if (category) {
-    const inCategory = active.filter((t) => t.category === category)
+    // 앱·웹은 새 대분류(예: 하수구·막힘)를 보냅니다. 카탈로그의 예전 분류와 함께 비교합니다.
+    const inCategory = active.filter((t) => t.category === category || priceTradeGroup(t) === category)
     if (inCategory.length === 1) return { trade: inCategory[0], candidates: inCategory }
     if (inCategory.length > 1) return { trade: null, candidates: inCategory }
   }

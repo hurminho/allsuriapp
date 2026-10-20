@@ -22,6 +22,7 @@ import '../../utils/api_failure.dart';
 import '../../utils/app_logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/commission.dart';
+import '../../config/trade_categories.dart';
 
 class CreateJobScreen extends StatefulWidget {
   const CreateJobScreen({super.key});
@@ -41,7 +42,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final TextEditingController _feeAmountController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
 
-  String _selectedCategory = '일반';
+  String _selectedCategory = TradeCategories.groupNames.first;
+  String? _selectedSubcategory;
   bool _submitting = false;
   bool _jobCreated = false; // 공사 생성 완료 플래그 (재등록 방지)
   bool _creatingOrder = false; // 오더 생성 중복 방지 플래그
@@ -53,16 +55,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final List<String> _uploadedImageUrls = [];
   bool _isUploadingImages = false;
 
-  final List<String> _categories = [
-    '일반',
-    '전기',
-    '수도',
-    '난방',
-    '에어컨',
-    '인테리어',
-    '청소',
-    '기타'
-  ];
 
   @override
   void initState() {
@@ -297,7 +289,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         kDefaultB2BCommissionRatePercent.toStringAsFixed(0);
     _feeAmountController.clear();
     _locationController.clear();
-    _selectedCategory = '일반';
+    _selectedCategory = TradeCategories.groupNames.first;
+    _selectedSubcategory = null;
     _selectedImages.clear();
     _uploadedImageUrls.clear();
     _jobCreated = false;
@@ -351,6 +344,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             ? null
             : _locationController.text.trim(),
         category: _selectedCategory,
+        subcategory: _selectedSubcategory,
         urgency: 'normal',
         commissionRate: _feeRate(),
         mediaUrls: _uploadedImageUrls.isEmpty ? null : _uploadedImageUrls,
@@ -373,7 +367,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           description: _descController.text.trim(),
           budget: budget,
           region: _locationController.text.trim(),
-          category: _selectedCategory);
+          category: _selectedCategory,
+          subcategory: _selectedSubcategory);
 
       // 탭으로 열린 화면에서 pop 하면 홈 셸이 닫혀 앱이 종료됩니다.
       if (!mounted) return;
@@ -680,21 +675,38 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                     DropdownButtonFormField<String>(
                       value: _selectedCategory,
                       decoration: _fieldDecoration(
-                        label: '카테고리 *',
+                        label: '공종 *',
                         icon: Icons.category_outlined,
                       ),
-                      items: _categories
-                          .map(
-                            (category) => DropdownMenuItem(
-                              value: category,
-                              child: Text(category),
-                            ),
-                          )
-                          .toList(),
+                      items: [
+                        for (final group in TradeCategories.groups)
+                          DropdownMenuItem(
+                            value: group.name,
+                            child: Text('${group.name}  ·  ${group.kind}'),
+                          ),
+                      ],
                       onChanged: (value) {
-                        setState(() => _selectedCategory = value!);
+                        setState(() {
+                          _selectedCategory = value!;
+                          _selectedSubcategory = null;
+                        });
                       },
                     ),
+                    if ((TradeCategories.group(_selectedCategory)?.items ?? const <String>[]).isNotEmpty)
+                      DropdownButtonFormField<String?>(
+                        key: ValueKey('sub-$_selectedCategory'),
+                        value: _selectedSubcategory,
+                        decoration: _fieldDecoration(
+                          label: '세부 공종 (선택)',
+                          icon: Icons.handyman_outlined,
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(value: null, child: Text('선택 안 함')),
+                          for (final item in TradeCategories.group(_selectedCategory)!.items)
+                            DropdownMenuItem<String?>(value: item, child: Text(item)),
+                        ],
+                        onChanged: (value) => setState(() => _selectedSubcategory = value),
+                      ),
                     TextFormField(
                       controller: _locationController,
                       decoration: _fieldDecoration(
@@ -913,6 +925,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     double? budget,
     String? region,
     required String category,
+    String? subcategory,
   }) async {
     if (!mounted) return;
     final action = await showModalBottomSheet<_PostCreateAction>(
@@ -992,6 +1005,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       budget: budget,
       region: region,
       category: category,
+      subcategory: subcategory,
     );
   }
 
@@ -1002,6 +1016,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     double? budget,
     String? region,
     required String category,
+    String? subcategory,
   }) async {
     if (_creatingOrder || !mounted) return;
     setState(() => _creatingOrder = true);
@@ -1018,6 +1033,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         description: description,
         region: (region ?? '').isEmpty ? null : region,
         category: category,
+        subcategory: subcategory,
         budgetAmount: budget,
         postedBy: currentUserId,
       );

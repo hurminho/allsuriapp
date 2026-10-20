@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../config/trade_categories.dart';
 import '../../models/user.dart';
 import '../../providers/user_provider.dart';
 import '../../services/auth_service.dart';
@@ -367,28 +368,46 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
           title: const Text('전문 분야 선택'),
           content: SizedBox(
             width: double.maxFinite,
-            height: 400,
-            child: ListView.builder(
-              itemCount: EquipmentCategories.categories.length,
-              itemBuilder: (context, index) {
-                final category = EquipmentCategories.categories[index];
-                final isSelected = _selectedSpecialties.contains(category);
-
-                return CheckboxListTile(
-                  title: Text(category),
-                  value: isSelected,
-                  onChanged: (bool? value) {
-                    setState(() {
-                      if (value == true) {
-                        _selectedSpecialties.add(category);
-                      } else {
-                        _selectedSpecialties.remove(category);
-                      }
-                    });
-                    setDialogState(() {}); // Dialog 내부 UI 업데이트
-                  },
-                );
-              },
+            height: 460,
+            // 대분류별로 세부 공종을 고릅니다. '전체'는 그 분야 전부(대분류 이름으로 저장).
+            child: ListView(
+              children: [
+                for (final group in TradeCategories.groups)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${group.kind} · ${group.name}',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final value in [group.name, ...group.items])
+                              FilterChip(
+                                label: Text(value == group.name
+                                    ? (group.items.isEmpty ? group.name : '전체')
+                                    : value),
+                                selected: _selectedSpecialties.contains(value),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedSpecialties.add(value);
+                                    } else {
+                                      _selectedSpecialties.remove(value);
+                                    }
+                                  });
+                                  setDialogState(() {}); // Dialog 내부 UI 업데이트
+                                },
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
           actions: [
