@@ -3786,6 +3786,11 @@ async function loadFeaturedBusinesses() {
     }
 }
 
+// 관리자 화면에 값을 넣을 때 쓰는 HTML 이스케이프
+function adminEsc(v) {
+    return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function renderFeaturedBusinesses(list) {
     const container = document.getElementById('featuredBizList');
     if (!container) return;
@@ -3793,24 +3798,61 @@ function renderFeaturedBusinesses(list) {
         container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray-400);">아직 등록된 추천 업체가 없습니다.<br><small>위 검색창에서 사업자를 찾아 추가해 주세요.</small></div>';
         return;
     }
+    const ready = list.every((item) => item.display_ready);
+    const input = 'width:100%;padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;';
     container.innerHTML = `
+        ${ready ? '' : `<div style="padding:0.75rem 1rem;margin-bottom:0.75rem;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:0.85rem;color:#92400e;">
+            ⚠️ 표시 이름·전화번호·웹사이트를 바꾸려면 Supabase SQL Editor 에서 <code>database/app_popups_featured_2026_10.sql</code> 을 먼저 실행해 주세요.</div>`}
         <div style="display:flex;flex-direction:column;gap:0.5rem;">
             ${list.map((item, idx) => {
                 const u = item.users || {};
                 const name = u.businessname || u.name || `(ID: ${item.user_id?.slice(0,8)}...)`;
-                const category = u.category || '';
-                const region = u.region || '';
                 const phone = u.phonenumber || '';
-                return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.9rem 1rem;background:#f9fafb;border:1px solid var(--gray-200);border-radius:10px;">
-                    <span style="background:#1e3a8a;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;">${idx+1}</span>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
-                        <div style="font-size:0.78rem;color:var(--gray-500);">${[category, region, phone].filter(Boolean).join(' · ')}</div>
+                const shown = item.website_url
+                    ? `웹사이트 ${item.website_url}${item.contact_phone ? ' · ' + item.contact_phone : ''}`
+                    : `전화 ${item.contact_phone || phone || '없음'}`;
+                return `<div style="padding:0.9rem 1rem;background:#f9fafb;border:1px solid var(--gray-200);border-radius:10px;">
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <span style="background:#1e3a8a;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;">${idx+1}</span>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${adminEsc(item.display_name || name)}${item.display_name ? ` <span style="font-weight:400;color:var(--gray-400);font-size:0.78rem;">(회원: ${adminEsc(name)})</span>` : ''}</div>
+                            <div style="font-size:0.78rem;color:var(--gray-500);">웹 표시: ${adminEsc(shown)}</div>
+                        </div>
+                        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;flex-shrink:0;" onclick="removeFeaturedBiz('${item.id}')">삭제</button>
                     </div>
-                    <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;flex-shrink:0;" onclick="removeFeaturedBiz('${item.id}')">삭제</button>
+                    ${ready ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.5rem;margin-top:0.75rem;">
+                        <label style="font-size:0.75rem;color:var(--gray-500);">표시 이름 (비우면 상호명)
+                            <input id="featName_${item.id}" type="text" maxlength="40" value="${adminEsc(item.display_name)}" placeholder="${adminEsc(name)}" style="${input}"/></label>
+                        <label style="font-size:0.75rem;color:var(--gray-500);">표시 전화번호 (비우면 회원 번호)
+                            <input id="featPhone_${item.id}" type="text" maxlength="20" value="${adminEsc(item.contact_phone)}" placeholder="예: 0507-1234-5678" style="${input}"/></label>
+                        <label style="font-size:0.75rem;color:var(--gray-500);">웹사이트 (넣으면 회원 번호 대신 표시)
+                            <input id="featWeb_${item.id}" type="url" maxlength="300" value="${adminEsc(item.website_url)}" placeholder="https://" style="${input}"/></label>
+                        <label style="font-size:0.75rem;color:var(--gray-500);">순서 (작을수록 앞)
+                            <input id="featOrder_${item.id}" type="number" value="${Number(item.sort_order) || 0}" style="${input}"/></label>
+                    </div>
+                    <div style="text-align:right;margin-top:0.5rem;">
+                        <button class="btn btn-primary btn-sm" onclick="saveFeaturedBiz('${item.id}')">저장</button>
+                    </div>` : ''}
                 </div>`;
             }).join('')}
         </div>`;
+}
+
+async function saveFeaturedBiz(id) {
+    const val = (prefix) => document.getElementById(`${prefix}_${id}`)?.value ?? '';
+    try {
+        await apiCall(`/featured-businesses/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+                displayName: val('featName'),
+                contactPhone: val('featPhone'),
+                websiteUrl: val('featWeb'),
+                sortOrder: val('featOrder'),
+            }),
+        });
+        showToast('✅ 저장했습니다. 홈페이지에는 몇 분 안에 반영됩니다.');
+        await loadFeaturedBusinesses();
+    } catch (e) { alert('저장 실패: ' + e.message); }
 }
 
 let _featBizTimer = null;
@@ -3850,6 +3892,275 @@ async function removeFeaturedBiz(id) {
     await apiCall(`/featured-businesses/${id}`, { method: 'DELETE' });
     showToast('🗑️ 제거되었습니다.');
     await loadFeaturedBusinesses();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 앱 팝업 (앱을 열면 대상자에게 뜨는 안내 창)
+// ══════════════════════════════════════════════════════════════
+
+let popupTrades = [];
+let popupItems = [];
+let popupEditingId = null;
+let popupSelected = new Map(); // id → 이름
+let _popupCountTimer = null;
+let _popupBizTimer = null;
+
+const POPUP_FREQ = { once: '한 번만', daily: '하루 한 번', always: '열 때마다' };
+
+function popupAudience() {
+    return document.querySelector('input[name="popupAudience"]:checked')?.value || 'all';
+}
+
+function updatePopupCounts() {
+    const t = document.getElementById('popupTitle');
+    const b = document.getElementById('popupBody');
+    if (t) document.getElementById('popupTitleCount').textContent = `${t.value.length} / 40`;
+    if (b) document.getElementById('popupBodyCount').textContent = `${b.value.length} / 500`;
+}
+
+function renderPopupTrades(checked = []) {
+    const area = document.getElementById('popupTradesArea');
+    if (!area) return;
+    area.innerHTML = popupTrades.map((t) => `
+        <label style="display:flex;align-items:center;gap:0.3rem;padding:0.35rem 0.7rem;border:1px solid var(--gray-300);border-radius:999px;font-size:0.85rem;cursor:pointer;">
+            <input type="checkbox" class="popupTradeChk" value="${adminEsc(t)}" ${checked.includes(t) ? 'checked' : ''} onchange="refreshPopupTargetCount()"/>${adminEsc(t)}
+        </label>`).join('');
+}
+
+function renderPopupSelected() {
+    const list = document.getElementById('popupSelectedList');
+    if (!list) return;
+    list.innerHTML = [...popupSelected.entries()].map(([id, name]) => `
+        <span style="display:inline-flex;align-items:center;gap:0.3rem;padding:0.3rem 0.6rem;background:#e0e7ff;color:#1e3a8a;border-radius:999px;font-size:0.8rem;">
+            ${adminEsc(name)}<button onclick="removePopupBiz('${id}')" style="border:none;background:none;cursor:pointer;color:#1e3a8a;font-weight:700;">×</button>
+        </span>`).join('');
+}
+
+function togglePopupAudience() {
+    const a = popupAudience();
+    document.getElementById('popupTradesArea').style.display = a === 'trades' ? 'flex' : 'none';
+    document.getElementById('popupSelectedArea').style.display = a === 'selected' ? 'block' : 'none';
+    refreshPopupTargetCount();
+}
+
+function popupTargetPayload() {
+    return {
+        audience: popupAudience(),
+        targetTrades: [...document.querySelectorAll('.popupTradeChk:checked')].map((c) => c.value),
+        targetUserIds: [...popupSelected.keys()],
+    };
+}
+
+function refreshPopupTargetCount() {
+    clearTimeout(_popupCountTimer);
+    const el = document.getElementById('popupTargetCount');
+    if (!el) return;
+    _popupCountTimer = setTimeout(async () => {
+        try {
+            const res = await apiCall('/app-popups/count', { method: 'POST', body: JSON.stringify(popupTargetPayload()) });
+            el.textContent = `대상 약 ${Number(res.count || 0).toLocaleString()}명 (앱 1.0.19 이상을 연 사람에게만 보입니다)`;
+        } catch (e) { el.textContent = ''; }
+    }, 300);
+}
+
+function searchPopupBiz(q) {
+    clearTimeout(_popupBizTimer);
+    _popupBizTimer = setTimeout(async () => {
+        const box = document.getElementById('popupBizResults');
+        if (!box) return;
+        if (!q.trim()) { box.innerHTML = ''; return; }
+        try {
+            const users = await apiCall(`/push-notifications/users?q=${encodeURIComponent(q)}`);
+            box.innerHTML = (Array.isArray(users) && users.length)
+                ? `<div style="border:1px solid var(--gray-200);border-radius:10px;overflow:hidden;">${users.map((u) => `
+                    <div style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;font-size:0.875rem;">
+                        <span>${adminEsc(u.businessname || u.name)}</span>
+                        <button class="btn btn-primary btn-sm" onclick="addPopupBiz('${u.id}', '${adminEsc(u.businessname || u.name).replace(/'/g, '&#39;')}')">추가</button>
+                    </div>`).join('')}</div>`
+                : '<div style="padding:0.5rem;color:var(--gray-400);font-size:0.875rem;">검색 결과 없음</div>';
+        } catch (e) { console.error(e); }
+    }, 400);
+}
+
+function addPopupBiz(id, name) {
+    popupSelected.set(id, name);
+    renderPopupSelected();
+    document.getElementById('popupBizResults').innerHTML = '';
+    document.getElementById('popupBizSearch').value = '';
+    refreshPopupTargetCount();
+}
+
+function removePopupBiz(id) {
+    popupSelected.delete(id);
+    renderPopupSelected();
+    refreshPopupTargetCount();
+}
+
+// ISO → datetime-local 입력값 (한국 시간 기준 브라우저)
+function toLocalInput(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(v) {
+    return v ? new Date(v).toISOString() : '';
+}
+
+function resetPopupForm() {
+    popupEditingId = null;
+    popupSelected = new Map();
+    ['popupTitle', 'popupBody', 'popupImage', 'popupButtonLabel', 'popupButtonUrl', 'popupStart', 'popupEnd', 'popupBizSearch'].forEach((id) => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('popupPriority').value = '0';
+    document.getElementById('popupFrequency').value = 'once';
+    document.getElementById('popupActive').checked = true;
+    document.querySelector('input[name="popupAudience"][value="all"]').checked = true;
+    document.getElementById('popupFormTitle').textContent = '새 앱 팝업';
+    document.getElementById('popupResetBtn').style.display = 'none';
+    renderPopupTrades();
+    renderPopupSelected();
+    updatePopupCounts();
+    togglePopupAudience();
+}
+
+function editPopup(id) {
+    const p = popupItems.find((x) => x.id === id);
+    if (!p) return;
+    popupEditingId = id;
+    document.getElementById('popupTitle').value = p.title || '';
+    document.getElementById('popupBody').value = p.body || '';
+    document.getElementById('popupImage').value = p.image_url || '';
+    document.getElementById('popupButtonLabel').value = p.button_label || '';
+    document.getElementById('popupButtonUrl').value = p.button_url || '';
+    document.getElementById('popupFrequency').value = p.frequency || 'once';
+    document.getElementById('popupStart').value = toLocalInput(p.start_at);
+    document.getElementById('popupEnd').value = toLocalInput(p.end_at);
+    document.getElementById('popupPriority').value = String(p.priority || 0);
+    document.getElementById('popupActive').checked = !!p.is_active;
+    const radio = document.querySelector(`input[name="popupAudience"][value="${p.audience}"]`);
+    if (radio) radio.checked = true;
+    renderPopupTrades(p.target_trades || []);
+    popupSelected = new Map((p.target_users || []).map((u) => [u.id, u.name]));
+    renderPopupSelected();
+    document.getElementById('popupFormTitle').textContent = '팝업 수정';
+    document.getElementById('popupResetBtn').style.display = '';
+    updatePopupCounts();
+    togglePopupAudience();
+    document.getElementById('section-app-popups').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function savePopup() {
+    const v = (id) => document.getElementById(id)?.value ?? '';
+    const payload = {
+        title: v('popupTitle'),
+        body: v('popupBody'),
+        imageUrl: v('popupImage'),
+        buttonLabel: v('popupButtonLabel'),
+        buttonUrl: v('popupButtonUrl'),
+        frequency: v('popupFrequency'),
+        startAt: fromLocalInput(v('popupStart')),
+        endAt: fromLocalInput(v('popupEnd')),
+        priority: v('popupPriority'),
+        isActive: document.getElementById('popupActive').checked,
+        ...popupTargetPayload(),
+    };
+    try {
+        await apiCall(popupEditingId ? `/app-popups/${popupEditingId}` : '/app-popups', {
+            method: popupEditingId ? 'PATCH' : 'POST',
+            body: JSON.stringify(payload),
+        });
+        showToast(popupEditingId ? '✅ 팝업을 수정했습니다.' : '✅ 팝업을 등록했습니다.');
+        resetPopupForm();
+        await loadPopups();
+    } catch (e) { alert('저장 실패: ' + e.message); }
+}
+
+async function togglePopupActive(id, active) {
+    try {
+        await apiCall(`/app-popups/${id}`, { method: 'PATCH', body: JSON.stringify({ isActive: active }) });
+        showToast(active ? '▶️ 켰습니다.' : '⏸️ 껐습니다.');
+        await loadPopups();
+    } catch (e) { alert('변경 실패: ' + e.message); }
+}
+
+async function deletePopup(id) {
+    if (!confirm('이 팝업과 노출 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
+    try {
+        await apiCall(`/app-popups/${id}`, { method: 'DELETE' });
+        showToast('🗑️ 삭제했습니다.');
+        if (popupEditingId === id) resetPopupForm();
+        await loadPopups();
+    } catch (e) { alert('삭제 실패: ' + e.message); }
+}
+
+function popupAudienceText(p) {
+    if (p.audience === 'trades') return `공종: ${(p.target_trades || []).join(', ')}`;
+    if (p.audience === 'selected') return `지정 ${(p.target_users || []).length}곳: ${(p.target_users || []).slice(0, 3).map((u) => u.name).join(', ')}${(p.target_users || []).length > 3 ? ' 외' : ''}`;
+    return '앱 사용자 전체';
+}
+
+function popupPeriodText(p) {
+    const f = (iso) => iso ? new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    if (!p.start_at && !p.end_at) return '기간 제한 없음';
+    return `${f(p.start_at) || '바로'} ~ ${f(p.end_at) || '끌 때까지'}`;
+}
+
+function renderPopups() {
+    const box = document.getElementById('popupList');
+    if (!box) return;
+    if (!popupItems.length) {
+        box.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray-400);">등록된 팝업이 없습니다.</div>';
+        return;
+    }
+    const now = Date.now();
+    box.innerHTML = `<div style="display:flex;flex-direction:column;gap:0.6rem;">${popupItems.map((p) => {
+        const ended = p.end_at && new Date(p.end_at).getTime() <= now;
+        const waiting = p.start_at && new Date(p.start_at).getTime() > now;
+        const badge = !p.is_active ? ['꺼짐', '#f3f4f6', '#6b7280']
+            : ended ? ['기간 끝남', '#f3f4f6', '#6b7280']
+            : waiting ? ['예약', '#fef3c7', '#92400e']
+            : ['노출 중', '#dcfce7', '#166534'];
+        const st = p.stats || {};
+        return `<div style="padding:0.9rem 1rem;border:1px solid var(--gray-200);border-radius:10px;background:#f9fafb;">
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                <span style="padding:0.15rem 0.5rem;border-radius:999px;font-size:0.75rem;font-weight:700;background:${badge[1]};color:${badge[2]};">${badge[0]}</span>
+                <strong style="flex:1;min-width:0;">${adminEsc(p.title)}</strong>
+                <span style="font-size:0.75rem;color:var(--gray-500);">우선순위 ${Number(p.priority) || 0}</span>
+            </div>
+            <div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.35rem;white-space:pre-line;max-height:3.2em;overflow:hidden;">${adminEsc(p.body)}</div>
+            <div style="font-size:0.78rem;color:var(--gray-500);margin-top:0.4rem;line-height:1.5;">
+                ${adminEsc(popupAudienceText(p))} · 대상 약 ${Number(p.target_count || 0).toLocaleString()}명 · ${POPUP_FREQ[p.frequency] || p.frequency} · ${adminEsc(popupPeriodText(p))}<br/>
+                본 사람 <strong>${st.seen || 0}</strong> · 버튼 누름 <strong>${st.clicked || 0}</strong> · 다시 보지 않기 ${st.hidden || 0}${p.button_url ? ` · 링크 ${adminEsc(p.button_url)}` : ''}
+            </div>
+            <div style="display:flex;gap:0.4rem;justify-content:flex-end;margin-top:0.6rem;">
+                <button class="btn btn-sm" onclick="editPopup('${p.id}')">수정</button>
+                <button class="btn btn-sm" onclick="togglePopupActive('${p.id}', ${!p.is_active})">${p.is_active ? '끄기' : '켜기'}</button>
+                <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;" onclick="deletePopup('${p.id}')">삭제</button>
+            </div>
+        </div>`;
+    }).join('')}</div>`;
+}
+
+async function loadPopups() {
+    const box = document.getElementById('popupList');
+    if (box) box.innerHTML = '<div class="loading"><div class="spinner"></div>로딩 중...</div>';
+    try {
+        const res = await apiCall('/app-popups');
+        const firstLoad = !popupTrades.length;
+        popupTrades = Array.isArray(res.trades) ? res.trades : [];
+        popupItems = Array.isArray(res.items) ? res.items : [];
+        document.getElementById('popupNotReady').style.display = res.ready === false ? 'block' : 'none';
+        if (firstLoad && !popupEditingId) {
+            renderPopupTrades();
+            refreshPopupTargetCount();
+        }
+        renderPopups();
+    } catch (e) {
+        if (box) box.innerHTML = `<div style="padding:1rem;color:#991b1b;font-size:0.875rem;">❌ 로드 실패: ${adminEsc(e.message)}</div>`;
+    }
 }
 
 // 페이지 로드 시 초기화

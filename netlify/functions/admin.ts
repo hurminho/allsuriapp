@@ -3,7 +3,8 @@
 // Proxies selected endpoints used by backend/public/admin.js
 // import { createClient } from "@supabase/supabase-js"; // ✅ 제거
 import { WEB_ORDER_COMMISSION_RATE } from '../lib/commission'
-import { groupOf } from '../lib/trade_categories'
+import { groupOf, TRADE_GROUP_NAMES } from '../lib/trade_categories'
+import { parsePopupInput, countPopupTargets, type PopupTargetUser } from '../lib/app_popups'
 
 // 환경변수가 없으면 관리자 API는 모두 401입니다(기본값 없음).
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.ADMIN_DEVELOPER_TOKEN || ''
@@ -1238,18 +1239,136 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
       }
     }
 
+    // ── 앱 팝업 (앱을 열면 대상자에게 뜨는 안내 창) ─────────────────────────
+    if (path.startsWith('/app-popups')) {
+      const sub = path.replace(/^\/app-popups/, '')
+      const json = (statusCode: number, body: unknown) => ({ statusCode, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
+      const notReady = (t: string) => t.includes('app_popups') || t.includes('PGRST205') || t.includes('42P01')
+      const NOT_READY_MSG = 'DB 에 팝업 테이블이 없습니다. database/app_popups_featured_2026_10.sql 을 먼저 실행해 주세요.'
+
+      // 대상 인원 계산용: 앱 사용자 id·전문분야 (팝업 대상 조건이 users 기준)
+      const loadTargetUsers = async (): Promise<PopupTargetUser[]> => {
+        const out: PopupTargetUser[] = []
+        for (let from = 0; ; from += 1000) {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/users?select=id,specialties&order=id.asc`, {
+            headers: { ...sbHeaders, Range: `${from}-${from + 999}` },
+          })
+          if (!res.ok) break
+          const page = await res.json() as PopupTargetUser[]
+          out.push(...page)
+          if (page.length < 1000) break
+        }
+        return out
+      }
+
+      // GET /app-popups – 목록 + 대상 인원·노출·클릭 수
+      if (event.httpMethod === 'GET' && (sub === '' || sub === '/')) {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_popups?select=*&order=created_at.desc`, { headers: sbHeaders })
+        if (!res.ok) {
+          const t = await res.text()
+          return json(200, { ready: !notReady(t), error: notReady(t) ? NOT_READY_MSG : t, trades: TRADE_GROUP_NAMES, items: [] })
+        }
+        const popups = await res.json() as any[]
+        const stats: Record<string, { seen: number; clicked: number; hidden: number }> = {}
+        if (popups.length) {
+          const idList = popups.map((p) => `"${p.id}"`).join(',')
+          const vr = await fetch(`${SUPABASE_URL}/rest/v1/app_popup_views?select=popup_id,clicked_at,hidden_at&popup_id=in.(${idList})`, {
+            headers: { ...sbHeaders, Range: '0-49999' },
+          })
+          const views = vr.ok ? await vr.json() as { popup_id: string; clicked_at: string | null; hidden_at: string | null }[] : []
+          for (const v of views) {
+            const st = (stats[v.popup_id] ??= { seen: 0, clicked: 0, hidden: 0 })
+            st.seen += 1
+            if (v.clicked_at) st.clicked += 1
+            if (v.hidden_at) st.hidden += 1
+          }
+        }
+        const users = popups.length ? await loadTargetUsers() : []
+        const selectedIds = [...new Set(popups.flatMap((p) => p.target_user_ids || []))] as string[]
+        const names = selectedIds.length ? await fetchUsers(selectedIds) : {}
+        const items = popups.map((p) => ({
+          ...p,
+          target_count: countPopupTargets(p, users),
+          target_users: (p.target_user_ids || []).map((id: string) => ({ id, name: names[id]?.businessname || names[id]?.name || id.slice(0, 8) })),
+          stats: stats[p.id] ?? { seen: 0, clicked: 0, hidden: 0 },
+        }))
+        return json(200, { ready: true, trades: TRADE_GROUP_NAMES, items })
+      }
+
+      // POST /app-popups/count – 저장 전에 대상 인원 미리 보기
+      if (event.httpMethod === 'POST' && sub === '/count') {
+        const b = JSON.parse(event.body || '{}')
+        const users = await loadTargetUsers()
+        const audience = ['all', 'trades', 'selected'].includes(b.audience) ? b.audience : 'all'
+        return json(200, {
+          count: countPopupTargets({
+            audience,
+            target_trades: Array.isArray(b.targetTrades) ? b.targetTrades : [],
+            target_user_ids: Array.isArray(b.targetUserIds) ? b.targetUserIds : [],
+          }, users),
+        })
+      }
+
+      // POST /app-popups – 새 팝업,  PATCH /app-popups/:id – 수정
+      const isCreate = event.httpMethod === 'POST' && (sub === '' || sub === '/')
+      const isUpdate = event.httpMethod === 'PATCH' && /^\/[0-9a-f-]{36}$/i.test(sub)
+      if (isCreate || isUpdate) {
+        const b = JSON.parse(event.body || '{}')
+        // 켜기/끄기만 바꿀 때
+        let row: Record<string, unknown>
+        if (isUpdate && Object.keys(b).length === 1 && typeof b.isActive === 'boolean') {
+          row = { is_active: b.isActive }
+        } else {
+          try {
+            row = parsePopupInput(b)
+          } catch (e: any) {
+            return json(400, { error: e.message })
+          }
+        }
+        row.updated_at = new Date().toISOString()
+        const url = isCreate
+          ? `${SUPABASE_URL}/rest/v1/app_popups`
+          : `${SUPABASE_URL}/rest/v1/app_popups?id=eq.${sub.slice(1)}`
+        const res = await fetch(url, {
+          method: isCreate ? 'POST' : 'PATCH',
+          headers: { ...sbHeaders, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify(row),
+        })
+        const t = await res.text()
+        if (!res.ok) return json(notReady(t) ? 409 : 500, { error: notReady(t) ? NOT_READY_MSG : '저장 실패', details: t })
+        return { statusCode: 200, body: t, headers: { 'Content-Type': 'application/json' } }
+      }
+
+      // DELETE /app-popups/:id (노출 기록도 같이 지워짐)
+      if (event.httpMethod === 'DELETE' && /^\/[0-9a-f-]{36}$/i.test(sub)) {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_popups?id=eq.${sub.slice(1)}`, { method: 'DELETE', headers: sbHeaders })
+        if (!res.ok) return json(500, { error: '삭제 실패', details: await res.text() })
+        return json(200, { success: true })
+      }
+    }
+
     // ── 추천 업체 관리 ──────────────────────────────────────────────
     if (path.startsWith('/featured-businesses')) {
       const sub = path.replace(/^\/featured-businesses/, '')
 
       // GET /featured-businesses – 추천 업체 목록 (기존 fetchUsers 헬퍼 사용)
       if (event.httpMethod === 'GET' && (sub === '' || sub === '/')) {
-        const featRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/web_featured_businesses?select=id,sort_order,user_id&order=sort_order.asc`,
+        // display_name·contact_phone·website_url 은 app_popups_featured_2026_10.sql 실행 후 생깁니다.
+        let featRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/web_featured_businesses?select=id,sort_order,user_id,display_name,contact_phone,website_url&order=sort_order.asc`,
           { headers: sbHeaders }
         )
+        if (!featRes.ok) {
+          featRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/web_featured_businesses?select=id,sort_order,user_id&order=sort_order.asc`,
+            { headers: sbHeaders }
+          )
+        }
         if (!featRes.ok) return { statusCode: 200, body: JSON.stringify([]), headers: { 'Content-Type': 'application/json' } }
-        const featured = await featRes.json() as { id: string; user_id: string; sort_order: number }[]
+        const featured = await featRes.json() as {
+          id: string; user_id: string; sort_order: number
+          display_name?: string | null; contact_phone?: string | null; website_url?: string | null
+        }[]
         if (!Array.isArray(featured) || featured.length === 0) return { statusCode: 200, body: JSON.stringify([]), headers: { 'Content-Type': 'application/json' } }
         const ids = featured.map(f => f.user_id).filter(Boolean)
         // 기존 fetchUsers 헬퍼 사용 (ID 포맷 이슈 방지)
@@ -1258,6 +1377,10 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
           id: f.id,
           sort_order: f.sort_order,
           user_id: f.user_id,
+          display_name: f.display_name ?? null,
+          contact_phone: f.contact_phone ?? null,
+          website_url: f.website_url ?? null,
+          display_ready: 'website_url' in f,
           users: usersMap[f.user_id] || null,
         }))
         return { statusCode: 200, body: JSON.stringify(result), headers: { 'Content-Type': 'application/json' } }
@@ -1276,6 +1399,45 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
         return { statusCode: 200, body: JSON.stringify(json), headers: { 'Content-Type': 'application/json' } }
       }
 
+      // PATCH /featured-businesses/:id – 웹에 보여 줄 이름·전화번호·웹사이트 (빈 값 = 회원 정보 사용)
+      if (event.httpMethod === 'PATCH' && sub.match(/^\/[^/]+$/)) {
+        const id = sub.slice(1)
+        const { displayName, contactPhone, websiteUrl, sortOrder } = JSON.parse(event.body || '{}')
+        const clean = (v: unknown, max: number) => {
+          const t = String(v ?? '').trim()
+          return t ? t.slice(0, max) : null
+        }
+        const website = clean(websiteUrl, 300)
+        if (website && !/^https?:\/\/[^\s]+$/.test(website)) {
+          return { statusCode: 400, body: JSON.stringify({ error: '웹사이트는 https:// 로 시작하는 주소로 입력해 주세요.' }), headers: { 'Content-Type': 'application/json' } }
+        }
+        const phone = clean(contactPhone, 20)
+        if (phone && !/^[0-9+\-() ]{7,20}$/.test(phone)) {
+          return { statusCode: 400, body: JSON.stringify({ error: '전화번호는 숫자와 - 만 입력해 주세요.' }), headers: { 'Content-Type': 'application/json' } }
+        }
+        const patch: Record<string, unknown> = {
+          display_name: clean(displayName, 40),
+          contact_phone: phone,
+          website_url: website,
+        }
+        if (Number.isFinite(Number(sortOrder))) patch.sort_order = Number(sortOrder)
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/web_featured_businesses?id=eq.${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify(patch),
+        })
+        if (!res.ok) {
+          const errText = await res.text()
+          const missing = errText.includes('display_name') || errText.includes('website_url') || errText.includes('PGRST204')
+          return {
+            statusCode: missing ? 409 : 500,
+            body: JSON.stringify({ error: missing ? 'DB 에 표시 정보 칸이 없습니다. database/app_popups_featured_2026_10.sql 을 먼저 실행해 주세요.' : '저장 실패', details: errText }),
+            headers: { 'Content-Type': 'application/json' },
+          }
+        }
+        return { statusCode: 200, body: await res.text(), headers: { 'Content-Type': 'application/json' } }
+      }
+
       // DELETE /featured-businesses/:id
       if (event.httpMethod === 'DELETE' && sub.match(/^\/[^/]+$/)) {
         const id = sub.slice(1)
@@ -1285,12 +1447,21 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
 
       // GET /featured-businesses/public – 웹사이트용 (평점 포함 공개 데이터)
       if (event.httpMethod === 'GET' && sub === '/public') {
-        const featRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/web_featured_businesses?select=id,sort_order,user_id&order=sort_order.asc`,
+        let featRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/web_featured_businesses?select=id,sort_order,user_id,display_name,contact_phone,website_url&order=sort_order.asc`,
           { headers: sbHeaders }
         )
+        if (!featRes.ok) {
+          featRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/web_featured_businesses?select=id,sort_order,user_id&order=sort_order.asc`,
+            { headers: sbHeaders }
+          )
+        }
         if (!featRes.ok) return { statusCode: 200, body: JSON.stringify([]), headers: { 'Content-Type': 'application/json' } }
-        const featured = await featRes.json() as { id: string; user_id: string }[]
+        const featured = await featRes.json() as {
+          id: string; user_id: string
+          display_name?: string | null; contact_phone?: string | null; website_url?: string | null
+        }[]
         if (!Array.isArray(featured) || featured.length === 0) return { statusCode: 200, body: JSON.stringify([]), headers: { 'Content-Type': 'application/json' } }
         const ids = featured.map(f => f.user_id).filter(Boolean)
         // fetchUsers 헬퍼 사용 (ID 따옴표 포맷 통일)
@@ -1314,10 +1485,12 @@ export const handler = async (event: any) => { // event 타입 any로 임시 설
           const u = usersMap[f.user_id]
           if (!u) return null
           const rm = ratingMap[f.user_id]
+          const websiteUrl = f.website_url || null
           return {
             id: f.id, userId: u.id,
-            businessName: u.businessname || u.name || '',
-            phonenumber: u.phonenumber || '',
+            businessName: f.display_name || u.businessname || u.name || '',
+            phonenumber: f.contact_phone || (websiteUrl ? '' : u.phonenumber || ''),
+            websiteUrl,
             category: u.category || '',
             region: u.region || '',
             avatarUrl: u.avatar_url || null,

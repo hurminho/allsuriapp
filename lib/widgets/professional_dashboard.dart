@@ -9,6 +9,7 @@ import '../services/ad_service.dart';
 import '../models/ad.dart';
 import '../models/order.dart' as app_models;
 import 'announcement_banner.dart';
+import 'app_popup_dialog.dart';
 import '../theme/business_theme.dart';
 import '../screens/business/estimate_requests_screen.dart';
 import '../screens/business/order_marketplace_screen.dart';
@@ -55,7 +56,8 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     super.initState();
     _setupRealtimeListeners();
 
-    // 로그인 후 푸시 알림 권한 체크 (딜레이 후 표시), 그다음 소식 받기 동의를 한 번만 묻습니다.
+    // 로그인 후 푸시 알림 권한 체크 (딜레이 후 표시), 그다음 소식 받기 동의를 한 번만 묻고,
+    // 마지막으로 관리자가 등록한 앱 팝업(대상자에게만)을 띄웁니다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(seconds: 2), () async {
         if (!mounted) return;
@@ -64,6 +66,8 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
         await PushPermissionService.checkAndRequest(context, userId: userId);
         if (!mounted) return;
         await maybeAskMarketingConsent(context, userId);
+        if (!mounted) return;
+        await maybeShowAppPopup(context);
       });
     });
   }

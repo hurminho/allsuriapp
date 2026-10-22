@@ -788,6 +788,10 @@
                     <span class="material-icons">campaign</span>
                     <span>광고 관리</span>
                 </div>
+                <div class="menu-item" onclick="showSection('app-popups')">
+                    <span class="material-icons">web_asset</span>
+                    <span>앱 팝업</span>
+                </div>
                 <div class="menu-item" onclick="showSection('web-orders')" style="border-top: 1px solid var(--gray-200); margin-top: 0.5rem; padding-top: 0.5rem;">
                     <span class="material-icons">assignment_ind</span>
                     <span>웹 견적 관리</span>
@@ -1161,6 +1165,80 @@
                                 로딩 중...
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- App Popups Section -->
+                <div id="section-app-popups" class="hidden">
+                    <div class="section" style="margin-bottom:1.5rem;max-width:760px;">
+                        <div class="section-header">
+                            <h2 class="section-title">
+                                <span class="material-icons">web_asset</span>
+                                <span id="popupFormTitle">새 앱 팝업</span>
+                            </h2>
+                            <button class="btn btn-sm" id="popupResetBtn" onclick="resetPopupForm()" style="display:none;">새로 만들기</button>
+                        </div>
+                        <div style="background:#f0f7ff;border-left:4px solid #1e3a8a;border-radius:8px;padding:0.9rem 1rem;margin-bottom:1.25rem;font-size:0.85rem;color:#1e3a8a;line-height:1.5;">
+                            📱 사업자가 앱(1.0.19 이상)을 열면 대시보드에 안내 창이 뜹니다. 대상에 해당하는 팝업이 여러 개면 <strong>우선순위가 높은 것 하나</strong>만 뜹니다.<br/>
+                            광고·이벤트 안내라면 제목 앞에 <strong>(광고)</strong>를 붙여 주세요.
+                        </div>
+                        <div id="popupNotReady" style="display:none;padding:0.9rem 1rem;margin-bottom:1rem;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:0.85rem;color:#92400e;">
+                            ⚠️ Supabase SQL Editor 에서 <code>database/app_popups_featured_2026_10.sql</code> 을 먼저 실행해 주세요.
+                        </div>
+                        <div style="display:grid;gap:0.9rem;">
+                            <label style="font-weight:600;">제목 <span id="popupTitleCount" style="font-weight:400;color:var(--gray-400);">0 / 40</span>
+                                <input id="popupTitle" type="text" maxlength="40" placeholder="예: 새 공종이 추가되었어요" oninput="updatePopupCounts()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;"/></label>
+                            <label style="font-weight:600;">내용 <span id="popupBodyCount" style="font-weight:400;color:var(--gray-400);">0 / 500</span>
+                                <textarea id="popupBody" rows="5" maxlength="500" placeholder="안내할 내용을 적어 주세요. 줄바꿈이 그대로 보입니다." oninput="updatePopupCounts()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;resize:vertical;"></textarea></label>
+                            <label style="font-weight:600;">이미지 주소 (선택, https://)
+                                <input id="popupImage" type="url" placeholder="https://..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;"/></label>
+                            <div style="display:grid;grid-template-columns:1fr 2fr;gap:0.75rem;">
+                                <label style="font-weight:600;">버튼 글자 (선택)
+                                    <input id="popupButtonLabel" type="text" maxlength="20" placeholder="자세히 보기" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;"/></label>
+                                <label style="font-weight:600;">버튼 링크 (선택, 비우면 버튼 없음)
+                                    <input id="popupButtonUrl" type="url" placeholder="https://allsuri.app/..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;"/></label>
+                            </div>
+                            <div>
+                                <div style="font-weight:600;margin-bottom:0.4rem;">대상</div>
+                                <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                                    <label style="display:flex;align-items:center;gap:0.4rem;padding:0.5rem 0.9rem;border:2px solid var(--gray-200);border-radius:10px;cursor:pointer;"><input type="radio" name="popupAudience" value="all" checked onchange="togglePopupAudience()"/>앱 사용자 전체</label>
+                                    <label style="display:flex;align-items:center;gap:0.4rem;padding:0.5rem 0.9rem;border:2px solid var(--gray-200);border-radius:10px;cursor:pointer;"><input type="radio" name="popupAudience" value="trades" onchange="togglePopupAudience()"/>공종별 사업자</label>
+                                    <label style="display:flex;align-items:center;gap:0.4rem;padding:0.5rem 0.9rem;border:2px solid var(--gray-200);border-radius:10px;cursor:pointer;"><input type="radio" name="popupAudience" value="selected" onchange="togglePopupAudience()"/>사업자 직접 선택</label>
+                                </div>
+                                <div id="popupTradesArea" style="display:none;margin-top:0.6rem;display:none;flex-wrap:wrap;gap:0.4rem;"></div>
+                                <div id="popupSelectedArea" style="display:none;margin-top:0.6rem;">
+                                    <input id="popupBizSearch" type="text" placeholder="상호명 또는 이름 검색..." oninput="searchPopupBiz(this.value)" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;"/>
+                                    <div id="popupBizResults" style="margin-top:0.4rem;max-height:200px;overflow-y:auto;"></div>
+                                    <div id="popupSelectedList" style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
+                                </div>
+                                <div id="popupTargetCount" style="margin-top:0.5rem;font-size:0.85rem;color:var(--gray-500);"></div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;">
+                                <label style="font-weight:600;">보여 주는 빈도
+                                    <select id="popupFrequency" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;">
+                                        <option value="once">한 번만</option>
+                                        <option value="daily">하루 한 번</option>
+                                        <option value="always">앱 열 때마다</option>
+                                    </select></label>
+                                <label style="font-weight:600;">시작 (비우면 바로)
+                                    <input id="popupStart" type="datetime-local" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;"/></label>
+                                <label style="font-weight:600;">종료 (비우면 끌 때까지)
+                                    <input id="popupEnd" type="datetime-local" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;"/></label>
+                                <label style="font-weight:600;">우선순위 (클수록 먼저)
+                                    <input id="popupPriority" type="number" value="0" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;margin-top:0.3rem;"/></label>
+                            </div>
+                            <label style="display:flex;align-items:center;gap:0.5rem;font-weight:600;"><input id="popupActive" type="checkbox" checked/> 저장하면 바로 켜기</label>
+                            <button onclick="savePopup()" style="width:100%;padding:0.85rem;background:#1e3a8a;color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;">저장</button>
+                        </div>
+                    </div>
+                    <div class="section">
+                        <div class="section-header">
+                            <h2 class="section-title">
+                                <span class="material-icons">list</span>
+                                등록된 팝업
+                            </h2>
+                        </div>
+                        <div id="popupList"><div class="loading"><div class="spinner"></div>로딩 중...</div></div>
                     </div>
                 </div>
 
@@ -1820,7 +1898,7 @@
         </div>
     </div>
 
-    <script src="admin.js?v=11&t=20261007002"></script>
+    <script src="admin.js?v=12&t=20261022001"></script>
     <script>
         // Kakao SDK 초기화
         if (window.Kakao && !Kakao.isInitialized()) {
@@ -1853,7 +1931,7 @@
             if (window.innerWidth <= 768) closeSidebar();
 
             // Hide all sections
-            ['dashboard', 'users', 'estimates', 'calls', 'posts', 'chats', 'announcements', 'ads', 'web-orders', 'web-content', 'push-notifications'].forEach(name => {
+            ['dashboard', 'users', 'estimates', 'calls', 'posts', 'chats', 'announcements', 'ads', 'app-popups', 'web-orders', 'web-content', 'push-notifications'].forEach(name => {
                 const el = document.getElementById(`section-${name}`);
                 if (el) el.classList.add('hidden');
             });
@@ -1872,6 +1950,7 @@
                 chats: '채팅 현황',
                 announcements: '공지 배너',
                 ads: '광고 관리',
+                'app-popups': '앱 팝업',
                 'web-orders': '웹 견적 관리',
                 'web-content': '웹 콘텐츠 관리',
                 'push-notifications': '푸시 알림 발송'
@@ -1903,6 +1982,9 @@
                     break;
                 case 'ads':
                     loadAds();
+                    break;
+                case 'app-popups':
+                    if (typeof loadPopups === 'function') loadPopups();
                     break;
                 case 'web-orders':
                     if (typeof loadWebOrders === 'function') loadWebOrders();
